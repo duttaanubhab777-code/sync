@@ -16,8 +16,7 @@ const userSchema = new mongoose.Schema(
         fullName: {
             type: String,
             required: true,
-            trim: true,
-            index: true
+            trim: true
         },
         email: {
             type: String,
@@ -31,7 +30,8 @@ const userSchema = new mongoose.Schema(
             type: Number,
             required: true,
             unique: true,
-            trim: true
+            trim: true,
+            index: true
         },
         password: {
             type: String,
@@ -41,6 +41,8 @@ const userSchema = new mongoose.Schema(
         avatar: {
             type: String //cloudnary URL
         },
+
+        lastSeen: { type: Date, default: null },
 
         ipAddress: {
             type: String,
