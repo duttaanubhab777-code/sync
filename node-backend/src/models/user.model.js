@@ -27,7 +27,7 @@ const userSchema = new mongoose.Schema(
         },
 
         phoneNumber: {
-            type: Number,
+            type: String, // phone number  string beacuse +91 etc
             required: true,
             unique: true,
             trim: true,
@@ -39,10 +39,18 @@ const userSchema = new mongoose.Schema(
         },
 
         avatar: {
-            type: String //cloudnary URL
+            type: String, //cloudnary URL
+            default: ""
         },
 
         lastSeen: { type: Date, default: null },
+
+        blockedUser: [
+            {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "User"
+            }
+        ],
 
         ipAddress: {
             type: String,
@@ -70,6 +78,14 @@ const userSchema = new mongoose.Schema(
         isBlocked: {
             type: Boolean,
             default: false
+        },
+
+        //whatsapp style bio
+
+        about: {
+            type: String,
+            default: "Hello ! I am using Sync 😃",
+            maxlength: 140
         },
 
         refreshToken: {

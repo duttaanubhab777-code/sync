@@ -20,6 +20,52 @@ const conversationSchema = new Schema(
             unique: true,
             sparse: true
         },
+
+        //whatsapp group style feature
+
+        groupName: {
+            type: String,
+            trim: true,
+            maxlength: 100,
+            default: ""
+        },
+
+        groupIcon: {
+            type: String, //cloudinary URL
+            default: ""
+        },
+
+        groupDrescription: {
+            type: String,
+            default: "",
+            maxlength: 500
+        },
+
+        groupRole: {
+            type: String,
+
+            enum: ["member", "groupAdmin"],
+            default: "member",
+            index: true
+        },
+
+        admins: [
+            {
+                type: Schema.Types.ObjectId,
+                ref: "User"
+            }
+        ],
+
+        createdBy: {
+            type: Schema.Types.ObjectId,
+            ref: "User"
+        },
+
+        onlyAdminCanMessage: {
+            type: Boolean,
+            default: false
+        },
+
         // চ্যাট লিস্টে শেষ মেসেজের প্রিভিউ দ্রুত দেখানোর জন্য
         lastMessage: {
             text: { type: String, default: "" },

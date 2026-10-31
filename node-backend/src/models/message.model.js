@@ -37,10 +37,36 @@ const messageSchema = new Schema(
             height: { type: Number },
             duration: { type: Number }
         },
+
+        //whatsapp style swipe reply to feature
+
+        replyTo: {
+            type: Schema.Types.ObjectId,
+            ref: "Message",
+            default: null
+        },
         status: {
             type: String,
             enum: ["sent", "delivered", "seen"],
             default: "sent"
+        },
+
+        deliveredTo: [
+            {
+                user: { type: Schema.Types.ObjectId, ref: "User" },
+                deliveredAt: { type: Date, default: Date.now }
+            }
+        ],
+        seenBy: [
+            {
+                user: { type: Schema.Types.ObjectId, ref: "User" },
+                seenAt: { type: Date, default: Date.now }
+            }
+        ],
+        // "Delete for everyone" করলে মে সে জ না মুছেমুছে ফ্ল্যা গ অন হবে
+        deletedForEveryone: {
+            type: Boolean,
+            default: false
         },
         hidden: {
             type: Boolean,
