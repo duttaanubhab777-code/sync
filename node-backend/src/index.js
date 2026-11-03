@@ -11,7 +11,7 @@ import "./models/message.model.js";
 import "./models/story.model.js";
 await connectDB();
 await prepareDatabase();
-const port = process.env.PORT || 5000;
+const port = process.env.PORT || 8000;
 // Express অ্যা প দি য়ে HTTP সা র্ভা র তৈ রি এবং তা তে Socket.IO যুক্তযু করা
 const server = http.createServer(app);
 const io = initSocket(server);
