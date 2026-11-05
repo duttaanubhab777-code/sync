@@ -2,8 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import express from "express";
-
-import helmet from "helemet";
+import helmet from "helmet";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { ApiError } from "./utils/ApiError.js";
