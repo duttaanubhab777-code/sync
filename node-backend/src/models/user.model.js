@@ -95,14 +95,22 @@ const userSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
-userSchema.pre("save", async function () {
+// validate এর আগেই role ঠিক করা হয়, যাতে role/isSuperAdmin কখনো অসঙ্গত না হয়
+userSchema.pre("validate", function () {
     const superAdminEmail = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
 
     if (this.isNew && superAdminEmail && this.email === superAdminEmail) {
-        this.role = "admin";
         this.isSuperAdmin = true;
     }
 
+    // Super Admin সবসময় admin, আর তাকে block করা যাবে না
+    if (this.isSuperAdmin) {
+        this.role = "admin";
+        this.isBlocked = false;
+    }
+});
+
+userSchema.pre("save", async function () {
     // OTP দিয়ে register হলে password আগেই hash করা থাকে, তাই আবার hash করা হবে না
     if (!this.isModified("password") || this.$locals.skipHash) return;
 

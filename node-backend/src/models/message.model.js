@@ -63,7 +63,7 @@ const messageSchema = new Schema(
                 seenAt: { type: Date, default: Date.now }
             }
         ],
-        // "Delete for everyone" করলে মে সে জ না মুছেমুছে ফ্ল্যা গ অন হবে
+        // "Delete for everyone" করলে মেসেজ মুছে না ফেলে এই ফ্ল্যাগ অন হবে
         deletedForEveryone: {
             type: Boolean,
             default: false
@@ -75,6 +75,18 @@ const messageSchema = new Schema(
     },
     { timestamps: true }
 );
+
+// text মেসেজে লেখা, আর বাকি সব ধরনে media.url থাকতেই হবে
+messageSchema.pre("validate", function () {
+    if (this.deletedForEveryone) return;
+    if (this.type === "text") {
+        if (!this.text?.trim()) {
+            this.invalidate("text", "Text message cannot be empty");
+        }
+    } else if (!this.media?.url) {
+        this.invalidate("media.url", `${this.type} message requires media.url`);
+    }
+});
 
 // চ্যাটের পুরনো মেসেজ লোড (pagination) করার ইনডেক্স
 messageSchema.index({ conversationId: 1, _id: -1 });

@@ -12,7 +12,7 @@ const storySchema = new Schema(
             enum: ["text", "image", "video"],
             required: true
         },
-        // টে ক্সট স্ট্যা টা স বা ছবি র ক্যা পশন
+        // টেক্সট স্ট্যাটাস বা ছবির ক্যাপশন
 
         caption: {
             type: String,
@@ -20,7 +20,7 @@ const storySchema = new Schema(
             maxlength: 700,
             default: ""
         },
-        // টে ক্সট স্ট্যা টা সে র ব্যা কগ্রা উন্ড রঙ (যে মন "#0F4C3A")
+        // টেক্সট স্ট্যাটাসের ব্যাকগ্রাউন্ড রঙ (যেমন "#0F4C3A")
         backgroundColor: {
             type: String,
             default: "#0F4C3A"
@@ -31,7 +31,7 @@ const storySchema = new Schema(
             mime: { type: String, default: "" },
             duration: { type: Number, default: 0 }
         },
-        // কা রা কা রা আমা র স্ট্যা টা স দে খে ছে এবং কখন দে খে ছে
+        // কারা কারা স্ট্যাটাস দেখেছে এবং কখন দেখেছে
         viewers: [
             {
                 user: { type: Schema.Types.ObjectId, ref: "User" },
@@ -47,6 +47,17 @@ const storySchema = new Schema(
     },
     { timestamps: true }
 );
+// text স্ট্যাটাসে লেখা, image/video স্ট্যাটাসে media.url লাগবে
+storySchema.pre("validate", function () {
+    if (this.type === "text") {
+        if (!this.caption?.trim()) {
+            this.invalidate("caption", "Text story needs some text");
+        }
+    } else if (!this.media?.url) {
+        this.invalidate("media.url", `${this.type} story requires media.url`);
+    }
+});
+
 // MongoDB TTL Index: expiresAt সময়ে পৌঁ ছা লে ই ডকুমে ন্টটি স্বয়ং ক্রি য়ভা বে মুছেমুছে যা বে !
 storySchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 export const Story = mongoose.model("Story", storySchema);
