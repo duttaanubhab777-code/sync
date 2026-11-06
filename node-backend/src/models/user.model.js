@@ -67,7 +67,7 @@ const userSchema = new mongoose.Schema(
         },
         role: {
             type: String,
-            enum: ["user", "admin"],
+            enum: ["user", "admin", "superAdmin"],
             default: "user",
             index: true
         },
@@ -103,9 +103,9 @@ userSchema.pre("validate", function () {
         this.isSuperAdmin = true;
     }
 
-    // Super Admin সবসময় admin, আর তাকে block করা যাবে না
+    // Super Admin not blocked
     if (this.isSuperAdmin) {
-        this.role = "admin";
+        this.role = "superAdmin";
         this.isBlocked = false;
     }
 });
