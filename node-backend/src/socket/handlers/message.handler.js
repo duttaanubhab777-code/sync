@@ -1,5 +1,5 @@
-import { Conversation } from "../models/conversation.model.js";
-import { Message } from "../models/message.model.js";
+import { Conversation } from "../../models/conversation.model.js";
+import { Message } from "../../models/message.model.js";
 
 // আমাদের অ্যাকাউন্ট এর cloudinary url কিনা টা যাচাই করা
 const isValidCloudinaryUrl = url => {
