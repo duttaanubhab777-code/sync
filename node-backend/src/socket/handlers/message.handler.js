@@ -1,5 +1,6 @@
 import { Conversation } from "../../models/conversation.model.js";
 import { Message } from "../../models/message.model.js";
+import { User } from "../../models/user.model.js";
 import { isValidCloudinaryUrl, pickMedia } from "../../utils/cloudinary.js";
 import { isObjectId } from "../../utils/helpers.js";
 
@@ -70,6 +71,19 @@ export const registerMessageHandlers = (io, socket) => {
             }
             if (!conv.canSendMessage(userId)) {
                 return ack?.({ ok: false, error: "ONLY_ADMINS_CAN_MESSAGE" });
+            }
+            // direct চ্যাটে কেউ কাউকে block করে থাকলে মেসেজ যাবে না
+            if (conv.type === "direct") {
+                const partnerId = conv.members
+                    .map(m => m.toString())
+                    .find(id => id !== userId);
+                const blocked = await User.exists({
+                    $or: [
+                        { _id: userId, blockedUser: partnerId },
+                        { _id: partnerId, blockedUser: userId }
+                    ]
+                });
+                if (blocked) return ack?.({ ok: false, error: "BLOCKED" });
             }
 
             const cleanText = text.trim();

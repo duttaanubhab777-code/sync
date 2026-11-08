@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
+import { randomUUID } from "node:crypto";
 import {
     getAccessSecret,
     getRefreshSecret,
@@ -93,8 +94,11 @@ const userSchema = new mongoose.Schema(
             maxlength: 140
         },
 
-        refreshToken: {
-            type: String
+        // প্রতিটা ডিভাইসের refresh token-এর SHA-256 hash (সর্বোচ্চ ৫টা), যাতে এক ডিভাইসে লগইন করলে আরেকটা লগআউট না হয়
+        refreshTokens: {
+            type: [String],
+            default: [],
+            select: false
         }
     },
     { timestamps: true }
@@ -143,9 +147,17 @@ userSchema.methods.generateAccessToken = function () {
 
 userSchema.methods.generateRefreshToken = function () {
     return jwt.sign(
-        { id: this._id.toString(), _id: this._id.toString() },
+        {
+            id: this._id.toString(),
+            _id: this._id.toString(),
+            // refresh token যেন access token হিসেবে চলতে না পারে
+            tokenType: "refresh"
+        },
         getRefreshSecret(),
-        { expiresIn: process.env.REFRESH_TOKEN_EXPIRY || "30d" }
+        {
+            expiresIn: process.env.REFRESH_TOKEN_EXPIRY || "30d",
+            jwtid: randomUUID()
+        }
     );
 };
 

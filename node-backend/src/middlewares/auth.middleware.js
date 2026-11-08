@@ -21,8 +21,13 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
         throw new ApiError(401, "Invalid or expired access token");
     }
 
+    // refresh token দিয়ে API চালানো যাবে না
+    if (decoded.tokenType === "refresh") {
+        throw new ApiError(401, "Invalid access token");
+    }
+
     const user = await User.findById(decoded.id || decoded._id).select(
-        "-password -refreshToken"
+        "-password"
     );
 
     if (!user) {
@@ -50,6 +55,7 @@ export const verifySocketToken = async (socket, next) => {
         if (!token) return next(new Error("UNAUTHORIZED"));
 
         const decoded = jwt.verify(token, getAccessSecret());
+        if (decoded.tokenType === "refresh") return next(new Error("UNAUTHORIZED"));
         const userId = String(decoded.id || decoded._id);
 
         const user = await User.findById(userId)

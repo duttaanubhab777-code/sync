@@ -143,7 +143,11 @@ sync/
 
 ## 🖥 Frontend কোথায় করব
 
-**সুপারিশ: একই repo-র `frontend/` ফোল্ডারে, আলাদা static হোস্টিংয়ে ডিপ্লয়।**
+**✅ সিদ্ধান্ত: `frontend/` ফোল্ডার Node সার্ভিসই serve করে। Frontend আর Node backend একটাই Render web service-এ ডিপ্লয় হয়।** (নিচের টেবিলের "Node-এর `public/` থেকে serve" অপশন, শুধু ফোল্ডারটা `frontend/`।) এতে CORS লাগে না আর API/Socket-এর ঠিকানা সবসময় `/api` ও `/socket.io`। ফ্রি Render ঘুমালে পেজও দেরিতে খোলে, তাই UptimeRobot দিয়ে `/health` ping করা ভালো।
+
+<details><summary>আগের সুপারিশ (আলাদা static হোস্টিং)</summary>
+
+আলাদা static হোস্টিংয়ে ডিপ্লয়:
 
 | অপশন                                                                                                      | ভালো দিক                                                                    | খারাপ দিক                                                   |
 | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------- |
@@ -153,6 +157,9 @@ sync/
 
 - মোবাইলে কোডিং করছ বলে শুরুতে **vanilla HTML/CSS/JS** রাখো, কোনো build tool লাগবে না। Socket.io client CDN থেকে নেওয়া যায়।
 - GitHub Pages শুধু root বা `/docs` ফোল্ডার serve করে, তাই `frontend/` সরাসরি দিতে চাইলে Vercel/Netlify/Cloudflare Pages সহজ।
+
+</details>
+
 - **কখন শুরু করবে:** Phase 3-এ একটা খুব সাদামাটা টেস্ট পেজ (login + মেসেজ বক্স), আসল ডিজাইন Phase 4-এর পরে।
 
 ---
@@ -297,9 +304,9 @@ sequenceDiagram
     N-->>A: ack {ok: true, message}
     N->>B: message:new {message}
     B->>N: message:delivered {messageId}
-    N->>A: message:status {messageId, "delivered"}
+    N->>A: message:status_bulk {messageIds, "delivered"}
     B->>N: message:seen {conversationId, upToMessageId}
-    N->>A: message:status {..., "seen"}
+    N->>A: message:status_bulk {messageIds, "seen"}
 ```
 
 ### ২) ছবি/ভিডিও/ভয়েস পাঠানো
@@ -368,7 +375,7 @@ sequenceDiagram
 | `message:new`                  | server → client          | `{message}`                                          |
 | `message:delivered`            | client → server          | `{messageId}`                                        |
 | `message:seen`                 | client → server          | `{conversationId, upToMessageId}`                    |
-| `message:status`               | server → client          | `{messageId, status}`                                |
+| `message:status_bulk`          | server → client          | `{conversationId, messageIds, status, by, at}`       |
 | `typing:start` / `typing:stop` | client → server          | `{conversationId}`                                   |
 | `typing`                       | server → client          | `{conversationId, userId, isTyping}`                 |
 | `presence:update`              | server → client          | `{userId, online, lastSeen?}`                        |
@@ -540,14 +547,20 @@ const media = await res.json(); // secure_url, public_id, bytes ...
 
 ```
 PORT=5000
+NODE_ENV=production
 MONGODB_URI=
 JWT_SECRET=
 JWT_EXPIRES_IN=15m
-FRONTEND_URL=
+REFRESH_TOKEN_SECRET=
+REFRESH_TOKEN_EXPIRY=30d
+FRONTEND_URL=          # একই service-এ ফাঁকা রাখো (লোকাল আলাদা পোর্টে চালালে তবেই দাও)
 CLOUDINARY_CLOUD_NAME=
-PYTHON_SERVICE_URL=
+PYTHON_SERVICE_URL=    # CSP-তে connect-src হিসেবে খোলা হয়
 SERVICE_KEY=
+ALLOW_INLINE_SCRIPTS=false
 ```
+
+পুরো তালিকা ও ব্যাখ্যা: `node-backend/.env.example`
 
 **🟨 `python-service/config.py`**
 
@@ -568,10 +581,12 @@ SERVICE_KEY = ""         # Node-এর সাথে এক
 
 **🟦 Render**
 
-- Root Directory: `node-backend`
-- Build: `npm install` · Start: `node src/index.js`
-- Environment-এ উপরের সব ভ্যারিয়েবল
-- চাইলে _Build Filter_-এ `node-backend/**` দাও, যাতে Python ফোল্ডারের commit-এ Node রিডিপ্লয় না হয়
+- Root Directory: **ফাঁকা রাখো** (repo root), কারণ `frontend/` ফোল্ডারও লাগবে
+- Build: `npm install --prefix node-backend`
+- Start: `npm start --prefix node-backend`
+- Environment-এ উপরের সব ভ্যারিয়েবল (`NODE_ENV=production` সহ)
+- চাইলে _Build Filter_-এ `node-backend/**` আর `frontend/**` দাও, যাতে Python ফোল্ডারের commit-এ রিডিপ্লয় না হয়
+- Frontend-এ `<script src="/socket.io/socket.io.js">` ব্যবহার করো (CDN লাগবে না), আর fetch-এ `/api/...` লেখো
 
 **🟨 PythonAnywhere**
 
@@ -588,7 +603,7 @@ cp config.example.py config.py   # তারপর মান বসাও
 
 **🟩 Frontend**
 
-- Vercel/Netlify/Cloudflare Pages-এ repo কানেক্ট, Root Directory = `frontend`
+- আলাদা ডিপ্লয় লাগে না। `frontend/` ফোল্ডার উপরের Render service থেকেই serve হয়
 
 ---
 

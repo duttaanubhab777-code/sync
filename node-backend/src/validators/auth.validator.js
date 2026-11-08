@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const normalizePhone = value => {
+export const normalizePhone = value => {
     let v = value.replace(/[\s\-()]/g, "");
     if (v.startsWith("+91")) v = v.slice(3);
     else if (v.startsWith("91") && v.length === 12) v = v.slice(2);

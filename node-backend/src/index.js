@@ -17,6 +17,9 @@ const server = http.createServer(app);
 const io = initSocket(server);
 // কন্ট্রো লা র থে কে ও যে ন io ব্য বহা র করা যা য় সে জন্য app-এ সে ট করে রা খা
 app.set("io", io);
+// Render-এর load balancer-এর idle timeout-এর চেয়ে বেশি রাখা, নইলে মাঝেমধ্যে 502 আসে
+server.keepAliveTimeout = 65_000;
+server.headersTimeout = 66_000;
 server.listen(port, "0.0.0.0", () => {
     console.log(`[Sync Server] Running on http://localhost:${port}`);
 });
