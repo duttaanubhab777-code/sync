@@ -1,7 +1,8 @@
 import React, { useEffect } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { Loader2, MessageSquare } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import SyncLogo from "./components/SyncLogo.jsx";
 import { initializeApp } from "./store/authSlice.js";
 import AppLayout from "./components/AppLayout.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
@@ -18,15 +19,13 @@ function ProtectedRoute({ children }) {
     if (initializing) {
         return (
             <div className="sync-splash-screen">
-                <div className="sync-splash-logo">
-                    <MessageSquare size={36} />
-                </div>
+                <SyncLogo size="splash" />
                 <h2>Sync</h2>
                 <div className="sync-splash-status">
                     <Loader2 size={18} className="spin" />
                     <span>
                         {serverWaking
-                            ? "সার্ভার জাগছে... অনুগ্রহ করে অপেক্ষা করুন"
+                            ? "Waking up the server. Please wait..."
                             : "Loading your workspace..."}
                     </span>
                 </div>

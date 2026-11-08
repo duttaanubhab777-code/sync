@@ -5,6 +5,7 @@ import react from "@vitejs/plugin-react";
 // লোকাল ডেভেলপমেন্টে (npm run dev) Vite 5173 পোর্টে চলে এবং নিচের proxy দিয়ে 5000 পোর্টের Node ব্যাকএন্ডে যুক্ত হয়।
 export default defineConfig({
     plugins: [react()],
+    publicDir: "../assets",
     build: {
         outDir: "dist",
         emptyOutDir: true,

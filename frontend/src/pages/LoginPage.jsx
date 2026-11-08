@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { MessageSquare, Lock, User, Loader2, Eye, EyeOff } from "lucide-react";
+import { Lock, User, Loader2, Eye, EyeOff } from "lucide-react";
+import SyncLogo from "../components/SyncLogo.jsx";
+import BrandTyping from "../components/BrandTyping.jsx";
 import { clearAuthError, loginUser } from "../store/authSlice.js";
 
 export default function LoginPage() {
@@ -44,22 +46,19 @@ export default function LoginPage() {
             {serverWaking && (
                 <div className="sync-top-banner waking">
                     <Loader2 size={16} className="spin" />
-                    <span>
-                        সার্ভার জাগছে (Render Cold Start)... একটু অপেক্ষা করুন
-                    </span>
+                    <span>Starting the server. This may take a few moments...</span>
                 </div>
             )}
 
             <div className="sync-auth-card">
                 <div className="sync-auth-brand">
-                    <div className="sync-auth-logo">
-                        <MessageSquare size={28} />
-                    </div>
+                    <SyncLogo size="auth" />
                     <h1>Welcome back to Sync</h1>
                     <p>
                         Sign in with your username, email, or 10-digit mobile
                         number
                     </p>
+                    <BrandTyping />
                 </div>
 
                 {error && <div className="sync-alert error">{error}</div>}

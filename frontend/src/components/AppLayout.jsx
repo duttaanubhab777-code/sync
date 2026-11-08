@@ -10,6 +10,7 @@ import {
     Loader2
 } from "lucide-react";
 import Avatar from "./Avatar.jsx";
+import SyncLogo from "./SyncLogo.jsx";
 import { logoutUser, forceLogout } from "../store/authSlice.js";
 import { fetchConversations, resetChatState } from "../store/chatSlice.js";
 import { fetchStories } from "../store/storySlice.js";
@@ -71,20 +72,20 @@ export default function AppLayout() {
             {serverWaking && (
                 <div className="sync-top-banner waking">
                     <Loader2 size={16} className="spin" />
-                    <span>সার্ভার জাগছে... অনুগ্রহ করে কয়েক সেকেন্ড অপেক্ষা করুন</span>
+                    <span>Waking up the server. This may take a few seconds.</span>
                 </div>
             )}
             {!serverWaking && !socketConnected && reconnecting && (
                 <div className="sync-top-banner offline">
                     <WifiOff size={15} />
-                    <span>সংযোগ বিচ্ছিন্ন... পুনরায় যুক্ত করার চেষ্টা চলছে</span>
+                    <span>Connection lost. Trying to reconnect...</span>
                 </div>
             )}
 
             <div className="sync-main-frame">
                 <aside className="sync-nav-rail">
                     <div className="sync-nav-brand" title="Sync Real-Time Chat">
-                        <div className="sync-logo-badge">S</div>
+                        <SyncLogo size="nav" />
                     </div>
 
                     <nav className="sync-nav-links">

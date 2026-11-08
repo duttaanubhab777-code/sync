@@ -17,7 +17,7 @@ export const uploadMediaToCloudinary = async (file, onProgress) => {
 
     if (!pyBaseUrl) {
         throw new Error(
-            "Python Media Service URL (PYTHON_SERVICE_URL) সেট করা নেই। Render বা .env-এ PYTHON_SERVICE_URL যোগ করুন।"
+            "The Python media service URL is not configured. Set PYTHON_SERVICE_URL in your deployment environment."
         );
     }
 
@@ -49,7 +49,7 @@ export const uploadMediaToCloudinary = async (file, onProgress) => {
         } else {
             throw new Error(
                 err.response?.data?.message ||
-                    "মিডিয়া সার্ভার থেকে আপলোড সিগনেচার পাওয়া যায়নি"
+                    "Unable to obtain an upload signature from the media service."
             );
         }
     }
