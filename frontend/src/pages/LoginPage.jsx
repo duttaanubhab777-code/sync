@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { Lock, User, Loader2, Eye, EyeOff } from "lucide-react";
 import SyncLogo from "../components/SyncLogo.jsx";
+import SyncBrandBar from "../components/SyncBrandBar.jsx";
 import BrandTyping from "../components/BrandTyping.jsx";
 import { clearAuthError, loginUser } from "../store/authSlice.js";
 
@@ -43,6 +44,7 @@ export default function LoginPage() {
 
     return (
         <div className="sync-auth-page">
+            <SyncBrandBar />
             {serverWaking && (
                 <div className="sync-top-banner waking">
                     <Loader2 size={16} className="spin" />
