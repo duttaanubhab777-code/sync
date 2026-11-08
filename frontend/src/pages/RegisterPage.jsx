@@ -12,6 +12,7 @@ import {
     EyeOff
 } from "lucide-react";
 import SyncLogo from "../components/SyncLogo.jsx";
+import SyncBrandBar from "../components/SyncBrandBar.jsx";
 import BrandTyping from "../components/BrandTyping.jsx";
 import { clearAuthError, registerUser } from "../store/authSlice.js";
 
@@ -84,6 +85,7 @@ export default function RegisterPage() {
 
     return (
         <div className="sync-auth-page">
+            <SyncBrandBar />
             {serverWaking && (
                 <div className="sync-top-banner waking">
                     <Loader2 size={16} className="spin" />
