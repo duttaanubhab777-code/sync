@@ -1,0 +1,21 @@
+{
+  "id": "/",
+  "name": "Sync — Real-Time Messaging",
+  "short_name": "Sync",
+  "description": "Fast, secure real-time messaging for conversations and groups.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#0b141a",
+  "theme_color": "#00a884",
+  "icons": [
+    {
+      "src": "/Sync.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
