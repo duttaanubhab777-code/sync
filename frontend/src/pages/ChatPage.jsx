@@ -25,6 +25,7 @@ import {
     MessageSquare
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
+import SyncBrandBar from "../components/SyncBrandBar.jsx";
 import {
     NewDirectChatModal,
     NewGroupChatModal,
@@ -468,6 +469,7 @@ export default function ChatPage() {
         >
             <section className="sync-chat-sidebar">
                 <div className="sync-pane-header">
+                    <SyncBrandBar className="sync-pane-brand" />
                     <h2>Chats</h2>
                     <div className="sync-header-actions">
                         <button
@@ -522,9 +524,16 @@ export default function ChatPage() {
 
                 <div className="sync-conv-list">
                     {conversationsLoading && conversations.length === 0 && (
-                        <div className="sync-empty-hint">
-                            <Loader2 size={18} className="spin" /> Loading
-                            conversations...
+                        <div aria-busy="true" aria-label="Loading conversations">
+                            {[0, 1, 2, 3, 4, 5].map(n => (
+                                <div className="sync-skeleton-row" key={n}>
+                                    <div className="sync-skel avatar" />
+                                    <div className="sync-skel-lines">
+                                        <div className="sync-skel line" />
+                                        <div className="sync-skel line short" />
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     )}
 
@@ -542,7 +551,7 @@ export default function ChatPage() {
                             </div>
                         )}
 
-                    {filteredConversations.map(conv => {
+                    {filteredConversations.map((conv, convIndex) => {
                         const info = getConvDisplay(conv);
                         const isSelected =
                             String(conv._id) === String(activeConversationId);
@@ -552,6 +561,7 @@ export default function ChatPage() {
                         return (
                             <div
                                 key={conv._id}
+                                style={{ "--i": Math.min(convIndex, 12) }}
                                 className={`sync-conv-row ${
                                     isSelected ? "active" : ""
                                 }`}

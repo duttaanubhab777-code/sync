@@ -13,6 +13,7 @@ import {
     ShieldCheck
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
+import SyncLogo from "../components/SyncLogo.jsx";
 import {
     fetchBlockedUsers,
     unblockUserById,
@@ -106,13 +107,11 @@ export default function ProfilePage() {
     return (
         <div className="sync-profile-page">
             <div className="sync-profile-container">
-                <div className="sync-profile-card">
-                    <h2>My Profile</h2>
-                    <p className="sync-muted">
-                        Manage your Sync profile information, avatar, and
-                        blocked contacts
-                    </p>
-
+                <div className="sync-profile-card sync-profile-main">
+                    <div className="sync-profile-cover">
+                        <SyncLogo size="cover" />
+                    </div>
+                    <div className="sync-profile-body">
                     <div className="sync-profile-avatar-row">
                         <Avatar
                             src={user?.avatar}
@@ -159,6 +158,14 @@ export default function ProfilePage() {
                         </div>
                     )}
                     {error && <div className="sync-alert error">{error}</div>}
+
+                    <div className="sync-profile-identity">
+                        <h2>My Profile</h2>
+                        <p className="sync-muted">
+                            Manage your Sync profile information, avatar, and
+                            blocked contacts
+                        </p>
+                    </div>
 
                     <form
                         className="sync-profile-form"
@@ -228,6 +235,7 @@ export default function ProfilePage() {
                             </span>
                         </button>
                     </form>
+                    </div>
                 </div>
 
                 <div className="sync-profile-card">

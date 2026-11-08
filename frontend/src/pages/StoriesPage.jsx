@@ -12,6 +12,7 @@ import {
     Loader2
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
+import SyncBrandBar from "../components/SyncBrandBar.jsx";
 import {
     createNewStory,
     deleteMyStory,
@@ -178,6 +179,7 @@ export default function StoriesPage() {
         <div className="sync-stories-layout">
             <div className="sync-stories-sidebar">
                 <div className="sync-pane-header">
+                    <SyncBrandBar className="sync-pane-brand" />
                     <h2>Stories</h2>
                     <button
                         type="button"

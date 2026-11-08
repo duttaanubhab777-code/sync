@@ -1,0 +1,171 @@
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+@media (max-width: 1180px) {
+    .sync-app-shell { padding: 10px; gap: 8px; }
+    .sync-main-frame,
+    .sync-chat-layout,
+    .sync-stories-layout { gap: 10px; }
+    .sync-chat-sidebar,
+    .sync-stories-sidebar { width: 330px; min-width: 300px; flex-basis: 330px; }
+    .sync-nav-rail { width: 74px; flex-basis: 74px; }
+    .sync-nav-item { width: 56px; height: 58px; }
+    .sync-info-drawer { width: 320px; }
+}
+
+@media (max-width: 940px) {
+    .sync-auth-page { grid-template-columns: 1fr; align-content: start; }
+    .sync-auth-hero { padding: 36px 20px 8px; }
+    .sync-hero-art { width: 130px; height: 130px; margin-bottom: 6px; }
+    .sync-hero-art .sync-brand-mark--hero { width: 104px; height: 104px; }
+    .sync-orbit.o2,
+    .sync-hero-features { display: none; }
+    .sync-hero-title { font-size: 2.2rem; }
+    .sync-brand-typing { font-size: 0.92rem; }
+    .sync-auth-panel { padding: 14px 16px 36px; }
+    .sync-auth-card { padding: 28px 22px; border-radius: 26px; }
+}
+
+@media (max-width: 820px) {
+    .sync-app-shell { padding: 0; gap: 0; padding-top: var(--safe-top); }
+    .sync-top-banner { border-radius: 0; margin: 0; }
+    .sync-main-frame { flex-direction: column-reverse; gap: 0; }
+
+    /* ----- bottom dock ----- */
+    .sync-nav-rail {
+        width: auto;
+        flex: 0 0 auto;
+        height: 66px;
+        margin: 4px 14px calc(12px + var(--safe-bottom));
+        padding: 6px;
+        flex-direction: row;
+        border-radius: 26px;
+        background: rgba(11, 43, 36, 0.97);
+        border-color: var(--line-strong);
+        box-shadow: 0 18px 40px -14px rgba(0, 0, 0, 0.8);
+    }
+
+    .sync-nav-brand,
+    .sync-nav-footer { display: none; }
+    .sync-nav-links { flex: 1; flex-direction: row; gap: 6px; }
+
+    .sync-nav-item {
+        flex: 1;
+        width: auto;
+        height: 100%;
+        flex-direction: row;
+        gap: 8px;
+        border-radius: 20px;
+    }
+
+    .sync-nav-item.active { flex: 2; }
+    .sync-nav-label { display: none; font-size: 0.82rem; }
+    .sync-nav-item.active .sync-nav-label { display: inline; animation: sync-fade 0.25s both; }
+    .sync-app-shell.in-chat .sync-nav-rail { display: none; }
+
+    /* ----- panes ----- */
+    .sync-workspace { min-height: 0; overflow: hidden; }
+    .sync-chat-layout,
+    .sync-stories-layout { gap: 0; overflow: hidden; }
+
+    .sync-chat-sidebar,
+    .sync-stories-sidebar {
+        width: 100%;
+        min-width: 0;
+        flex: 1 1 auto;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+    }
+
+    .sync-chat-stage,
+    .sync-stories-stage { border: 0; border-radius: 0; }
+
+    .sync-chat-layout .sync-chat-stage { display: none; }
+    .sync-chat-layout.has-active-chat .sync-chat-sidebar { display: none; }
+    .sync-chat-layout.has-active-chat .sync-chat-stage { display: flex; flex: 1; background: var(--bg-chat); }
+
+    .sync-stories-layout .sync-stories-stage { display: none; }
+    .sync-stories-layout.has-active-story .sync-stories-stage { display: flex; position: fixed; inset: 0; z-index: 70; border-radius: 0; }
+
+    .sync-pane-header { min-height: 64px; padding: 0 14px 0 18px; }
+    .sync-pane-header h2 { display: none; }
+    .sync-stories-sidebar .sync-pane-header h2 { display: block; font-size: 1.4rem; }
+    .sync-pane-brand { display: flex; }
+    .sync-sidebar-controls { padding: 0 14px 12px; }
+    .sync-conv-list { padding: 0 8px 8px; }
+
+    .mobile-back { display: inline-flex; margin-left: -8px; }
+    .sync-chat-header { min-height: 64px; padding: 0 8px 0 10px; padding-top: 0; }
+    .sync-chat-header-left { gap: 8px; }
+    .sync-messages-viewport { padding: 14px 12px 8px; }
+    .sync-msg-bubble { max-width: min(86%, 560px); }
+
+    .sync-composer-wrap { padding: 6px 10px 10px; padding-bottom: max(10px, var(--safe-bottom)); }
+    .sync-composer-input { font-size: 16px; }
+
+    .sync-info-drawer { inset: 0; width: 100%; border: 0; border-radius: 0; animation-name: sync-slide-up; }
+
+    .sync-story-player { padding: calc(14px + var(--safe-top)) 14px calc(18px + var(--safe-bottom)); }
+    .sync-story-text-canvas { font-size: clamp(1.3rem, 6vw, 1.75rem); padding: 16px; }
+    .sync-story-nav { width: 40px; height: 40px; margin-top: -20px; }
+
+    .sync-profile-page { border: 0; border-radius: 0; padding: 14px 12px 24px; }
+    .sync-profile-card { padding: 18px 16px; border-radius: 22px; }
+    .sync-profile-main { padding: 0; }
+    .sync-profile-body { padding: 0 16px 18px; }
+    .sync-profile-cover { height: 108px; }
+    .sync-signout-card { flex-direction: column; align-items: stretch; }
+
+    /* ----- sheets ----- */
+    .sync-modal-backdrop { align-items: flex-end; padding: 0; }
+
+    .sync-modal-card {
+        max-width: none;
+        max-height: 92dvh;
+        padding-bottom: var(--safe-bottom);
+        border-radius: 28px 28px 0 0;
+        border-bottom: 0;
+    }
+
+    .sync-modal-card.is-confirm { padding-bottom: calc(22px + var(--safe-bottom)); }
+    .sync-modal-body { padding: 16px 16px 20px; }
+}
+
+@media (max-width: 560px) {
+    .sync-grid-2,
+    .sync-readonly-grid { grid-template-columns: 1fr; }
+    .sync-auth-head h1 { font-size: 1.5rem; }
+    .sync-placeholder-actions { flex-wrap: wrap; justify-content: center; }
+    .sync-field input,
+    .sync-field textarea,
+    .sync-search-input-wrap input { font-size: 16px; }
+    .sync-profile-avatar-row { flex-direction: column; align-items: flex-start; gap: 12px; margin-top: -44px; }
+    .sync-modal-footer { flex-wrap: wrap; }
+    .sync-modal-footer .sync-btn { flex: 1; }
+    .reply-banner-text p { max-width: 62vw; }
+    .sync-msg-actions { right: 6px; }
+}
+
+@media (max-height: 620px) and (min-width: 821px) {
+    .sync-nav-brand { display: none; }
+}
+
+/* ক্যামেরা-নচ/হোম বারে সুরক্ষা */
+@supports (padding: max(0px)) {
+    @media (max-width: 820px) {
+        .sync-chat-header { padding-top: 0; }
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        animation-delay: 0ms !important;
+        transition-duration: 0.01ms !important;
+    }
+}

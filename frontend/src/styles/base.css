@@ -1,0 +1,588 @@
+/* ==========================================================================
+   Sync — UI system
+   Brand: logo gradient (lime → leaf → teal) + MongoDB spring green (#00ED64)
+   Rules: শুধু transform/opacity অ্যানিমেট করা হয়েছে, backdrop-filter নেই → lag হয় না
+   ========================================================================== */
+
+:root {
+    color-scheme: dark;
+
+    --bg-0: #031512;
+    --bg-1: #07201b;
+    --bg-2: #0b2b24;
+    --bg-3: #11392f;
+    --bg-chat: #041a16;
+
+    --line: rgba(130, 255, 190, 0.09);
+    --line-strong: rgba(130, 255, 190, 0.2);
+
+    --text: #e8f7f0;
+    --text-2: #9bb8ad;
+    --text-3: #6d8a7f;
+
+    --mongo: #00ed64;
+    --lime: #b6f34d;
+    --leaf: #4fd08a;
+    --teal: #2ccb9a;
+    --cyan: #1fa7b0;
+    --forest: #0e5a3e;
+
+    --grad-brand: linear-gradient(120deg, #b6f34d 0%, #00ed64 36%, #2ccb9a 70%, #1fa7b0 100%);
+    --grad-btn: linear-gradient(135deg, #00ed64 0%, #4ee58a 48%, #2fd3a8 100%);
+    --grad-btn-hover: linear-gradient(135deg, #3cff8c 0%, #6cf0a1 48%, #4fe3bb 100%);
+    --grad-out: linear-gradient(135deg, #0f9158 0%, #0b8272 100%);
+    --grad-soft: linear-gradient(135deg, rgba(0, 237, 100, 0.16), rgba(31, 167, 176, 0.12));
+
+    --on-brand: #022b17;
+    --danger: #ff5d6c;
+    --seen: #8cf3ff;
+
+    --r-xl: 28px;
+    --r-lg: 22px;
+    --r-md: 16px;
+    --r-sm: 12px;
+
+    --font: "Plus Jakarta Sans", "Hind Siliguri", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --ease: cubic-bezier(0.22, 0.9, 0.28, 1);
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+    /* পুরনো নামগুলো (যদি কোথাও থেকে যায়) */
+    --bg-deep: var(--bg-0);
+    --bg-panel: var(--bg-1);
+    --bg-elevated: var(--bg-2);
+    --bg-hover: var(--bg-3);
+    --accent: var(--mongo);
+    --text-primary: var(--text);
+    --text-secondary: var(--text-2);
+    --border-subtle: var(--line);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html,
+body,
+#root {
+    height: 100%;
+    width: 100%;
+    min-height: 100dvh;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow: hidden;
+    overscroll-behavior: none;
+}
+
+body {
+    background:
+        radial-gradient(900px 620px at 6% -10%, rgba(182, 243, 77, 0.1), transparent 62%),
+        radial-gradient(1000px 720px at 104% 110%, rgba(31, 167, 176, 0.16), transparent 62%),
+        var(--bg-0);
+}
+
+#root {
+    background: transparent;
+}
+
+a {
+    color: var(--mongo);
+    text-decoration: none;
+}
+
+button,
+input,
+textarea {
+    font-family: inherit;
+    color: inherit;
+    font-size: inherit;
+}
+
+button {
+    cursor: pointer;
+}
+
+button,
+a,
+input,
+textarea,
+label {
+    -webkit-tap-highlight-color: transparent;
+}
+
+svg.lucide {
+    stroke-width: 1.85;
+}
+
+:focus-visible {
+    outline: 2px solid var(--mongo);
+    outline-offset: 3px;
+    border-radius: 8px;
+}
+
+::selection {
+    background: rgba(0, 237, 100, 0.3);
+}
+
+input[type="checkbox"] {
+    accent-color: var(--mongo);
+    width: 16px;
+    height: 16px;
+}
+
+.spin {
+    animation: sync-spin 0.9s linear infinite;
+}
+
+.mt-2 { margin-top: 8px; }
+.mt-4 { margin-top: 16px; }
+
+/* ---------- scrollbars ---------- */
+.sync-messages-viewport,
+.sync-conv-list,
+.sync-stories-list,
+.sync-drawer-body,
+.sync-profile-page,
+.sync-modal-body,
+.sync-auth-page {
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(130, 255, 190, 0.22) transparent;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* ==========================================================================
+   Keyframes (সবগুলো transform / opacity)
+   ========================================================================== */
+@keyframes sync-spin { to { transform: rotate(360deg); } }
+@keyframes sync-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes sync-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sync-pop { from { opacity: 0; transform: scale(0.86); } to { opacity: 1; transform: none; } }
+@keyframes sync-slide-up { from { opacity: 0; transform: translateY(26px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes sync-slide-left { from { opacity: 0; transform: translateX(26px); } to { opacity: 1; transform: none; } }
+@keyframes sync-bubble-in { from { opacity: 0; transform: translateY(10px) scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes sync-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+@keyframes sync-glow { 0%, 100% { opacity: 0.55; transform: scale(1); } 50% { opacity: 0.95; transform: scale(1.12); } }
+@keyframes sync-logo-turn { 0% { transform: rotate(0); } 70%, 100% { transform: rotate(360deg); } }
+@keyframes sync-pulse { 50% { opacity: 0.3; } }
+@keyframes sync-caret-blink { to { visibility: hidden; } }
+@keyframes sync-shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@keyframes sync-ping { 0% { transform: scale(1); opacity: 0.55; } 100% { transform: scale(2.1); opacity: 0; } }
+@keyframes sync-dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75%, 100% { content: "..."; } }
+@keyframes sync-drift { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(3%, -4%, 0); } }
+
+/* ==========================================================================
+   Brand: logo, wordmark, splash
+   ========================================================================== */
+.sync-brand-mark {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    isolation: isolate;
+    background: transparent;
+    border: 0;
+    padding: 0;
+}
+
+.sync-brand-mark img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: transparent;
+    user-select: none;
+    -webkit-user-drag: none;
+    pointer-events: none;
+}
+
+/* লোগোর পেছনে বক্স নয়, শুধু নরম আলো (ব্যাকগ্রাউন্ড ছাড়াই লোগো সুন্দর দেখায়) */
+.sync-brand-mark.has-glow::before {
+    content: "";
+    position: absolute;
+    inset: -28%;
+    z-index: -1;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, rgba(0, 237, 100, 0.34), rgba(31, 167, 176, 0.12) 55%, transparent 72%);
+    animation: sync-glow 3.4s ease-in-out infinite;
+    will-change: transform, opacity;
+}
+
+.sync-brand-mark.is-spinning img {
+    animation: sync-logo-turn 2.6s cubic-bezier(0.65, 0.05, 0.3, 0.95) infinite;
+    will-change: transform;
+}
+
+.sync-brand-mark--mini { width: 30px; height: 30px; }
+.sync-brand-mark--bar { width: 34px; height: 34px; }
+.sync-brand-mark--nav { width: 46px; height: 46px; }
+.sync-brand-mark--auth { width: 84px; height: 84px; }
+.sync-brand-mark--splash { width: 104px; height: 104px; }
+.sync-brand-mark--hero { width: 168px; height: 168px; }
+.sync-brand-mark--stage { width: 132px; height: 132px; }
+.sync-brand-mark--cover { width: 150px; height: 150px; }
+
+.sync-wordmark {
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    background: var(--grad-brand);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+}
+
+.sync-brandbar {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+}
+
+.sync-brandbar-name {
+    font-size: 1.28rem;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    background: var(--grad-brand);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+}
+
+.sync-splash-screen {
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    background: radial-gradient(60% 45% at 50% 38%, rgba(0, 237, 100, 0.16), transparent 70%), var(--bg-0);
+}
+
+.sync-splash-screen h2 {
+    font-size: 1.7rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    background: var(--grad-brand);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+}
+
+.sync-splash-status {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 22px;
+    color: var(--text-2);
+    font-size: 0.9rem;
+    animation: sync-fade 0.6s ease both;
+}
+
+.sync-top-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 38px;
+    padding: 8px 16px;
+    font-size: 0.84rem;
+    font-weight: 600;
+    text-align: center;
+    border-radius: 14px;
+    animation: sync-slide-up 0.35s var(--ease) both;
+    z-index: 60;
+}
+
+.sync-top-banner.waking {
+    background: rgba(0, 237, 100, 0.12);
+    color: #7bf2a8;
+    border: 1px solid rgba(0, 237, 100, 0.25);
+}
+
+.sync-top-banner.offline {
+    background: rgba(255, 93, 108, 0.12);
+    color: #ff9aa4;
+    border: 1px solid rgba(255, 93, 108, 0.28);
+}
+
+/* ==========================================================================
+   Buttons, inputs, alerts
+   ========================================================================== */
+.sync-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 42px;
+    padding: 10px 18px;
+    border-radius: 14px;
+    border: 1px solid transparent;
+    font-size: 0.92rem;
+    font-weight: 700;
+    letter-spacing: -0.005em;
+    white-space: nowrap;
+    transition: transform 0.18s var(--ease), background-color 0.2s, border-color 0.2s, color 0.2s, opacity 0.2s;
+}
+
+.sync-btn:active:not(:disabled) { transform: scale(0.97); }
+.sync-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.sync-btn.primary {
+    background: var(--grad-btn);
+    color: var(--on-brand);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+/* glow আলাদা layer-এ, তাই hover-এ শুধু opacity বদলায় (সস্তা) */
+.sync-btn.primary::after {
+    content: "";
+    position: absolute;
+    inset: 4px 8px -6px;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--grad-btn);
+    filter: blur(14px);
+    opacity: 0.32;
+    transition: opacity 0.25s;
+}
+
+.sync-btn.primary:hover:not(:disabled) {
+    background: var(--grad-btn-hover);
+}
+
+.sync-btn.primary:hover:not(:disabled)::after { opacity: 0.58; }
+
+.sync-btn.secondary {
+    background: var(--bg-2);
+    color: var(--text);
+    border-color: var(--line-strong);
+}
+
+.sync-btn.secondary:hover:not(:disabled) {
+    background: var(--bg-3);
+    border-color: rgba(0, 237, 100, 0.35);
+}
+
+.sync-btn.ghost {
+    background: transparent;
+    color: var(--text-2);
+}
+
+.sync-btn.ghost:hover:not(:disabled) {
+    background: rgba(130, 255, 190, 0.07);
+    color: var(--text);
+}
+
+.sync-btn.danger {
+    background: rgba(255, 93, 108, 0.12);
+    color: #ff8a96;
+    border-color: rgba(255, 93, 108, 0.3);
+}
+
+.sync-btn.danger:hover:not(:disabled) {
+    background: rgba(255, 93, 108, 0.22);
+}
+
+.sync-btn.danger-solid {
+    background: linear-gradient(135deg, #ff5d6c, #e23a6a);
+    color: #fff;
+}
+
+.sync-btn.full { width: 100%; }
+.sync-btn.lg { min-height: 52px; padding: 13px 22px; font-size: 0.98rem; border-radius: 16px; }
+.sync-btn.sm { min-height: 36px; padding: 7px 14px; font-size: 0.84rem; border-radius: 12px; }
+.sync-btn.xs { min-height: 30px; padding: 5px 11px; font-size: 0.78rem; border-radius: 10px; }
+
+.sync-icon-btn {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 auto;
+    border-radius: 14px;
+    border: 0;
+    background: transparent;
+    color: var(--text-2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.18s, color 0.18s, transform 0.18s var(--ease);
+}
+
+.sync-icon-btn:hover,
+.sync-icon-btn.active {
+    background: rgba(130, 255, 190, 0.1);
+    color: var(--mongo);
+}
+
+.sync-icon-btn:active { transform: scale(0.92); }
+.sync-icon-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.sync-icon-btn.xs { width: 30px; height: 30px; border-radius: 10px; }
+.sync-icon-btn.danger:hover { background: rgba(255, 93, 108, 0.14); color: var(--danger); }
+.sync-icon-btn.light { color: #fff; background: rgba(2, 15, 12, 0.5); }
+.sync-icon-btn.light:hover { background: rgba(2, 15, 12, 0.75); color: #fff; }
+
+.sync-alert {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 11px 14px;
+    border-radius: 14px;
+    font-size: 0.86rem;
+    line-height: 1.4;
+    animation: sync-pop 0.3s var(--ease) both;
+}
+
+.sync-alert.error {
+    background: rgba(255, 93, 108, 0.11);
+    color: #ff9aa4;
+    border: 1px solid rgba(255, 93, 108, 0.28);
+}
+
+.sync-alert.success {
+    background: rgba(0, 237, 100, 0.1);
+    color: #7bf2a8;
+    border: 1px solid rgba(0, 237, 100, 0.28);
+}
+
+.sync-field {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.sync-field label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-2);
+    letter-spacing: 0.005em;
+}
+
+.sync-field input[type="text"],
+.sync-field input[type="email"],
+.sync-field input[type="tel"],
+.sync-field input[type="password"],
+.sync-field input[type="search"],
+.sync-field textarea {
+    width: 100%;
+    min-height: 50px;
+    padding: 12px 15px;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+}
+
+.sync-field textarea { resize: none; line-height: 1.5; }
+
+.sync-field input[type="file"] {
+    width: 100%;
+    padding: 10px;
+    background: var(--bg-2);
+    border: 1px dashed var(--line-strong);
+    border-radius: 14px;
+    color: var(--text-2);
+    font-size: 0.86rem;
+}
+
+.sync-field input::placeholder,
+.sync-field textarea::placeholder,
+.sync-search-input-wrap input::placeholder,
+.sync-composer-input::placeholder {
+    color: var(--text-3);
+}
+
+.sync-field input:focus,
+.sync-field textarea:focus {
+    border-color: var(--mongo);
+    background: var(--bg-3);
+    box-shadow: 0 0 0 4px rgba(0, 237, 100, 0.13);
+}
+
+.sync-input-icon {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.sync-input-icon > svg {
+    position: absolute;
+    left: 15px;
+    color: var(--text-3);
+    pointer-events: none;
+    transition: color 0.2s;
+}
+
+.sync-input-icon:focus-within > svg { color: var(--mongo); }
+.sync-input-icon input { padding-left: 44px !important; padding-right: 44px !important; }
+
+.sync-pass-toggle {
+    position: absolute;
+    right: 8px;
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: 12px;
+    background: none;
+    color: var(--text-3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s, background-color 0.2s;
+}
+
+.sync-pass-toggle:hover { color: var(--mongo); background: rgba(130, 255, 190, 0.08); }
+
+.sync-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+
+.sync-muted { color: var(--text-2); font-size: 0.86rem; line-height: 1.5; }
+
+.sync-section-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--text-2);
+}
+
+.sync-empty-hint {
+    padding: 26px 14px;
+    text-align: center;
+    color: var(--text-2);
+    font-size: 0.88rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    animation: sync-fade 0.4s both;
+}
+
+.sync-progress-bar {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--bg-3);
+    overflow: hidden;
+}
+
+.sync-progress-bar > div {
+    height: 100%;
+    border-radius: inherit;
+    background: var(--grad-btn);
+    transition: width 0.2s linear;
+}
