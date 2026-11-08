@@ -25,52 +25,63 @@ export const buildMongoUri = (raw, dbName = DB_NAME) => {
     return `${scheme[0]}${hosts}/${dbName}${query}`;
 };
 
+let connectingPromise = null;
+
 const connectDB = async () => {
-    try {
-        const conn = await mongoose.connect(
-            buildMongoUri(process.env.MONGODB_URI),
-            {
-                serverSelectionTimeoutMS: 15_000,
-                socketTimeoutMS: 45_000
+    if (mongoose.connection.readyState === 1) return;
+    if (connectingPromise) return connectingPromise;
+
+    connectingPromise = (async () => {
+        while (mongoose.connection.readyState !== 1) {
+            try {
+                const conn = await mongoose.connect(
+                    buildMongoUri(process.env.MONGODB_URI),
+                    {
+                        serverSelectionTimeoutMS: 15_000,
+                        socketTimeoutMS: 45_000
+                    }
+                );
+                console.log(
+                    `MongoDB connected: ${conn.connection.host}/${conn.connection.name}`
+                );
+                break;
+            } catch (error) {
+                console.error(
+                    "MongoDB connection error (retrying in 5s):",
+                    error.message
+                );
+                if (!process.env.MONGODB_URI) {
+                    break;
+                }
+                await new Promise(resolve => setTimeout(resolve, 5000));
             }
-        );
-        console.log(
-            `MongoDB connected: ${conn.connection.host}/${conn.connection.name}`
-        );
-    } catch (error) {
-        console.error("MongoDB connection error:", error);
-        process.exit(1);
-    }
+        }
+        connectingPromise = null;
+    })();
+
+    return connectingPromise;
 };
 
 mongoose.connection.on("disconnected", () => console.warn("[DB] disconnected"));
 mongoose.connection.on("reconnected", () => console.log("[DB] reconnected"));
 
-// Creates collections and builds indexes for every registered model.
-// Runs at startup so unique indexes (e.g. sender + clientMsgId) exist before the first request.
+// Creates indexes in parallel for every registered model without blocking startup.
 export const prepareDatabase = async () => {
+    if (mongoose.connection.readyState !== 1) return;
     const models = Object.values(mongoose.models);
-    for (const model of models) {
-        try {
-            await model.createCollection();
-        } catch (error) {
-            if (error?.codeName !== "NamespaceExists" && error?.code !== 48) {
+    await Promise.all(
+        models.map(async model => {
+            try {
+                await model.createIndexes();
+            } catch (error) {
                 console.error(
-                    `[DB] createCollection failed for ${model.modelName}:`,
+                    `[DB] createIndexes failed for ${model.modelName}:`,
                     error.message
                 );
             }
-        }
-        try {
-            await model.syncIndexes();
-        } catch (error) {
-            console.error(
-                `[DB] syncIndexes failed for ${model.modelName}:`,
-                error.message
-            );
-        }
-    }
-    console.log(`[DB] ready: ${models.length} models synced`);
+        })
+    );
+    console.log(`[DB] ready: ${models.length} models indexed`);
 };
 
 export default connectDB;

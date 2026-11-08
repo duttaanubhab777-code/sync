@@ -1,5 +1,5 @@
 import { Server } from "socket.io";
-import { allowedOrigins } from "../app.js";
+import { corsOptions } from "../app.js";
 import { verifySocketToken } from "../middlewares/auth.middleware.js";
 import { Conversation } from "../models/conversation.model.js";
 import { registerMessageHandlers } from "./handlers/message.handler.js";
@@ -8,10 +8,7 @@ import { registerStatusHandlers } from "./handlers/status.handler.js";
 
 export const initSocket = httpServer => {
     const io = new Server(httpServer, {
-        cors: {
-            origin: allowedOrigins,
-            credentials: true
-        },
+        cors: corsOptions,
         pingTimeout: 25000,
         pingInterval: 10000
     });

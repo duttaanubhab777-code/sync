@@ -7,8 +7,8 @@ import { User } from "../models/user.model.js";
 // ---------- সাধারণ REST API-এর জন্য ----------
 export const verifyJWT = asyncHandler(async (req, res, next) => {
     const token =
-        req.cookies?.accessToken ||
-        req.header("Authorization")?.replace("Bearer ", "").trim();
+        req.header("Authorization")?.replace("Bearer ", "").trim() ||
+        req.cookies?.accessToken;
 
     if (!token) {
         throw new ApiError(401, "Unauthorised request");
@@ -55,7 +55,8 @@ export const verifySocketToken = async (socket, next) => {
         if (!token) return next(new Error("UNAUTHORIZED"));
 
         const decoded = jwt.verify(token, getAccessSecret());
-        if (decoded.tokenType === "refresh") return next(new Error("UNAUTHORIZED"));
+        if (decoded.tokenType === "refresh")
+            return next(new Error("UNAUTHORIZED"));
         const userId = String(decoded.id || decoded._id);
 
         const user = await User.findById(userId)

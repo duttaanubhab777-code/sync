@@ -4,26 +4,37 @@ import mongoose from "mongoose";
 import connectDB, { prepareDatabase } from "./db/db.js";
 import { app } from "./app.js";
 import { initSocket } from "./socket/index.js";
-// ডা টা বে স মডে লগুলো রে জি স্টা র করা যা তে prepareDatabase ইনডে ক্স তৈ রি করতে পা রে
+// ডাটাবেস মডেলগুলো রেজিস্টার করা যাতে prepareDatabase ইনডেক্স তৈরি করতে পারে
 import "./models/user.model.js";
 import "./models/conversation.model.js";
 import "./models/message.model.js";
 import "./models/story.model.js";
-await connectDB();
-await prepareDatabase();
+
 const port = process.env.PORT || 8000;
-// Express অ্যা প দি য়ে HTTP সা র্ভা র তৈ রি এবং তা তে Socket.IO যুক্তযু করা
+
+// Express অ্যাপ দিয়ে HTTP সার্ভার তৈরি এবং তাতে Socket.IO যুক্ত করা
 const server = http.createServer(app);
 const io = initSocket(server);
-// কন্ট্রো লা র থে কে ও যে ন io ব্য বহা র করা যা য় সে জন্য app-এ সে ট করে রা খা
+
+// কন্ট্রোলার থেকেও যেন io ব্যবহার করা যায় সেজন্য app-এ সেট করে রাখা
 app.set("io", io);
+
 // Render-এর load balancer-এর idle timeout-এর চেয়ে বেশি রাখা, নইলে মাঝেমধ্যে 502 আসে
 server.keepAliveTimeout = 65_000;
 server.headersTimeout = 66_000;
+
+// Render Cold Start-এ যাতে সাথে সাথে পোর্ট ও /health রেসপন্স করে, তাই আগে server.listen চালু করা
 server.listen(port, "0.0.0.0", () => {
-    console.log(`[Sync Server] Running on http://localhost:${port}`);
+    console.log(`[Sync Server] Running on http://0.0.0.0:${port}`);
 });
-// Render নতুন ডি প্লয় করা র সময় SIGTERM পা ঠা লে নি রা পদে বন্ধ হওয়া
+
+// ব্যাকগ্রাউন্ডে MongoDB কানেকশন ও ইনডেক্স প্রস্তুত করা
+(async () => {
+    await connectDB();
+    await prepareDatabase();
+})();
+
+// Render নতুন ডিপ্লয় করার সময় SIGTERM পাঠালে নিরাপদে বন্ধ হওয়া
 const shutdown = signal => {
     console.log(`[${signal}] shutting down gracefully...`);
 

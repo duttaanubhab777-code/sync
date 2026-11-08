@@ -28,13 +28,25 @@ export const initializeApp = createAsyncThunk(
 
         let healthData = null;
         try {
-            const res = await api.get("/health");
-            healthData = res.data;
-            if (healthData?.pythonServiceUrl) {
-                localStorage.setItem(PY_URL_KEY, healthData.pythonServiceUrl);
+            // Render Cold Start-এর সময় সার্ভার ও ডেটাবেস জাগা পর্যন্ত রিট্রাই করা
+            for (let attempt = 0; attempt < 8; attempt++) {
+                try {
+                    const res = await api.get("/health", { timeout: 12000 });
+                    healthData = res.data;
+                    if (healthData?.pythonServiceUrl) {
+                        localStorage.setItem(
+                            PY_URL_KEY,
+                            healthData.pythonServiceUrl
+                        );
+                    }
+                    if (healthData?.dbConnected !== false) {
+                        break;
+                    }
+                } catch {
+                    // সার্ভার এখনো জাগছে, ৩ সেকেন্ড অপেক্ষা করে আবার চেষ্টা
+                }
+                await new Promise(resolve => setTimeout(resolve, 3000));
             }
-        } catch {
-            // ignore
         } finally {
             clearTimeout(wakeTimer);
             dispatch(setServerWaking(false));
@@ -62,7 +74,10 @@ export const initializeApp = createAsyncThunk(
 
 export const registerUser = createAsyncThunk(
     "auth/registerUser",
-    async (payload, { rejectWithValue }) => {
+    async (payload, { dispatch, rejectWithValue }) => {
+        const wakeTimer = setTimeout(() => {
+            dispatch(setServerWaking(true));
+        }, 1500);
         try {
             const res = await api.post("/api/auth/register", payload);
             const { user, accessToken, refreshToken } = res.data?.data || {};
@@ -73,13 +88,19 @@ export const registerUser = createAsyncThunk(
             return rejectWithValue(
                 extractErrorMessage(err, "Registration failed")
             );
+        } finally {
+            clearTimeout(wakeTimer);
+            dispatch(setServerWaking(false));
         }
     }
 );
 
 export const loginUser = createAsyncThunk(
     "auth/loginUser",
-    async (payload, { rejectWithValue }) => {
+    async (payload, { dispatch, rejectWithValue }) => {
+        const wakeTimer = setTimeout(() => {
+            dispatch(setServerWaking(true));
+        }, 1500);
         try {
             const res = await api.post("/api/auth/login", payload);
             const { user, accessToken, refreshToken } = res.data?.data || {};
@@ -88,6 +109,9 @@ export const loginUser = createAsyncThunk(
             return { user, accessToken, refreshToken };
         } catch (err) {
             return rejectWithValue(extractErrorMessage(err, "Login failed"));
+        } finally {
+            clearTimeout(wakeTimer);
+            dispatch(setServerWaking(false));
         }
     }
 );
@@ -169,7 +193,7 @@ export const unblockUserById = createAsyncThunk(
 const initialState = {
     user: loadCachedUser(),
     accessToken: getStoredToken(),
-    isAuthenticated: Boolean(getStoredToken() && loadCachedUser()),
+    isAuthenticated: false,
     initializing: true,
     serverWaking: false,
     loading: false,

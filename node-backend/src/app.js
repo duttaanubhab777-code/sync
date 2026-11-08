@@ -2,6 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import express from "express";
+import mongoose from "mongoose";
 import helmet from "helmet";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -27,12 +28,27 @@ if (process.env.TRUST_PROXY) {
 }
 
 // ---------- CORS ----------
-// frontend ও backend একই Render service/origin থেকে চলে, তাই প্রোডাকশনে CORS লাগে না।
-// লোকাল ডেভেলপমেন্টে frontend আলাদা পোর্টে (যেমন Vite 5173) চালালে FRONTEND_URL-এ সেই origin দাও।
-export const allowedOrigins = (process.env.FRONTEND_URL || "")
-    .split(",")
+// frontend ও backend একই Render service/origin থেকে চলে, পাশাপাশি RENDER_EXTERNAL_URL ও FRONTEND_URL সাপোর্ট করবে
+export const allowedOrigins = [
+    ...(process.env.FRONTEND_URL || "").split(","),
+    process.env.RENDER_EXTERNAL_URL || ""
+]
     .map(u => u.trim().replace(/\/+$/, ""))
     .filter(Boolean);
+
+export const corsOptions = {
+    origin: (origin, callback) => {
+        if (
+            !origin ||
+            allowedOrigins.length === 0 ||
+            allowedOrigins.includes(origin)
+        ) {
+            return callback(null, true);
+        }
+        return callback(null, false);
+    },
+    credentials: true
+};
 
 // ---------- নিরাপত্তা (helmet + CSP) ----------
 const originOf = url => {
@@ -82,12 +98,7 @@ app.use(
         }
     })
 );
-app.use(
-    cors({
-        origin: allowedOrigins,
-        credentials: true
-    })
-);
+app.use(cors(corsOptions));
 app.use(express.json({ limit: "64kb" }));
 app.use(express.urlencoded({ extended: true, limit: "64kb" }));
 app.use(cookieParser());
@@ -97,6 +108,7 @@ app.get("/health", (_req, res) => {
     res.status(200).json({
         ok: true,
         service: "sync-node-backend",
+        dbConnected: mongoose.connection.readyState === 1,
         pythonServiceUrl: process.env.PYTHON_SERVICE_URL || "",
         cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME || "",
         timestamp: new Date().toISOString()
@@ -119,11 +131,7 @@ const resolveFrontendDir = () => {
     if (process.env.FRONTEND_DIR) {
         return path.resolve(process.env.FRONTEND_DIR);
     }
-    const viteDistDir = path.resolve(__dirname, "../../frontend/dist");
-    if (fs.existsSync(path.join(viteDistDir, "index.html"))) {
-        return viteDistDir;
-    }
-    return path.resolve(__dirname, "../../frontend");
+    return path.resolve(__dirname, "../../frontend/dist");
 };
 
 const FRONTEND_DIR = resolveFrontendDir();
@@ -155,14 +163,19 @@ if (hasFrontend) {
         if (req.method !== "GET" && req.method !== "HEAD") return next();
         if (path.extname(req.path)) return next();
         if (!req.accepts("html")) return next();
-        res.sendFile(INDEX_FILE);
+        res.sendFile("index.html", { root: FRONTEND_DIR });
     });
 } else {
     console.warn(
-        `[Sync Server] Frontend build not found at ${FRONTEND_DIR} (index.html নেই), শুধু API চলবে`
+        `[Sync Server] Frontend build not found at ${FRONTEND_DIR} (index.html নেই, 'npm run build' চালানো হয়েছে কিনা দেখো), শুধু API চলবে`
     );
     app.get("/", (_req, res) => {
-        res.status(200).json({ ok: true, service: "sync-node-backend" });
+        res.status(200).json({
+            ok: true,
+            service: "sync-node-backend",
+            warning:
+                "Frontend build (frontend/dist) not found. Make sure Render Build Command is set to: npm run build"
+        });
     });
 }
 
@@ -195,8 +208,7 @@ app.use((err, _req, res, next) => {
         message = "Request body is too large";
     } else if (err?.name === "ValidationError") {
         statusCode = 400;
-        message =
-            Object.values(err.errors || {})[0]?.message || "Invalid data";
+        message = Object.values(err.errors || {})[0]?.message || "Invalid data";
     } else if (err?.name === "CastError") {
         statusCode = 400;
         message = "Invalid id";
