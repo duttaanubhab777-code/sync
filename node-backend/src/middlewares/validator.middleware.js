@@ -1,12 +1,13 @@
+// req.body কে zod schema অনুযায়ী যাচাই করে। ভুল হলে প্রথম error message ফেরত দেয়।
+// (zod v4-এ error-এর তালিকা থাকে err.issues-এ, আগের err.errors আর নেই)
 export const validate = schema => async (req, res, next) => {
     try {
-        // req.body কে স্কিমা অনুযায়ী ভ্যালিডেট করবে
-        const parseBody = await schema.parseAsync(req.body);
-        req.body = parseBody;
+        req.body = await schema.parseAsync(req.body ?? {});
         next();
     } catch (err) {
-        // ভ্যালিডেশন ফেইল করলে ফ্রন্টএন্ডে এরর পাঠাবে
-        const message = err.errors[0].message;
-        return res.status(400).json({ message: message });
+        const message = err?.issues?.[0]?.message || "Invalid request data";
+        return res
+            .status(400)
+            .json({ success: false, statusCode: 400, message, errors: [] });
     }
 };

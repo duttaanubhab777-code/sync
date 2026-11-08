@@ -1,8 +1,10 @@
 import jwt from "jsonwebtoken";
-import { ApiError } from "./utils/ApiError.js";
-import { asyncHandler } from "./utils/asyncHandler.js";
-import { User } from "./models/user.model.js";
+import { ApiError } from "../utils/ApiError.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
+import { getAccessSecret } from "../utils/token.js";
+import { User } from "../models/user.model.js";
 
+// ---------- সাধারণ REST API-এর জন্য ----------
 export const verifyJWT = asyncHandler(async (req, res, next) => {
     const token =
         req.cookies?.accessToken ||
@@ -11,19 +13,20 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
     if (!token) {
         throw new ApiError(401, "Unauthorised request");
     }
-    let decodedToken;
+
+    let decoded;
     try {
-        decodedToken = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+        decoded = jwt.verify(token, getAccessSecret());
     } catch (error) {
-        throw new ApiError(401, error?.message || "Invalid Access Token");
+        throw new ApiError(401, "Invalid or expired access token");
     }
 
-    const user = await User.findById(decodedToken?._id).select(
+    const user = await User.findById(decoded.id || decoded._id).select(
         "-password -refreshToken"
     );
 
     if (!user) {
-        throw new ApiError(401, "Invalid Access Token");
+        throw new ApiError(401, "Invalid access token");
     }
 
     // block করা ইউজারের পুরনো token দিয়েও আর ঢোকা যাবে না
@@ -35,24 +38,29 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
     next();
 });
 
-// Socket.IO কা নে কশনে র সময় টো কে ন যা চা ই করা র মি ডলওয়্যা র
-export const verifySocketToken = (socket, next) => {
+// ---------- Socket.IO কানেকশনের সময় ----------
+// token যাচাইয়ের পর DB থেকে দেখা হয় ইউজার এখনো আছে কিনা আর block হয়েছে কিনা
+export const verifySocketToken = async (socket, next) => {
     try {
         const token =
             socket.handshake.auth?.token ||
             socket.handshake.headers?.authorization
                 ?.replace("Bearer ", "")
                 .trim();
-        if (!token) {
-            return next(new Error("UNAUTHORIZED"));
-        }
-        const secret = process.env.ACCESS_TOKEN_SECRET;
-        const decoded = jwt.verify(token, secret);
+        if (!token) return next(new Error("UNAUTHORIZED"));
+
+        const decoded = jwt.verify(token, getAccessSecret());
         const userId = String(decoded.id || decoded._id);
+
+        const user = await User.findById(userId)
+            .select("username fullName isBlocked")
+            .lean();
+        if (!user || user.isBlocked) return next(new Error("UNAUTHORIZED"));
+
         socket.user = {
             id: userId,
-            username: decoded.username,
-            fullName: decoded.fullName
+            username: user.username,
+            fullName: user.fullName
         };
         next();
     } catch {
@@ -64,14 +72,12 @@ export const verifyAdmin = asyncHandler(async (req, res, next) => {
     if (!req.user) {
         throw new ApiError(401, "Unauthorized request");
     }
-
-    if (req.user.role !== "admin") {
+    if (req.user.role !== "admin" && req.user.role !== "superAdmin") {
         throw new ApiError(
             403,
             "Access denied! Only admins can perform this action."
         );
     }
-
     next();
 });
 
@@ -82,6 +88,5 @@ export const verifySuperAdmin = asyncHandler(async (req, res, next) => {
             "Access denied! Only the Super Admin can perform this action."
         );
     }
-
     next();
 });

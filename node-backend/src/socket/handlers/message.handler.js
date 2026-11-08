@@ -1,23 +1,34 @@
 import { Conversation } from "../../models/conversation.model.js";
 import { Message } from "../../models/message.model.js";
+import { isValidCloudinaryUrl, pickMedia } from "../../utils/cloudinary.js";
+import { isObjectId } from "../../utils/helpers.js";
 
-// আমাদের অ্যাকাউন্ট এর cloudinary url কিনা টা যাচাই করা
-const isValidCloudinaryUrl = url => {
-    if (!url || typeof url !== "string") {
-        return false;
-    }
-    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+const ALLOWED_TYPES = ["text", "image", "video", "audio", "file"];
+const MAX_TEXT = 4000;
 
-    if (!cloudName) {
-        return url.startsWith("https://res.cloudinary.com/");
-    }
-    return url.startsWith(`https://res.cloudinary.com/${cloudName}/`);
+// একটা socket থেকে ১০ সেকেন্ডে সর্বোচ্চ ২০টা মেসেজ (spam/flood ঠেকাতে)
+const RATE_WINDOW_MS = 10_000;
+const RATE_MAX = 20;
+
+const POPULATE_SENDER = { path: "sender", select: "username fullName avatar" };
+const POPULATE_REPLY = {
+    path: "replyTo",
+    select: "text type sender media.url deletedForEveryone"
 };
 
 export const registerMessageHandlers = (io, socket) => {
     const userId = socket.user.id;
-    // for 1 to 1 new messages
+    let sentAt = [];
 
+    const isRateLimited = () => {
+        const now = Date.now();
+        sentAt = sentAt.filter(t => now - t < RATE_WINDOW_MS);
+        if (sentAt.length >= RATE_MAX) return true;
+        sentAt.push(now);
+        return false;
+    };
+
+    // ১. নতুন মেসেজ পাঠানো (১-টু-১ ও গ্রুপ দুটোর জন্যই)
     socket.on("message:send", async (payload, ack) => {
         try {
             const {
@@ -29,89 +40,122 @@ export const registerMessageHandlers = (io, socket) => {
                 replyTo = null
             } = payload || {};
 
-            if (!conversationId || !clientMsgId) {
+            if (
+                !isObjectId(conversationId) ||
+                typeof clientMsgId !== "string" ||
+                !clientMsgId ||
+                clientMsgId.length > 100 ||
+                typeof text !== "string" ||
+                !ALLOWED_TYPES.includes(type)
+            ) {
                 return ack?.({ ok: false, error: "INVALID_PAYLOAD" });
             }
 
-            //find conversation and search user member of this conversation
-            const conv = await Conversation.findById(conversationId);
-
-            if (!conv || !conv.members.some(m => m.toString() === userId)) {
-                return ack?.({ ok: false, error: "FORBIDDEN_NOT_MEMBER" });
+            if (isRateLimited()) {
+                return ack?.({ ok: false, error: "RATE_LIMITED" });
             }
 
-            // if only admin can send message
-            if (
-                conv.type === "group" &&
-                conv.onlyAdminsCanMessage &&
-                !conv.admins.some(a => a.toString() === userId)
-            ) {
-                return ack?.({ ok: false, error: "ONLY_ADMINS_CAN_MESSAGE" });
-            }
-
-            // check that media url is our cloudinary url
-
-            if (type !== "text") {
-                if (!media?.url || isValidCloudinaryUrl(media.url)) {
-                    return ack?.({ ok: false, error: "INVALID_MEDIA_URL" });
-                }
-            } else if (!text.trim()) {
-                return ack?.({ ok: false, error: "EMPTY_MESSAGE" });
-            }
-
-            //duplicate message check
-
+            // আগে duplicate চেক: নেটওয়ার্ক রিট্রাই হলে নতুন করে সেভ না করে আগেরটাই ফেরত দেওয়া
             let msg = await Message.findOne({ sender: userId, clientMsgId })
-                .populate("sender", "username fullName avatar")
-                .populate("replyTo", "text type media.url");
-
+                .populate(POPULATE_SENDER)
+                .populate(POPULATE_REPLY);
             if (msg) {
                 return ack?.({ ok: true, message: msg, duplicate: true });
             }
 
-            // new message save in database
-
-            msg = await Message.create({
-                conversationId,
-                sender: userId,
-                clientMsgId,
-                type,
-                text: text.trim(),
-                media: type !== "text" ? media : undefined,
-                replyTo: replyTo || null,
-                status: "sent"
-            });
-            msg = await msg.populate([
-                { path: "sender", select: "username fullName avatar" },
-                { path: "replyTo", select: "text type sender media.url" }
-            ]);
-
-            // preview unread messages
-
-            const previewText =
-                type === "text"
-                    ? text.trim().slice(0, 100)
-                    : `[${type.toUpperCase()}]`;
-
-            for (const memberId of conv.members) {
-                const mStr = memberId.toString();
-                if (mStr !== userId) {
-                    const prevUnread = conv.unread.get(mStr) || 0;
-                    conv.unread.set(mStr, prevUnread + 1);
-                }
+            // কনভারসেশন আছে কিনা, ইউজার সদস্য কিনা, গ্রুপে "শুধু admin" চালু আছে কিনা
+            const conv = await Conversation.findById(conversationId);
+            if (!conv || !conv.isMember(userId)) {
+                return ack?.({ ok: false, error: "FORBIDDEN_NOT_MEMBER" });
+            }
+            if (!conv.canSendMessage(userId)) {
+                return ack?.({ ok: false, error: "ONLY_ADMINS_CAN_MESSAGE" });
             }
 
-            conv.lastMessage = {
-                messageId: msg._id,
-                text: previewText,
-                type,
-                sender: userId,
-                createdAt: msg.createdAt
-            };
-            await conv.save();
-            // প্রে রককে প্রা প্তি স্বী কা র (Ack -> Single Tick ✓) পা ঠা নো
+            const cleanText = text.trim();
+            let cleanMedia;
+            if (type === "text") {
+                if (!cleanText) return ack?.({ ok: false, error: "EMPTY_MESSAGE" });
+            } else {
+                cleanMedia = pickMedia(media);
+                if (!cleanMedia?.url || !isValidCloudinaryUrl(cleanMedia.url)) {
+                    return ack?.({ ok: false, error: "INVALID_MEDIA_URL" });
+                }
+            }
+            if (cleanText.length > MAX_TEXT) {
+                return ack?.({ ok: false, error: "MESSAGE_TOO_LONG" });
+            }
+
+            // reply করলে ওই মেসেজ একই চ্যাটের কিনা দেখা
+            let replyId = null;
+            if (replyTo) {
+                if (!isObjectId(replyTo)) {
+                    return ack?.({ ok: false, error: "INVALID_REPLY" });
+                }
+                const target = await Message.exists({
+                    _id: replyTo,
+                    conversationId
+                });
+                if (!target) return ack?.({ ok: false, error: "INVALID_REPLY" });
+                replyId = replyTo;
+            }
+
+            try {
+                msg = await Message.create({
+                    conversationId,
+                    sender: userId,
+                    clientMsgId,
+                    type,
+                    text: cleanText,
+                    media: cleanMedia,
+                    replyTo: replyId,
+                    status: "sent"
+                });
+            } catch (err) {
+                // দুটো একই মেসেজ একসাথে এলে unique index একটাকে আটকায়, তখন আগেরটাই ফেরত দিই
+                if (err?.code === 11000) {
+                    const existing = await Message.findOne({
+                        sender: userId,
+                        clientMsgId
+                    })
+                        .populate(POPULATE_SENDER)
+                        .populate(POPULATE_REPLY);
+                    return ack?.({ ok: true, message: existing, duplicate: true });
+                }
+                throw err;
+            }
+            msg = await msg.populate([POPULATE_SENDER, POPULATE_REPLY]);
+
+            // চ্যাট লিস্টের প্রিভিউ আর বাকিদের unread সংখ্যা এক query-তে atomic ভাবে আপডেট
+            // (conv.save() না করে updateOne, যাতে দুটো মেসেজ একসাথে এলে একটা আরেকটাকে ওভাররাইট না করে)
+            const inc = {};
+            for (const m of conv.members) {
+                const id = m.toString();
+                if (id !== userId) inc[`unread.${id}`] = 1;
+            }
+            await Conversation.updateOne(
+                { _id: conv._id },
+                {
+                    $set: {
+                        lastMessage: {
+                            messageId: msg._id,
+                            text:
+                                type === "text"
+                                    ? cleanText.slice(0, 100)
+                                    : `[${type.toUpperCase()}]`,
+                            type,
+                            sender: userId,
+                            createdAt: msg.createdAt
+                        }
+                    },
+                    $inc: inc
+                }
+            );
+
+            // প্রেরককে প্রাপ্তিস্বীকার (Ack -> Single Tick ✓)
             ack?.({ ok: true, message: msg });
-            // কনভা রসে শনে র সব সদস্যে র সব ডি ভা ইসে রি য়ে ল-টা ইমে মে সে জ পা ঠা নো
+
+            // সব সদস্যের সব ডিভাইসে রিয়েল-টাইম মেসেজ (যে socket থেকে পাঠানো হলো সেটা বাদে)
             const memberRooms = conv.members.map(m => `user:${m.toString()}`);
             io.to(memberRooms).except(socket.id).emit("message:new", {
                 message: msg,
@@ -122,33 +166,49 @@ export const registerMessageHandlers = (io, socket) => {
             ack?.({ ok: false, error: "SERVER_ERROR" });
         }
     });
-    // ২. মে সে জ সবা র জন্য মুছেমুছে ফে লা (Delete for Everyone)
-    socket.on("message:delete", async ({ messageId }, ack) => {
+
+    // ২. সবার জন্য মেসেজ মুছে ফেলা (Delete for Everyone)
+    socket.on("message:delete", async (payload, ack) => {
         try {
+            const { messageId } = payload || {};
+            if (!isObjectId(messageId)) {
+                return ack?.({ ok: false, error: "INVALID_PAYLOAD" });
+            }
             const msg = await Message.findById(messageId);
             if (!msg || msg.sender.toString() !== userId) {
                 return ack?.({ ok: false, error: "NOT_ALLOWED" });
             }
+            if (msg.deletedForEveryone) return ack?.({ ok: true });
+
             msg.deletedForEveryone = true;
-            msg.text = "This message was deleted for evryone";
+            msg.text = "This message was deleted";
             msg.media = undefined;
             await msg.save();
+
+            // এটা যদি চ্যাটের শেষ মেসেজ হয়, চ্যাট লিস্টের প্রিভিউও বদলে দেওয়া
+            await Conversation.updateOne(
+                { _id: msg.conversationId, "lastMessage.messageId": msg._id },
+                {
+                    $set: {
+                        "lastMessage.text": "This message was deleted",
+                        "lastMessage.type": "text"
+                    }
+                }
+            );
+
             const conv = await Conversation.findById(msg.conversationId, {
                 members: 1
             }).lean();
             if (conv) {
-                const memberRooms = conv.members.map(
-                    m => `user:${m.toString()}`
-                );
+                const memberRooms = conv.members.map(m => `user:${m.toString()}`);
                 io.to(memberRooms).emit("message:deleted", {
                     messageId: msg._id,
                     conversationId: msg.conversationId
                 });
             }
             ack?.({ ok: true });
-        } catch {
-            // Error handling
-
+        } catch (err) {
+            console.error("[Socket message:delete Error]:", err.message);
             ack?.({ ok: false, error: "SERVER_ERROR" });
         }
     });

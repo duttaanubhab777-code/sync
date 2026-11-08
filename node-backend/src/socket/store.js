@@ -1,5 +1,4 @@
-// userId (String) -> now how many socket/tab are connected
-
+// userId (String) -> এখন কয়টা socket/ট্যাব কানেক্টেড আছে তার সংখ্যা
 const onlineCounts = new Map();
 
 export const addUserConnection = userId => {
@@ -8,8 +7,7 @@ export const addUserConnection = userId => {
     const nextCount = current + 1;
     onlineCounts.set(key, nextCount);
 
-    //if  0 now 1 then one user is online
-
+    // আগে 0 ছিল, এখন 1 হলো মানে ইউজার এইমাত্র অনলাইনে এল
     return { isFirstConnection: current === 0, count: nextCount };
 };
 
@@ -19,18 +17,16 @@ export const removeUserConnection = userId => {
 
     if (current <= 1) {
         onlineCounts.delete(key);
-
-        //all device/tab are disconnected user is ofline
-
-        return { isCompletlyOfline: true, count: 0 };
+        // সব ডিভাইস/ট্যাব বন্ধ, ইউজার এখন পুরোপুরি অফলাইন
+        return { isCompletelyOffline: true, count: 0 };
     }
     const nextCount = current - 1;
     onlineCounts.set(key, nextCount);
-    return { isCompletlyOfline: false, count: nextCount };
+    return { isCompletelyOffline: false, count: nextCount };
 };
 
 export const isUserOnline = userId => {
-    return onlineCounts.get(String(userId) || 0) > 0;
+    return (onlineCounts.get(String(userId)) || 0) > 0;
 };
 
 export const getOnlineUserIds = () => {

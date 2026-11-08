@@ -2,6 +2,11 @@ import mongoose from "mongoose";
 import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
+import {
+    getAccessSecret,
+    getRefreshSecret,
+    getAccessExpiry
+} from "../utils/token.js";
 
 const userSchema = new mongoose.Schema(
     {
@@ -112,7 +117,7 @@ userSchema.pre("validate", function () {
 
 userSchema.pre("save", async function () {
     // OTP দিয়ে register হলে password আগেই hash করা থাকে, তাই আবার hash করা হবে না
-    if (!this.isModified("password") || this.$locals.skipHash) return;
+    if (!this.isModified("password") || this.$locals?.skipHash) return;
 
     this.password = await bcrypt.hash(this.password, 10);
 });
@@ -121,32 +126,33 @@ userSchema.methods.isPasswordCorrect = async function (password) {
     return await bcrypt.compare(password, this.password);
 };
 
-userSchema.methods.genarateAccessToken = function () {
+// Node ও Python দুই সার্ভিসেই যেন একই token কাজ করে, তাই payload-এ id আর _id দুটোই আছে
+userSchema.methods.generateAccessToken = function () {
     return jwt.sign(
         {
-            _id: this._id,
+            id: this._id.toString(),
+            _id: this._id.toString(),
             email: this.email,
             username: this.username,
             fullName: this.fullName
         },
-        process.env.ACCESS_TOKEN_SECRET,
-        {
-            expiresIn: process.env.ACCESS_TOKEN_EXPIRY
-        }
+        getAccessSecret(),
+        { expiresIn: getAccessExpiry() }
     );
 };
 
-userSchema.methods.genarateRefreshToken = function () {
+userSchema.methods.generateRefreshToken = function () {
     return jwt.sign(
-        {
-            _id: this._id
-        },
-        process.env.REFRESH_TOKEN_SECRET,
-        {
-            expiresIn: process.env.REFRESH_TOKEN_EXPIRY
-        }
+        { id: this._id.toString(), _id: this._id.toString() },
+        getRefreshSecret(),
+        { expiresIn: process.env.REFRESH_TOKEN_EXPIRY || "30d" }
     );
 };
+
+// আগের বানান-ভুল নামগুলোও রাখা হলো, যাতে কোথাও পুরনো নামে কল করলে এরর না দেয়
+userSchema.methods.genarateAccessToken = userSchema.methods.generateAccessToken;
+userSchema.methods.genarateRefreshToken =
+    userSchema.methods.generateRefreshToken;
 
 userSchema.plugin(mongooseAggregatePaginate);
 

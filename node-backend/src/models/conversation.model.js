@@ -59,6 +59,7 @@ const conversationSchema = new Schema(
 
         // চ্যাট লিস্টে শেষ মেসেজের প্রিভিউ দ্রুত দেখানোর জন্য
         lastMessage: {
+            messageId: { type: Schema.Types.ObjectId, ref: "Message" },
             text: { type: String, default: "" },
             type: { type: String, default: "text" },
             sender: { type: Schema.Types.ObjectId, ref: "User" },
@@ -97,7 +98,10 @@ conversationSchema.pre("validate", function () {
 
     if (this.type === "direct") {
         if (this.members.length !== 2) {
-            this.invalidate("members", "A direct chat must have exactly 2 members");
+            this.invalidate(
+                "members",
+                "A direct chat must have exactly 2 members"
+            );
             return;
         }
         this.pairKey = this.members.map(idOf).sort().join("_");
@@ -137,7 +141,8 @@ conversationSchema.pre("validate", function () {
 
     // group-এ অন্তত একজন admin সবসময় থাকবে (সবাই চলে গেলে সবচেয়ে পুরনো member admin হবে)
     if (this.admins.length === 0 && this.members.length > 0) {
-        const creatorIsMember = this.createdBy && seen.has(idOf(this.createdBy));
+        const creatorIsMember =
+            this.createdBy && seen.has(idOf(this.createdBy));
         this.admins = [creatorIsMember ? this.createdBy : this.members[0]];
     }
 });
@@ -148,7 +153,8 @@ conversationSchema.methods.isMember = function (userId) {
 
 conversationSchema.methods.isGroupAdmin = function (userId) {
     return (
-        this.type === "group" && this.admins.some(a => idOf(a) === String(userId))
+        this.type === "group" &&
+        this.admins.some(a => idOf(a) === String(userId))
     );
 };
 
