@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
-    MessageSquare,
     User,
     AtSign,
     Mail,
@@ -12,6 +11,8 @@ import {
     Eye,
     EyeOff
 } from "lucide-react";
+import SyncLogo from "../components/SyncLogo.jsx";
+import BrandTyping from "../components/BrandTyping.jsx";
 import { clearAuthError, registerUser } from "../store/authSlice.js";
 
 export default function RegisterPage() {
@@ -86,19 +87,16 @@ export default function RegisterPage() {
             {serverWaking && (
                 <div className="sync-top-banner waking">
                     <Loader2 size={16} className="spin" />
-                    <span>
-                        সার্ভার জাগছে (Render Cold Start)... একটু অপেক্ষা করুন
-                    </span>
+                    <span>Starting the server. This may take a few moments...</span>
                 </div>
             )}
 
             <div className="sync-auth-card">
                 <div className="sync-auth-brand">
-                    <div className="sync-auth-logo">
-                        <MessageSquare size={28} />
-                    </div>
+                    <SyncLogo size="auth" />
                     <h1>Create your Sync account</h1>
-                    <p>Fast, secure real-time messaging with friends & groups</p>
+                    <p>Fast, secure real-time messaging with friends and groups</p>
+                    <BrandTyping />
                 </div>
 
                 {(localError || error) && (
