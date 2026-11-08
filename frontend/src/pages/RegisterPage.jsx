@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
-    User,
+    UserRound,
+    UserPlus,
     AtSign,
     Mail,
     Phone,
@@ -11,9 +12,7 @@ import {
     Eye,
     EyeOff
 } from "lucide-react";
-import SyncLogo from "../components/SyncLogo.jsx";
-import SyncBrandBar from "../components/SyncBrandBar.jsx";
-import BrandTyping from "../components/BrandTyping.jsx";
+import AuthShell from "../components/AuthShell.jsx";
 import { clearAuthError, registerUser } from "../store/authSlice.js";
 
 export default function RegisterPage() {
@@ -84,144 +83,139 @@ export default function RegisterPage() {
     };
 
     return (
-        <div className="sync-auth-page">
-            <SyncBrandBar />
-            {serverWaking && (
-                <div className="sync-top-banner waking">
-                    <Loader2 size={16} className="spin" />
-                    <span>Starting the server. This may take a few moments...</span>
-                </div>
+        <AuthShell serverWaking={serverWaking}>
+            <div className="sync-auth-head">
+                <h1>Create your account</h1>
+                <p>Chat with friends and groups in real time. It only takes a minute.</p>
+            </div>
+
+            {(localError || error) && (
+                <div className="sync-alert error">{localError || error}</div>
             )}
 
-            <div className="sync-auth-card">
-                <div className="sync-auth-brand">
-                    <SyncLogo size="auth" />
-                    <h1>Create your Sync account</h1>
-                    <p>Fast, secure real-time messaging with friends and groups</p>
-                    <BrandTyping />
+            <form className="sync-auth-form" onSubmit={handleSubmit}>
+                <div className="sync-grid-2">
+                    <div className="sync-field">
+                        <label htmlFor="reg-username">Username</label>
+                        <div className="sync-input-icon">
+                            <AtSign size={18} />
+                            <input
+                                id="reg-username"
+                                type="text"
+                                name="username"
+                                placeholder="jarvis_01"
+                                value={form.username}
+                                onChange={handleChange}
+                                maxLength={20}
+                                autoComplete="username"
+                                required
+                            />
+                        </div>
+                    </div>
+
+                    <div className="sync-field">
+                        <label htmlFor="reg-name">Full name</label>
+                        <div className="sync-input-icon">
+                            <UserRound size={18} />
+                            <input
+                                id="reg-name"
+                                type="text"
+                                name="fullName"
+                                placeholder="Anubhab Dutta"
+                                value={form.fullName}
+                                onChange={handleChange}
+                                maxLength={50}
+                                autoComplete="name"
+                                required
+                            />
+                        </div>
+                    </div>
                 </div>
 
-                {(localError || error) && (
-                    <div className="sync-alert error">
-                        {localError || error}
+                <div className="sync-field">
+                    <label htmlFor="reg-email">Email address</label>
+                    <div className="sync-input-icon">
+                        <Mail size={18} />
+                        <input
+                            id="reg-email"
+                            type="email"
+                            name="email"
+                            placeholder="you@example.com"
+                            value={form.email}
+                            onChange={handleChange}
+                            autoComplete="email"
+                            required
+                        />
                     </div>
-                )}
-
-                <form className="sync-auth-form" onSubmit={handleSubmit}>
-                    <div className="sync-grid-2">
-                        <div className="sync-field">
-                            <label>Username *</label>
-                            <div className="sync-input-icon">
-                                <AtSign size={16} />
-                                <input
-                                    type="text"
-                                    name="username"
-                                    placeholder="jarvis_01"
-                                    value={form.username}
-                                    onChange={handleChange}
-                                    maxLength={20}
-                                    required
-                                />
-                            </div>
-                        </div>
-
-                        <div className="sync-field">
-                            <label>Full Name *</label>
-                            <div className="sync-input-icon">
-                                <User size={16} />
-                                <input
-                                    type="text"
-                                    name="fullName"
-                                    placeholder="Anubhab Dutta"
-                                    value={form.fullName}
-                                    onChange={handleChange}
-                                    maxLength={50}
-                                    required
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="sync-field">
-                        <label>Email Address *</label>
-                        <div className="sync-input-icon">
-                            <Mail size={16} />
-                            <input
-                                type="email"
-                                name="email"
-                                placeholder="you@example.com"
-                                value={form.email}
-                                onChange={handleChange}
-                                required
-                            />
-                        </div>
-                    </div>
-
-                    <div className="sync-field">
-                        <label>Indian Mobile Number (10 digits) *</label>
-                        <div className="sync-input-icon">
-                            <Phone size={16} />
-                            <input
-                                type="tel"
-                                name="phoneNumber"
-                                placeholder="9876543210 or +91 9876543210"
-                                value={form.phoneNumber}
-                                onChange={handleChange}
-                                required
-                            />
-                        </div>
-                    </div>
-
-                    <div className="sync-field">
-                        <label>Password (min 8 chars) *</label>
-                        <div className="sync-input-icon">
-                            <Lock size={16} />
-                            <input
-                                type={showPass ? "text" : "password"}
-                                name="password"
-                                placeholder="At least 8 characters"
-                                value={form.password}
-                                onChange={handleChange}
-                                minLength={8}
-                                maxLength={64}
-                                required
-                            />
-                            <button
-                                type="button"
-                                className="sync-pass-toggle"
-                                onClick={() => setShowPass(v => !v)}
-                                tabIndex={-1}
-                            >
-                                {showPass ? (
-                                    <EyeOff size={16} />
-                                ) : (
-                                    <Eye size={16} />
-                                )}
-                            </button>
-                        </div>
-                    </div>
-
-                    <button
-                        type="submit"
-                        className="sync-btn primary full lg"
-                        disabled={loading}
-                    >
-                        {loading ? (
-                            <>
-                                <Loader2 size={18} className="spin" />
-                                <span>Creating Account...</span>
-                            </>
-                        ) : (
-                            "Create Account"
-                        )}
-                    </button>
-                </form>
-
-                <div className="sync-auth-footer">
-                    <span>Already have an account?</span>{" "}
-                    <Link to="/login">Sign In</Link>
                 </div>
+
+                <div className="sync-field">
+                    <label htmlFor="reg-phone">Indian mobile number (10 digits)</label>
+                    <div className="sync-input-icon">
+                        <Phone size={18} />
+                        <input
+                            id="reg-phone"
+                            type="tel"
+                            name="phoneNumber"
+                            placeholder="9876543210 or +91 9876543210"
+                            value={form.phoneNumber}
+                            onChange={handleChange}
+                            autoComplete="tel"
+                            required
+                        />
+                    </div>
+                </div>
+
+                <div className="sync-field">
+                    <label htmlFor="reg-pass">Password (min 8 characters)</label>
+                    <div className="sync-input-icon">
+                        <Lock size={18} />
+                        <input
+                            id="reg-pass"
+                            type={showPass ? "text" : "password"}
+                            name="password"
+                            placeholder="At least 8 characters"
+                            value={form.password}
+                            onChange={handleChange}
+                            minLength={8}
+                            maxLength={64}
+                            autoComplete="new-password"
+                            required
+                        />
+                        <button
+                            type="button"
+                            className="sync-pass-toggle"
+                            onClick={() => setShowPass(v => !v)}
+                            aria-label={showPass ? "Hide password" : "Show password"}
+                        >
+                            {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                    </div>
+                </div>
+
+                <button
+                    type="submit"
+                    className="sync-btn primary full lg"
+                    disabled={loading}
+                >
+                    {loading ? (
+                        <>
+                            <Loader2 size={18} className="spin" />
+                            <span>Creating account...</span>
+                        </>
+                    ) : (
+                        <>
+                            <UserPlus size={18} />
+                            <span>Create account</span>
+                        </>
+                    )}
+                </button>
+            </form>
+
+            <div className="sync-auth-footer">
+                <span>Already have an account?</span>
+                <Link to="/login">Sign in</Link>
             </div>
-        </div>
+        </AuthShell>
     );
 }

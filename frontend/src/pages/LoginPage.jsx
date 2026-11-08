@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { Lock, User, Loader2, Eye, EyeOff } from "lucide-react";
-import SyncLogo from "../components/SyncLogo.jsx";
-import SyncBrandBar from "../components/SyncBrandBar.jsx";
-import BrandTyping from "../components/BrandTyping.jsx";
+import { Lock, UserRound, Loader2, Eye, EyeOff, LogIn } from "lucide-react";
+import AuthShell from "../components/AuthShell.jsx";
 import { clearAuthError, loginUser } from "../store/authSlice.js";
 
 export default function LoginPage() {
@@ -43,92 +41,81 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="sync-auth-page">
-            <SyncBrandBar />
-            {serverWaking && (
-                <div className="sync-top-banner waking">
-                    <Loader2 size={16} className="spin" />
-                    <span>Starting the server. This may take a few moments...</span>
-                </div>
-            )}
-
-            <div className="sync-auth-card">
-                <div className="sync-auth-brand">
-                    <SyncLogo size="auth" />
-                    <h1>Welcome back to Sync</h1>
-                    <p>
-                        Sign in with your username, email, or 10-digit mobile
-                        number
-                    </p>
-                    <BrandTyping />
-                </div>
-
-                {error && <div className="sync-alert error">{error}</div>}
-
-                <form className="sync-auth-form" onSubmit={handleSubmit}>
-                    <div className="sync-field">
-                        <label>Username, Email or Phone</label>
-                        <div className="sync-input-icon">
-                            <User size={17} />
-                            <input
-                                type="text"
-                                placeholder="username / you@email.com / 9876543210"
-                                value={identifier}
-                                onChange={e => setIdentifier(e.target.value)}
-                                autoComplete="username"
-                                required
-                            />
-                        </div>
-                    </div>
-
-                    <div className="sync-field">
-                        <label>Password</label>
-                        <div className="sync-input-icon">
-                            <Lock size={17} />
-                            <input
-                                type={showPass ? "text" : "password"}
-                                placeholder="Enter your password"
-                                value={password}
-                                onChange={e => setPassword(e.target.value)}
-                                autoComplete="current-password"
-                                required
-                            />
-                            <button
-                                type="button"
-                                className="sync-pass-toggle"
-                                onClick={() => setShowPass(v => !v)}
-                                tabIndex={-1}
-                            >
-                                {showPass ? (
-                                    <EyeOff size={16} />
-                                ) : (
-                                    <Eye size={16} />
-                                )}
-                            </button>
-                        </div>
-                    </div>
-
-                    <button
-                        type="submit"
-                        className="sync-btn primary full lg"
-                        disabled={loading}
-                    >
-                        {loading ? (
-                            <>
-                                <Loader2 size={18} className="spin" />
-                                <span>Signing in...</span>
-                            </>
-                        ) : (
-                            "Sign In"
-                        )}
-                    </button>
-                </form>
-
-                <div className="sync-auth-footer">
-                    <span>Don't have an account?</span>{" "}
-                    <Link to="/register">Create a Sync account</Link>
-                </div>
+        <AuthShell serverWaking={serverWaking}>
+            <div className="sync-auth-head">
+                <h1>Welcome back</h1>
+                <p>
+                    Sign in with your username, email, or 10-digit mobile
+                    number.
+                </p>
             </div>
-        </div>
+
+            {error && <div className="sync-alert error">{error}</div>}
+
+            <form className="sync-auth-form" onSubmit={handleSubmit}>
+                <div className="sync-field">
+                    <label htmlFor="login-id">Username, email or phone</label>
+                    <div className="sync-input-icon">
+                        <UserRound size={18} />
+                        <input
+                            id="login-id"
+                            type="text"
+                            placeholder="username / you@email.com / 9876543210"
+                            value={identifier}
+                            onChange={e => setIdentifier(e.target.value)}
+                            autoComplete="username"
+                            required
+                        />
+                    </div>
+                </div>
+
+                <div className="sync-field">
+                    <label htmlFor="login-pass">Password</label>
+                    <div className="sync-input-icon">
+                        <Lock size={18} />
+                        <input
+                            id="login-pass"
+                            type={showPass ? "text" : "password"}
+                            placeholder="Enter your password"
+                            value={password}
+                            onChange={e => setPassword(e.target.value)}
+                            autoComplete="current-password"
+                            required
+                        />
+                        <button
+                            type="button"
+                            className="sync-pass-toggle"
+                            onClick={() => setShowPass(v => !v)}
+                            aria-label={showPass ? "Hide password" : "Show password"}
+                        >
+                            {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                    </div>
+                </div>
+
+                <button
+                    type="submit"
+                    className="sync-btn primary full lg"
+                    disabled={loading}
+                >
+                    {loading ? (
+                        <>
+                            <Loader2 size={18} className="spin" />
+                            <span>Signing in...</span>
+                        </>
+                    ) : (
+                        <>
+                            <LogIn size={18} />
+                            <span>Sign in</span>
+                        </>
+                    )}
+                </button>
+            </form>
+
+            <div className="sync-auth-footer">
+                <span>New to Sync?</span>
+                <Link to="/register">Create an account</Link>
+            </div>
+        </AuthShell>
     );
 }

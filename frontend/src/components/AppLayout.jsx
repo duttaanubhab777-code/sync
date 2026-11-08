@@ -1,17 +1,19 @@
-import React, { useEffect } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
-    MessageSquare,
-    CircleDot,
-    User,
-    LogOut,
+    MessageCircle,
+    Aperture,
+    UserRound,
+    Power,
     WifiOff,
     Loader2
 } from "lucide-react";
 import Avatar from "./Avatar.jsx";
-import SyncBrandBar from "./SyncBrandBar.jsx";
-import { logoutUser, forceLogout } from "../store/authSlice.js";
+import SyncLogo from "./SyncLogo.jsx";
+import ConfirmDialog from "./ConfirmDialog.jsx";
+import useSignOut from "../hooks/useSignOut.js";
+import { forceLogout } from "../store/authSlice.js";
 import { fetchConversations, resetChatState } from "../store/chatSlice.js";
 import { fetchStories } from "../store/storySlice.js";
 import { connectSocket, disconnectSocket } from "../services/socket.js";
@@ -19,6 +21,8 @@ import { connectSocket, disconnectSocket } from "../services/socket.js";
 export default function AppLayout() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
+    const location = useLocation();
+    const signOut = useSignOut();
 
     const { user, isAuthenticated, serverWaking } = useSelector(
         state => state.auth
@@ -28,14 +32,18 @@ export default function AppLayout() {
     );
     const { storyGroups } = useSelector(state => state.story);
 
+    const [confirmLogout, setConfirmLogout] = useState(false);
+    const [loggingOut, setLoggingOut] = useState(false);
+
     const totalUnread = conversations.reduce(
         (acc, c) => acc + Number(c.unread || 0),
         0
     );
 
-    const hasUnseenStories = storyGroups.some(
-        g => !g.isMine && g.hasUnseen
-    );
+    const hasUnseenStories = storyGroups.some(g => !g.isMine && g.hasUnseen);
+
+    // মোবাইলে চ্যাট খোলা থাকলে নিচের নেভ লুকিয়ে composer-কে জায়গা দেওয়া হয়
+    const inChat = /^\/chats\/[^/]+/.test(location.pathname);
 
     useEffect(() => {
         if (!isAuthenticated) return;
@@ -60,15 +68,16 @@ export default function AppLayout() {
             window.removeEventListener("sync:unauthorized", handleUnauthorized);
     }, [dispatch, navigate]);
 
-    const handleLogout = async () => {
-        disconnectSocket();
-        dispatch(resetChatState());
-        await dispatch(logoutUser());
-        navigate("/login", { replace: true });
+    const handleConfirmLogout = async () => {
+        setLoggingOut(true);
+        await signOut();
     };
 
+    const navClass = ({ isActive }) =>
+        `sync-nav-item ${isActive ? "active" : ""}`;
+
     return (
-        <div className="sync-app-shell">
+        <div className={`sync-app-shell ${inChat ? "in-chat" : ""}`}>
             {serverWaking && (
                 <div className="sync-top-banner waking">
                     <Loader2 size={16} className="spin" />
@@ -82,20 +91,16 @@ export default function AppLayout() {
                 </div>
             )}
 
-            <SyncBrandBar />
             <div className="sync-main-frame">
                 <aside className="sync-nav-rail">
+                    <div className="sync-nav-brand">
+                        <SyncLogo size="nav" glow />
+                    </div>
 
-                    <nav className="sync-nav-links">
-                        <NavLink
-                            to="/chats"
-                            className={({ isActive }) =>
-                                `sync-nav-item ${isActive ? "active" : ""}`
-                            }
-                            title="Chats"
-                        >
+                    <nav className="sync-nav-links" aria-label="Main">
+                        <NavLink to="/chats" className={navClass} title="Chats">
                             <div className="sync-nav-icon-wrap">
-                                <MessageSquare size={22} />
+                                <MessageCircle size={23} />
                                 {totalUnread > 0 && (
                                     <span className="sync-nav-badge">
                                         {totalUnread > 99 ? "99+" : totalUnread}
@@ -107,13 +112,11 @@ export default function AppLayout() {
 
                         <NavLink
                             to="/stories"
-                            className={({ isActive }) =>
-                                `sync-nav-item ${isActive ? "active" : ""}`
-                            }
-                            title="Stories (24h Status)"
+                            className={navClass}
+                            title="Stories"
                         >
                             <div className="sync-nav-icon-wrap">
-                                <CircleDot size={22} />
+                                <Aperture size={23} />
                                 {hasUnseenStories && (
                                     <span className="sync-nav-dot" />
                                 )}
@@ -123,13 +126,11 @@ export default function AppLayout() {
 
                         <NavLink
                             to="/profile"
-                            className={({ isActive }) =>
-                                `sync-nav-item ${isActive ? "active" : ""}`
-                            }
-                            title="Profile & Settings"
+                            className={navClass}
+                            title="Profile"
                         >
                             <div className="sync-nav-icon-wrap">
-                                <User size={22} />
+                                <UserRound size={23} />
                             </div>
                             <span className="sync-nav-label">Profile</span>
                         </NavLink>
@@ -140,12 +141,13 @@ export default function AppLayout() {
                             type="button"
                             className="sync-nav-user-btn"
                             onClick={() => navigate("/profile")}
-                            title={user?.fullName || "My Profile"}
+                            title={user?.fullName || "My profile"}
+                            aria-label="My profile"
                         >
                             <Avatar
                                 src={user?.avatar}
                                 name={user?.fullName || user?.username}
-                                size={36}
+                                size={38}
                                 showOnline
                                 online={socketConnected}
                             />
@@ -153,10 +155,11 @@ export default function AppLayout() {
                         <button
                             type="button"
                             className="sync-nav-logout"
-                            onClick={handleLogout}
-                            title="Logout"
+                            onClick={() => setConfirmLogout(true)}
+                            title="Sign out"
+                            aria-label="Sign out"
                         >
-                            <LogOut size={19} />
+                            <Power size={19} />
                         </button>
                     </div>
                 </aside>
@@ -165,6 +168,18 @@ export default function AppLayout() {
                     <Outlet />
                 </main>
             </div>
+
+            {confirmLogout && (
+                <ConfirmDialog
+                    icon={Power}
+                    title="Sign out of Sync?"
+                    message="You will need to sign in again to read your chats and stories."
+                    confirmLabel="Sign out"
+                    busy={loggingOut}
+                    onConfirm={handleConfirmLogout}
+                    onCancel={() => setConfirmLogout(false)}
+                />
+            )}
         </div>
     );
 }

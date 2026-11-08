@@ -2,26 +2,58 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0b141a" />
-    <meta name="description" content="Fast, secure real-time messaging for conversations and groups." />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <meta name="theme-color" content="#031512" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="description" content="Sync — fast, secure messaging for chats, groups and stories." />
     <meta name="application-name" content="Sync" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Sync" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="format-detection" content="telephone=no" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="icon" type="image/png" href="/Sync.png" />
-    <link rel="apple-touch-icon" href="/Sync.png" />
-    <title>Sync — Real-Time Messaging</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+    <link rel="preload" as="image" type="image/webp" href="/logo-mark.webp" fetchpriority="high" />
+    <title>Sync</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
+    <style>
+      /* React লোড হওয়ার আগের boot splash: সাদা ঝলক আসে না */
+      html, body { margin: 0; background: #031512; }
+      #boot {
+        position: fixed; inset: 0; z-index: 9999;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+        background:
+          radial-gradient(60% 45% at 50% 38%, rgba(0, 237, 100, 0.16), transparent 70%),
+          #031512;
+        transition: opacity 0.28s ease;
+      }
+      #boot.is-gone { opacity: 0; pointer-events: none; }
+      #boot img { width: 96px; height: 96px; display: block; animation: boot-spin 2.6s cubic-bezier(0.65, 0.05, 0.3, 0.95) infinite; }
+      #boot b {
+        font: 800 1.7rem/1 "Plus Jakarta Sans", system-ui, sans-serif; letter-spacing: -0.03em;
+        background: linear-gradient(100deg, #b6f34d, #00ed64 40%, #2ccb9a 75%, #1fa7b0);
+        -webkit-background-clip: text; background-clip: text; color: transparent;
+      }
+      @keyframes boot-spin { 0% { transform: rotate(0); } 70%, 100% { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { #boot img { animation: none; } }
+    </style>
   </head>
   <body>
+    <div id="boot" aria-hidden="true">
+      <img src="/logo-mark.webp" width="96" height="96" alt="" />
+      <b>Sync</b>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

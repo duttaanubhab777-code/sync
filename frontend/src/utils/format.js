@@ -90,3 +90,24 @@ export const getInitials = name => {
     }
     return String(name).slice(0, 2).toUpperCase();
 };
+
+export const DEFAULT_ABOUT = "Hey there! I'm using Sync";
+
+// পুরনো ডিফল্ট bio-তে কিবোর্ড ইমোজি ছিল, UI-তে সেটা পরিষ্কার টেক্সট হিসেবে দেখাই
+export const cleanAbout = text => {
+    const value = String(text || "").trim();
+    if (!value || /^hello\s*!?\s*i am using sync/i.test(value)) {
+        return DEFAULT_ABOUT;
+    }
+    return value;
+};
+
+// নাম থেকে 0–5 টোন (অ্যাভাটারের গ্রেডিয়েন্ট রঙ ঠিক করতে)
+export const getAvatarTone = name => {
+    const str = String(name || "");
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+    }
+    return hash % 6;
+};

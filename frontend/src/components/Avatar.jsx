@@ -1,5 +1,5 @@
 import React from "react";
-import { getInitials } from "../utils/format.js";
+import { getInitials, getAvatarTone } from "../utils/format.js";
 
 export default function Avatar({
     src = "",
@@ -22,10 +22,13 @@ export default function Avatar({
                     alt={name || "avatar"}
                     className="sync-avatar-img"
                     loading="lazy"
+                    decoding="async"
                 />
             ) : (
                 <div
-                    className={`sync-avatar-fallback ${isGroup ? "is-group" : ""}`}
+                    className={`sync-avatar-fallback tone-${getAvatarTone(
+                        name
+                    )} ${isGroup ? "is-group" : ""}`}
                     style={{ fontSize: Math.max(12, Math.floor(size * 0.38)) }}
                 >
                     {initials}
@@ -33,7 +36,9 @@ export default function Avatar({
             )}
             {showOnline && (
                 <span
-                    className={`sync-presence-dot ${online ? "is-online" : "is-offline"}`}
+                    className={`sync-presence-dot ${
+                        online ? "is-online" : "is-offline"
+                    }`}
                     title={online ? "Online" : "Offline"}
                 />
             )}
