@@ -551,9 +551,7 @@ const chatSlice = createSlice({
                             }
                         }
                     }
-                    if (c.lastMessage?.messageId) {
-                                }
-                }
+                 }
             })
             .addCase(fetchConversations.rejected, (state, action) => {
                 state.conversationsLoading = false;
@@ -645,9 +643,7 @@ const chatSlice = createSlice({
                     bucket.items = messages;
                 }
 
-                if (messages.length > 0) {
-                }
-            })
+             })
             .addCase(fetchMessages.rejected, (state, action) => {
                 const convId = String(action.meta.arg.conversationId);
                 const bucket = ensureConvBucket(state, convId);
