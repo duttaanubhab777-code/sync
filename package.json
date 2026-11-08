@@ -1,0 +1,18 @@
+{
+    "name": "sync-monorepo",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Sync — Real-time WhatsApp-style chat app (Vite + React + Redux frontend & Node.js + Socket.io backend in a single Render Web Service)",
+    "scripts": {
+        "install:frontend": "npm --prefix frontend install --include=dev",
+        "build:frontend": "npm --prefix frontend run build",
+        "install:backend": "npm --prefix node-backend install",
+        "build": "npm run install:frontend && npm run build:frontend && npm run install:backend",
+        "start": "npm --prefix node-backend start",
+        "dev:frontend": "npm --prefix frontend run dev",
+        "dev:backend": "npm --prefix node-backend run dev"
+    },
+    "engines": {
+        "node": ">=20.19.0"
+    }
+}
