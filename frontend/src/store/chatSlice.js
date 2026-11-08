@@ -8,10 +8,10 @@ import {
 
 const saveLastMsgId = id => {
     if (!id || String(id).startsWith("temp_")) return;
-    const current = localStorage.getItem(LAST_MSG_ID_KEY);
-    if (!current || String(id) > current) {
-        localStorage.setItem(LAST_MSG_ID_KEY, String(id));
-    }
+    // Only a completed server sync may move this durable cursor.
+    // Assign exactly: a cursor previously advanced by a live socket event
+    // may be ahead of messages that the paginated sync has not fetched yet.
+    localStorage.setItem(LAST_MSG_ID_KEY, String(id));
 };
 
 export const fetchConversations = createAsyncThunk(
@@ -144,7 +144,7 @@ export const syncMissedMessages = createAsyncThunk(
 
             let allNewMessages = [];
             let allUpdated = [];
-            let latestServerTime = "";
+            let syncServerTime = "";
             let safetyCounter = 0;
 
             while (safetyCounter < 10) {
@@ -160,7 +160,11 @@ export const syncMissedMessages = createAsyncThunk(
 
                 allNewMessages = allNewMessages.concat(batch);
                 if (safetyCounter === 1) allUpdated = updated;
-                if (data.serverTime) latestServerTime = data.serverTime;
+                // Keep the first page's watermark. Later pages are not queried
+                // for updates, so storing their newer time could skip updates.
+                if (data.serverTime && !syncServerTime) {
+                    syncServerTime = data.serverTime;
+                }
 
                 if (batch.length > 0) {
                     after = batch[batch.length - 1]._id;
@@ -169,8 +173,12 @@ export const syncMissedMessages = createAsyncThunk(
                 if (!data.hasMore || batch.length === 0) break;
             }
 
-            if (latestServerTime) {
-                localStorage.setItem(LAST_SERVER_TIME_KEY, latestServerTime);
+            // Commit the cursor only after every fetched page has been
+            // collected successfully. Never advance it from an individual
+            // socket event while this pagination loop is still in progress.
+            if (after) saveLastMsgId(after);
+            if (syncServerTime) {
+                localStorage.setItem(LAST_SERVER_TIME_KEY, syncServerTime);
             }
 
             await dispatch(fetchConversations());
@@ -347,8 +355,6 @@ const chatSlice = createSlice({
             } else {
                 bucket.items.push(message);
             }
-            saveLastMsgId(message._id);
-
             const conv = state.conversations.find(
                 c => String(c._id) === convId
             );
@@ -663,7 +669,6 @@ const chatSlice = createSlice({
                         if (idx === -1) bucket.items.push(m);
                         else bucket.items[idx] = m;
                     }
-                    saveLastMsgId(m._id);
                 }
 
                 for (const u of updated) {
