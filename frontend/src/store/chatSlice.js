@@ -164,7 +164,6 @@ export const syncMissedMessages = createAsyncThunk(
 
                 if (batch.length > 0) {
                     after = batch[batch.length - 1]._id;
-                    saveLastMsgId(after);
                 }
 
                 if (!data.hasMore || batch.length === 0) break;
@@ -304,7 +303,6 @@ const chatSlice = createSlice({
             } else {
                 bucket.items.push(message);
             }
-            saveLastMsgId(message._id);
 
             const conv = state.conversations.find(
                 c => String(c._id) === convId
@@ -554,8 +552,7 @@ const chatSlice = createSlice({
                         }
                     }
                     if (c.lastMessage?.messageId) {
-                        saveLastMsgId(c.lastMessage.messageId);
-                    }
+                                }
                 }
             })
             .addCase(fetchConversations.rejected, (state, action) => {
@@ -649,7 +646,6 @@ const chatSlice = createSlice({
                 }
 
                 if (messages.length > 0) {
-                    saveLastMsgId(messages[messages.length - 1]._id);
                 }
             })
             .addCase(fetchMessages.rejected, (state, action) => {
