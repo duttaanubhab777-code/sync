@@ -10,7 +10,7 @@ import {
     Loader2
 } from "lucide-react";
 import Avatar from "./Avatar.jsx";
-import SyncLogo from "./SyncLogo.jsx";
+import SyncBrandBar from "./SyncBrandBar.jsx";
 import { logoutUser, forceLogout } from "../store/authSlice.js";
 import { fetchConversations, resetChatState } from "../store/chatSlice.js";
 import { fetchStories } from "../store/storySlice.js";
@@ -82,11 +82,9 @@ export default function AppLayout() {
                 </div>
             )}
 
+            <SyncBrandBar />
             <div className="sync-main-frame">
                 <aside className="sync-nav-rail">
-                    <div className="sync-nav-brand" title="Sync Real-Time Chat">
-                        <SyncLogo size="nav" />
-                    </div>
 
                     <nav className="sync-nav-links">
                         <NavLink
