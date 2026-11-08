@@ -1,0 +1,48 @@
+services:
+  - type: web
+    name: sync
+    runtime: node
+    plan: free
+    region: singapore
+    # Root directory ফাঁকা (repo root), কারণ একটাই Web Service থেকে frontend/dist ও node-backend একসাথে চলবে
+    buildCommand: npm --prefix frontend install --include=dev && npm --prefix frontend run build && npm --prefix node-backend install
+    startCommand: npm --prefix node-backend start
+    healthCheckPath: /health
+    autoDeploy: true
+    buildFilter:
+      paths:
+        - node-backend/**
+        - frontend/**
+        - package.json
+        - render.yaml
+      ignoredPaths:
+        - python-service/**
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "1"
+      - key: JWT_EXPIRES_IN
+        value: 15m
+      - key: REFRESH_TOKEN_EXPIRY
+        value: 30d
+      - key: ALLOW_INLINE_SCRIPTS
+        value: "false"
+      # নিচের ভ্যারিয়েবলগুলোর মান Render Dashboard-এ বসাতে হবে (sync: false)
+      # বিশেষ দ্রষ্টব্য: JWT_SECRET ও SERVICE_KEY অবশ্যই PythonAnywhere-এর config.py-এর সাথে হুবহু এক হতে হবে
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: REFRESH_TOKEN_SECRET
+        generateValue: true
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: PYTHON_SERVICE_URL
+        sync: false
+      - key: SERVICE_KEY
+        sync: false
+      - key: SUPER_ADMIN_EMAIL
+        sync: false

@@ -16,9 +16,6 @@ const isProd = () =>
     process.env.NODE_ENV === "production" || Boolean(process.env.RENDER);
 
 // ---------- proxy ----------
-// Render প্রক্সির পেছনে চলে। trust proxy ঠিক থাকলে Express নিজেই আসল ক্লায়েন্ট IP (req.ip) দেয়,
-// আর rate limit সেটাই ব্যবহার করে। (X-Forwarded-For-এর প্রথম মান নিজে পড়া নিরাপদ নয়, কেউ নকল করতে পারে)
-// .env-এ TRUST_PROXY=1 দিলে সেটা, নাহলে Render-এ (RENDER ভ্যারিয়েবল থাকে) নিজে থেকেই 1
 if (process.env.TRUST_PROXY) {
     const v = process.env.TRUST_PROXY;
     app.set(
@@ -30,16 +27,14 @@ if (process.env.TRUST_PROXY) {
 }
 
 // ---------- CORS ----------
-// frontend ও backend এখন একই service/origin থেকে চলে, তাই প্রোডাকশনে CORS লাগে না।
-// লোকাল ডেভেলপমেন্টে frontend আলাদা পোর্টে চালালে FRONTEND_URL-এ সেই origin দাও (কমা দিয়ে একাধিক)।
+// frontend ও backend একই Render service/origin থেকে চলে, তাই প্রোডাকশনে CORS লাগে না।
+// লোকাল ডেভেলপমেন্টে frontend আলাদা পোর্টে (যেমন Vite 5173) চালালে FRONTEND_URL-এ সেই origin দাও।
 export const allowedOrigins = (process.env.FRONTEND_URL || "")
     .split(",")
     .map(u => u.trim().replace(/\/+$/, ""))
     .filter(Boolean);
 
 // ---------- নিরাপত্তা (helmet + CSP) ----------
-// Cloudinary-তে সরাসরি আপলোড (api.cloudinary.com) আর Python সার্ভিসে (media sign) কল যেন আটকে না যায়,
-// তাই connect-src-এ এগুলো খোলা। Socket.io client নিজের সার্ভার থেকেই আসে: <script src="/socket.io/socket.io.js">
 const originOf = url => {
     try {
         return new URL(url).origin;
@@ -59,7 +54,6 @@ app.use(
                 "script-src": allowInlineScripts
                     ? ["'self'", "'unsafe-inline'"]
                     : ["'self'"],
-                // onclick="..." জাতীয় inline handler (ALLOW_INLINE_SCRIPTS=true হলে চলবে)
                 "script-src-attr": allowInlineScripts
                     ? ["'unsafe-inline'"]
                     : ["'none'"],
@@ -78,10 +72,11 @@ app.use(
                 "media-src": ["'self'", "blob:", "https://res.cloudinary.com"],
                 "connect-src": [
                     "'self'",
+                    "ws:",
+                    "wss:",
                     "https://api.cloudinary.com",
                     ...(pythonOrigin ? [pythonOrigin] : [])
                 ],
-                // লোকাল http ডেভেলপমেন্টে এটা থাকলে সব http রিসোর্স https হয়ে ভেঙে যায়
                 "upgrade-insecure-requests": isProd() ? [] : null
             }
         }
@@ -97,11 +92,13 @@ app.use(express.json({ limit: "64kb" }));
 app.use(express.urlencoded({ extended: true, limit: "64kb" }));
 app.use(cookieParser());
 
-// Render কোল্ড স্টার্ট জাগানো ও UptimeRobot ping-এর জন্য (DB ছোঁয় না, তাই হালকা)
+// Render কোল্ড স্টার্ট জাগানো ও UptimeRobot ping-এর জন্য + ফ্রন্টএন্ডের জন্য runtime public config
 app.get("/health", (_req, res) => {
     res.status(200).json({
         ok: true,
         service: "sync-node-backend",
+        pythonServiceUrl: process.env.PYTHON_SERVICE_URL || "",
+        cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME || "",
         timestamp: new Date().toISOString()
     });
 });
@@ -117,11 +114,19 @@ app.use("/api", (_req, res) => {
     });
 });
 
-// ---------- Frontend (একই service থেকে static ফাইল) ----------
-// repo-র frontend/ ফোল্ডার। অন্য জায়গায় রাখলে .env-এ FRONTEND_DIR দাও।
-const FRONTEND_DIR = process.env.FRONTEND_DIR
-    ? path.resolve(process.env.FRONTEND_DIR)
-    : path.resolve(__dirname, "../../frontend");
+// ---------- Frontend (একই Render Web Service থেকে Vite build serve করা) ----------
+const resolveFrontendDir = () => {
+    if (process.env.FRONTEND_DIR) {
+        return path.resolve(process.env.FRONTEND_DIR);
+    }
+    const viteDistDir = path.resolve(__dirname, "../../frontend/dist");
+    if (fs.existsSync(path.join(viteDistDir, "index.html"))) {
+        return viteDistDir;
+    }
+    return path.resolve(__dirname, "../../frontend");
+};
+
+const FRONTEND_DIR = resolveFrontendDir();
 const INDEX_FILE = path.join(FRONTEND_DIR, "index.html");
 const hasFrontend = fs.existsSync(INDEX_FILE);
 
@@ -129,21 +134,23 @@ if (hasFrontend) {
     app.use(
         express.static(FRONTEND_DIR, {
             index: "index.html",
-            // /login লিখলে login.html খুলবে
             extensions: ["html"],
             setHeaders: (res, filePath) => {
-                // HTML সবসময় নতুন, বাকি ফাইল (css/js/ছবি) ১ ঘণ্টা cache
-                res.setHeader(
-                    "Cache-Control",
-                    filePath.endsWith(".html")
-                        ? "no-cache"
-                        : "public, max-age=3600"
-                );
+                if (filePath.endsWith(".html")) {
+                    res.setHeader("Cache-Control", "no-cache");
+                } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+                    res.setHeader(
+                        "Cache-Control",
+                        "public, max-age=31536000, immutable"
+                    );
+                } else {
+                    res.setHeader("Cache-Control", "public, max-age=3600");
+                }
             }
         })
     );
 
-    // ব্রাউজারে সরাসরি অন্য পথ খুললে (যেমন /chat) index.html দেওয়া; ফাইলের এক্সটেনশন থাকলে (যেমন /missing.js) নয়
+    // React Router SPA fallback: ব্রাউজারে সরাসরি /login, /chats, /stories ইত্যাদি খুললে index.html দেওয়া
     app.use((req, res, next) => {
         if (req.method !== "GET" && req.method !== "HEAD") return next();
         if (path.extname(req.path)) return next();
@@ -152,7 +159,7 @@ if (hasFrontend) {
     });
 } else {
     console.warn(
-        `[Sync Server] Frontend not found at ${FRONTEND_DIR} (index.html নেই), শুধু API চলবে`
+        `[Sync Server] Frontend build not found at ${FRONTEND_DIR} (index.html নেই), শুধু API চলবে`
     );
     app.get("/", (_req, res) => {
         res.status(200).json({ ok: true, service: "sync-node-backend" });
@@ -169,7 +176,6 @@ app.use((_req, res) => {
 });
 
 // ---------- গ্লোবাল এরর হ্যান্ডলার ----------
-// কোনো এরর এলে সার্ভার ক্র্যাশ না করে সুন্দর JSON দেয়। অজানা (৫০০) এররের ভেতরের তথ্য প্রোডাকশনে বাইরে যায় না।
 app.use((err, _req, res, next) => {
     if (res.headersSent) return next(err);
 
