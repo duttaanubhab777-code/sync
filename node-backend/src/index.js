@@ -11,6 +11,8 @@ import "./models/message.model.js";
 import "./models/story.model.js";
 import "./models/notification.model.js";
 import "./models/push-subscription.model.js";
+import "./models/notice.model.js";
+import { User } from "./models/user.model.js";
 
 const port = process.env.PORT || 8000;
 
@@ -34,7 +36,24 @@ server.listen(port, "0.0.0.0", () => {
 (async () => {
     await connectDB();
     await prepareDatabase();
+    await ensureSuperAdmin();
 })();
+
+// SUPER_ADMIN_EMAIL দেওয়া ইমেইলের অ্যাকাউন্ট আগে থেকেই থাকলেও Super Admin বানিয়ে দেওয়া
+// (আগে শুধু নতুন register করার সময় হতো, তাই আগের অ্যাকাউন্ট কখনো admin হতো না)
+async function ensureSuperAdmin() {
+    const email = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
+    if (!email) return;
+    try {
+        const res = await User.updateOne(
+            { email, $or: [{ isSuperAdmin: { $ne: true } }, { role: { $ne: "superAdmin" } }] },
+            { $set: { isSuperAdmin: true, role: "superAdmin", isBlocked: false } }
+        );
+        if (res.modifiedCount) console.log(`[Admin] ${email} is now the Super Admin`);
+    } catch (err) {
+        console.error("[Admin] ensureSuperAdmin failed:", err.message);
+    }
+}
 
 // Render নতুন ডিপ্লয় করার সময় SIGTERM পাঠালে নিরাপদে বন্ধ হওয়া
 const shutdown = signal => {
