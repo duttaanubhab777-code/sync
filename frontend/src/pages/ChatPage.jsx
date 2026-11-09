@@ -22,7 +22,8 @@ import {
     X,
     Lock,
     Loader2,
-    MessageSquare
+    MessageSquare,
+    ExternalLink
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncBrandBar from "../components/SyncBrandBar.jsx";
@@ -55,6 +56,73 @@ import {
     formatTime,
     generateClientMsgId
 } from "../utils/format.js";
+
+const MESSAGE_URL_REGEX = /https?:\/\/[^\s<>"']+/gi;
+
+function MessageLinkContent({ text }) {
+    const matches = [...String(text || "").matchAll(MESSAGE_URL_REGEX)];
+    if (!matches.length) return <>{text}</>;
+
+    const parts = [];
+    let cursor = 0;
+    const links = [];
+
+    matches.forEach((match, index) => {
+        const rawUrl = match[0];
+        const trailing = rawUrl.match(/[),.!?;:]+$/)?.[0] || "";
+        const href = trailing ? rawUrl.slice(0, -trailing.length) : rawUrl;
+        let parsed;
+        try {
+            parsed = new URL(href);
+            if (!["http:", "https:"].includes(parsed.protocol)) return;
+        } catch {
+            return;
+        }
+        if (match.index > cursor) parts.push(text.slice(cursor, match.index));
+        parts.push(
+            <a
+                key={`message-link-${index}`}
+                href={parsed.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={event => event.stopPropagation()}
+                className="sync-message-link"
+            >
+                {href}
+            </a>,
+            trailing
+        );
+        links.push({ href: parsed.href, host: parsed.hostname });
+        cursor = match.index + rawUrl.length;
+    });
+
+    if (!links.length) return <>{text}</>;
+    if (cursor < text.length) parts.push(text.slice(cursor));
+
+    const preview = links[0];
+    return (
+        <>
+            {parts}
+            <a
+                className="sync-link-preview"
+                href={preview.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={event => event.stopPropagation()}
+            >
+                <span className="sync-link-preview-icon">
+                    <ExternalLink size={19} />
+                </span>
+                <span className="sync-link-preview-copy">
+                    <strong>{preview.host}</strong>
+                    <small>{preview.href}</small>
+                    <em>Open link</em>
+                </span>
+                <ExternalLink size={16} className="sync-link-preview-arrow" />
+            </a>
+        </>
+    );
+}
 
 function StatusTick({ status, optimistic, failed }) {
     if (failed) {
@@ -937,7 +1005,7 @@ export default function ChatPage() {
                                                     <div className="sync-msg-text">
                                                         {msg.deletedForEveryone
                                                             ? "🚫 This message was deleted"
-                                                            : msg.text}
+                                                            : <MessageLinkContent text={msg.text} />}
                                                     </div>
                                                 )}
 
