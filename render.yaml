@@ -47,3 +47,10 @@ services:
         sync: false
       - key: SUPER_ADMIN_EMAIL
         sync: false
+      # Generate with: npx web-push generate-vapid-keys
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        value: mailto:sync93346@gmail.com
