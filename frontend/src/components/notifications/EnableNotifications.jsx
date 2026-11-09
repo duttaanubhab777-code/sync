@@ -69,7 +69,7 @@ export default function EnableNotifications() {
     };
 
     return (
-        <button type="button" onClick={enable} disabled={state === "working" || state === "enabled"}>
+        <button className="sync-notification-enable" type="button" onClick={enable} disabled={state === "working" || state === "enabled"} aria-live="polite">
             {labels[state]}
         </button>
     );
