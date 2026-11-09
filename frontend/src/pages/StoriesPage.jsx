@@ -177,7 +177,7 @@ export default function StoriesPage() {
         .filter(g => !g.isMine);
 
     return (
-        <div className="sync-stories-layout">
+        <div className={`sync-stories-layout ${viewerState !== null ? "has-active-story" : ""}`}>
             <div className="sync-stories-sidebar">
                 <div className="sync-pane-header">
                     <SyncBrandBar className="sync-pane-brand" />
