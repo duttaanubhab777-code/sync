@@ -9,6 +9,8 @@ import "./models/user.model.js";
 import "./models/conversation.model.js";
 import "./models/message.model.js";
 import "./models/story.model.js";
+import "./models/notification.model.js";
+import "./models/push-subscription.model.js";
 
 const port = process.env.PORT || 8000;
 
