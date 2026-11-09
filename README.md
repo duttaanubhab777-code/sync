@@ -556,24 +556,24 @@ REFRESH_TOKEN_EXPIRY=30d
 FRONTEND_URL=          # একই service-এ ফাঁকা রাখো (লোকাল আলাদা পোর্টে চালালে তবেই দাও)
 CLOUDINARY_CLOUD_NAME=
 PYTHON_SERVICE_URL=    # CSP-তে connect-src হিসেবে খোলা হয়
-SERVICE_KEY=
 ALLOW_INLINE_SCRIPTS=false
 ```
 
 পুরো তালিকা ও ব্যাখ্যা: `node-backend/.env.example`
 
-**🟨 `python-service/config.py`**
+**🟨 `python-service/config.py`** (`config.example.py` কপি করে বানাও, GitHub-এ দেবে না)
 
 ```python
-JWT_SECRET = ""          # Node-এর সাথে হুবহু এক
-CLOUD_NAME = ""
-API_KEY = ""
-API_SECRET = ""          # শুধু Python-এর কাছে থাকবে
-FRONTEND_URL = ""
-SERVICE_KEY = ""         # Node-এর সাথে এক
+JWT_SECRET = ""              # Render-এর JWT_SECRET-এর সাথে হুবহু এক
+CLOUDINARY_CLOUD_NAME = ""   # Render-এর CLOUDINARY_CLOUD_NAME-এর সাথে এক
+CLOUDINARY_API_KEY = ""
+CLOUDINARY_API_SECRET = ""   # শুধু Python-এর কাছে থাকবে
+ALLOWED_ORIGINS = "https://sync-5lfm.onrender.com"
 ```
 
 > `CLOUDINARY_API_SECRET` শুধু Python-এ থাকবে, Node-এ লাগবে না।
+> `SERVICE_KEY` এখন কোথাও ব্যবহার হয় না (ভবিষ্যতের `/scan`-এর জন্য ভাবা হয়েছিল), তাই কোনো জায়গাতেই দিতে হবে না।
+> পুরো ধাপে ধাপে নির্দেশনা: [`PYTHONANYWHERE_DEPLOYMENT_GUIDE.md`](PYTHONANYWHERE_DEPLOYMENT_GUIDE.md)
 
 ---
 
@@ -590,16 +590,19 @@ SERVICE_KEY = ""         # Node-এর সাথে এক
 
 **🟨 PythonAnywhere**
 
+শুধু `python-service/`-এর ভেতরের ফাইল আলাদা ফোল্ডারে (`~/sync-media-service`) রাখা হয়, পুরো প্রজেক্ট নয়।
+বিস্তারিত বাংলা গাইড: [`PYTHONANYWHERE_DEPLOYMENT_GUIDE.md`](PYTHONANYWHERE_DEPLOYMENT_GUIDE.md)
+
 ```bash
-git clone https://github.com/<USERNAME>/sync.git
-cd sync/python-service
-python3 -m venv venv && source venv/bin/activate
+mkvirtualenv --python=/usr/bin/python3.10 sync-media-env
+cd ~/sync-media-service
 pip install -r requirements.txt
 cp config.example.py config.py   # তারপর মান বসাও
+python verify_install.py         # সব OK কিনা দেখো
 ```
 
-- Web tab → WSGI ফাইলে `python-service` path দাও
-- আপডেটে: `git pull` → Web tab-এ **Reload**
+- Web tab → Manual configuration, Virtualenv path, আর WSGI ফাইলে `pythonanywhere_wsgi.py`-এর কোড
+- আপডেটে: নতুন ফাইল আপলোড → Web tab-এ **Reload** (`config.py` মুছো না)
 
 **🟩 Frontend**
 

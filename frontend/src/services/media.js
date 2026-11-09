@@ -1,7 +1,9 @@
 import axios from "axios";
 import { getStoredToken, PY_URL_KEY, refreshAccessToken } from "./api.js";
 
-export const uploadMediaToCloudinary = async (file, onProgress) => {
+// options.purpose (ঐচ্ছিক): "chat" (ডিফল্ট) | "voice" | "avatar" | "story" | "group"
+// Python সার্ভিস এটা দেখে Cloudinary folder ঠিক করে। না দিলে আগের মতোই sync/chat।
+export const uploadMediaToCloudinary = async (file, onProgress, options = {}) => {
     if (!file) throw new Error("No file selected");
 
     const MAX_BYTES = 25 * 1024 * 1024;
@@ -21,13 +23,15 @@ export const uploadMediaToCloudinary = async (file, onProgress) => {
         );
     }
 
+    const signBody = options?.purpose ? { purpose: options.purpose } : {};
+
     let token = getStoredToken();
 
     let signRes;
     try {
         signRes = await axios.post(
             `${pyBaseUrl}/media/sign`,
-            {},
+            signBody,
             {
                 headers: {
                     Authorization: `Bearer ${token}`
@@ -39,7 +43,7 @@ export const uploadMediaToCloudinary = async (file, onProgress) => {
             token = await refreshAccessToken();
             signRes = await axios.post(
                 `${pyBaseUrl}/media/sign`,
-                {},
+                signBody,
                 {
                     headers: {
                         Authorization: `Bearer ${token}`
@@ -66,19 +70,33 @@ export const uploadMediaToCloudinary = async (file, onProgress) => {
     formData.append("api_key", apiKey);
     formData.append("timestamp", String(timestamp));
     if (folder) formData.append("folder", folder);
+    // সার্ভার যদি allowed_formats সই করে থাকে (ENFORCE_ALLOWED_FORMATS চালু), ঠিক সেটাই পাঠাতে হবে
+    if (signData.allowedFormats) {
+        formData.append("allowed_formats", signData.allowedFormats);
+    }
     formData.append("signature", signature);
 
-    const uploadRes = await axios.post(
-        `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
-        formData,
-        {
-            onUploadProgress: evt => {
-                if (evt.total && typeof onProgress === "function") {
-                    onProgress(Math.round((evt.loaded * 100) / evt.total));
+    let uploadRes;
+    try {
+        uploadRes = await axios.post(
+            `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
+            formData,
+            {
+                onUploadProgress: evt => {
+                    if (evt.total && typeof onProgress === "function") {
+                        onProgress(Math.round((evt.loaded * 100) / evt.total));
+                    }
                 }
             }
-        }
-    );
+        );
+    } catch (err) {
+        // Cloudinary আসল কারণ জানায় (যেমন "Invalid Signature", "File size too large"), সেটা দেখানো
+        throw new Error(
+            err.response?.data?.error?.message ||
+                err.message ||
+                "Upload to Cloudinary failed"
+        );
+    }
 
     const data = uploadRes.data;
     return {

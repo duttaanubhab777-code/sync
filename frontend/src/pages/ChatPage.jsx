@@ -380,7 +380,8 @@ export default function ChatPage() {
                 try {
                     const media = await uploadMediaToCloudinary(
                         audioFile,
-                        setUploadProgress
+                        setUploadProgress,
+                        { purpose: "voice" }
                     );
                     await sendSocketMessage({
                         conversationId: activeConversationId,

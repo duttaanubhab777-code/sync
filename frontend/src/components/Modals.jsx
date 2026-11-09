@@ -207,7 +207,9 @@ export function NewGroupChatModal({ onClose, onGroupReady }) {
         setUploadingIcon(true);
         setError("");
         try {
-            const uploaded = await uploadMediaToCloudinary(file);
+            const uploaded = await uploadMediaToCloudinary(file, undefined, {
+                purpose: "group"
+            });
             setGroupIcon(uploaded.url);
         } catch (err) {
             setError(err.message || "Icon upload failed");
@@ -499,7 +501,9 @@ export function ChatInfoDrawer({ conversation, onClose }) {
         setSavingGroup(true);
         setError("");
         try {
-            const media = await uploadMediaToCloudinary(file);
+            const media = await uploadMediaToCloudinary(file, undefined, {
+                purpose: "group"
+            });
             await dispatch(
                 updateGroupDetails({
                     conversationId: conversation._id,

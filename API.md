@@ -157,5 +157,6 @@ Sync-এর পর চ্যাট লিস্টের `unread` সংখ্�
 | POST   | `/media/sign` | `Bearer JWT`    | Cloudinary signature |
 | POST   | `/scan` _(পরে)_ | `X-Service-Key` | ছবি স্ক্যান          |
 
+- `POST /media/sign` body: `{}` (ফাঁকা) অথবা `{ "purpose": "chat" | "voice" | "avatar" | "story" | "group" }`। সফল হলে `data`-তে `cloudName, apiKey, timestamp, folder, signature` (সাথে `purpose`, আর ENFORCE_ALLOWED_FORMATS চালু থাকলে `allowedFormats`)। folder: `sync/chat`, `sync/voice`, `sync/avatars`, `sync/stories`, `sync/groups`। টোকেন ভুল/মেয়াদ-শেষ/refresh হলে **401** (frontend তখন refresh করে আবার চেষ্টা করে), অন্য origin হলে 403, কনফিগ অসম্পূর্ণ হলে 503, বেশি রিকোয়েস্টে 429।
 - Node যে **access token** দেয় সেটাই Python যাচাই করবে (একই `JWT_SECRET`, payload-এ `id` আছে)। **Refresh token** দিয়ে Python-কেও ডাকা যাবে না, তাই আলাদা `tokenType: "refresh"` আছে, Python-এ access token হিসেবে `tokenType` নেই এমন token-ই মানতে হবে।
 - Python-এর CORS-এ `FRONTEND_URL` হিসেবে **Render সার্ভিসের ঠিকানা** (`https://<নাম>.onrender.com`) দিতে হবে, কারণ ব্রাউজার এখান থেকেই `/media/sign` ডাকে।

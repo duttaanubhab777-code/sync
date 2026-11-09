@@ -72,7 +72,9 @@ export default function ProfilePage() {
         setMessage("");
         setError("");
         try {
-            const media = await uploadMediaToCloudinary(file);
+            const media = await uploadMediaToCloudinary(file, undefined, {
+                purpose: "avatar"
+            });
             await dispatch(updateMyProfile({ avatar: media.url })).unwrap();
             setMessage("Profile photo updated");
         } catch (err) {

@@ -31,7 +31,8 @@ services:
       - key: ALLOW_INLINE_SCRIPTS
         value: "false"
       # নিচের ভ্যারিয়েবলগুলোর মান Render Dashboard-এ বসাতে হবে (sync: false)
-      # বিশেষ দ্রষ্টব্য: JWT_SECRET ও SERVICE_KEY অবশ্যই PythonAnywhere-এর config.py-এর সাথে হুবহু এক হতে হবে
+      # বিশেষ দ্রষ্টব্য: JWT_SECRET অবশ্যই PythonAnywhere-এর config.py-র JWT_SECRET-এর সাথে হুবহু এক হতে হবে
+      # (SERVICE_KEY এখন কোথাও ব্যবহার হয় না, তাই সরানো হয়েছে; ভবিষ্যতে /scan যোগ হলে আবার লাগবে)
       - key: MONGODB_URI
         sync: false
       - key: JWT_SECRET
@@ -41,8 +42,6 @@ services:
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: PYTHON_SERVICE_URL
-        sync: false
-      - key: SERVICE_KEY
         sync: false
       - key: SUPER_ADMIN_EMAIL
         sync: false
