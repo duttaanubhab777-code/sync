@@ -30,8 +30,10 @@ services:
         value: 30d
       - key: ALLOW_INLINE_SCRIPTS
         value: "false"
-      # নিচের ভ্যারিয়েবলগুলোর মান Render Dashboard-এ বসাতে হবে (sync: false)
-      # বিশেষ দ্রষ্টব্য: JWT_SECRET অবশ্যই PythonAnywhere-এর config.py-র JWT_SECRET-এর সাথে হুবহু এক হতে হবে
+      # Set the sync:false values in the Render Dashboard Environment tab.
+      # JWT_SECRET must exactly match python-service/config.py on PythonAnywhere.
+      # Cloudinary API credentials (API_KEY and API_SECRET) belong ONLY on PythonAnywhere,
+      # never in this Render service or the frontend. Only CLOUDINARY_CLOUD_NAME is needed here.
       # (SERVICE_KEY এখন কোথাও ব্যবহার হয় না, তাই সরানো হয়েছে; ভবিষ্যতে /scan যোগ হলে আবার লাগবে)
       - key: MONGODB_URI
         sync: false
