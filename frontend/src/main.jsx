@@ -29,10 +29,3 @@ requestAnimationFrame(() => requestAnimationFrame(hideBootSplash));
 // নিরাপত্তা: কোনো কারণে উপরেরটা না চললেও ৩ সেকেন্ডে সরে যাবে
 setTimeout(hideBootSplash, 3000);
 
-if (import.meta.env.PROD && "serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/service-worker.js").catch(error => {
-            console.error("Sync service worker registration failed:", error);
-        });
-    });
-}
