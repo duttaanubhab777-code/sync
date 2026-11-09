@@ -343,36 +343,64 @@ export default function ChatPage() {
     };
 
     const startVoiceRecording = async () => {
-        if (!navigator.mediaDevices?.getUserMedia) {
-            setComposerError("Voice recording is not supported in this browser");
+        // getUserMedia requires HTTPS (or localhost) and a user gesture.
+        if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+            setComposerError(
+                "Microphone access requires a secure HTTPS connection. Open Sync using its HTTPS address and try again."
+            );
             return;
         }
+        if (typeof window.MediaRecorder === "undefined") {
+            setComposerError("Voice recording is not supported by this browser.");
+            return;
+        }
+
         setComposerError("");
+        let stream;
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: true
-            });
-            const recorder = new MediaRecorder(stream);
+            // Calling this directly from the microphone button opens the
+            // browser's native Allow / Block permission prompt when needed.
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+            const mimeType = [
+                "audio/webm;codecs=opus",
+                "audio/webm",
+                "audio/mp4"
+            ].find(type => MediaRecorder.isTypeSupported?.(type));
+            const recorder = new MediaRecorder(
+                stream,
+                mimeType ? { mimeType } : undefined
+            );
+            const recordingType = recorder.mimeType || mimeType || "audio/webm";
             audioChunksRef.current = [];
 
             recorder.ondataavailable = evt => {
                 if (evt.data.size > 0) audioChunksRef.current.push(evt.data);
             };
 
+            recorder.onerror = () => {
+                stream.getTracks().forEach(track => track.stop());
+                clearInterval(recordTimerRef.current);
+                setIsRecording(false);
+                setRecordingSeconds(0);
+                setComposerError("The microphone recording could not be started. Please try again.");
+            };
+
             recorder.onstop = async () => {
-                stream.getTracks().forEach(t => t.stop());
+                stream.getTracks().forEach(track => track.stop());
                 clearInterval(recordTimerRef.current);
                 setIsRecording(false);
                 setRecordingSeconds(0);
 
                 if (audioChunksRef.current.length === 0) return;
                 const blob = new Blob(audioChunksRef.current, {
-                    type: "audio/webm"
+                    type: recordingType
                 });
+                const extension = recordingType.includes("mp4") ? "m4a" : "webm";
                 const audioFile = new File(
                     [blob],
-                    `voice_${Date.now()}.webm`,
-                    { type: "audio/webm" }
+                    `voice_${Date.now()}.${extension}`,
+                    { type: recordingType }
                 );
 
                 setUploadingMedia(true);
@@ -414,10 +442,21 @@ export default function ChatPage() {
             setIsRecording(true);
             setRecordingSeconds(0);
             recordTimerRef.current = setInterval(() => {
-                setRecordingSeconds(s => s + 1);
+                setRecordingSeconds(seconds => seconds + 1);
             }, 1000);
-        } catch {
-            setComposerError("Microphone permission denied");
+        } catch (err) {
+            stream?.getTracks().forEach(track => track.stop());
+            const messages = {
+                NotAllowedError: "Please allow microphone access in your browser to record a voice message.",
+                PermissionDeniedError: "Please allow microphone access in your browser to record a voice message.",
+                NotFoundError: "No microphone was found on this device.",
+                NotReadableError: "The microphone is already in use by another app."
+            };
+            setComposerError(
+                messages[err?.name] ||
+                err?.message ||
+                "Could not access the microphone. Check your browser permissions and try again."
+            );
         }
     };
 
