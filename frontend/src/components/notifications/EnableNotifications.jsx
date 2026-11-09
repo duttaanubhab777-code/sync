@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Bell, BellRing, Loader2 } from "lucide-react";
 
 const decodeBase64Url = value => {
     const padding = "=".repeat((4 - value.length % 4) % 4);
@@ -69,8 +70,9 @@ export default function EnableNotifications() {
     };
 
     return (
-        <button className="sync-notification-enable" type="button" onClick={enable} disabled={state === "working" || state === "enabled"} aria-live="polite">
-            {labels[state]}
+        <button className="sync-notification-enable" type="button" onClick={enable} disabled={state === "working" || state === "enabled"} aria-label={labels[state]} title={labels[state]} aria-live="polite">
+            {state === "working" ? <Loader2 size={18} className="spin" /> : state === "enabled" ? <BellRing size={18} /> : <Bell size={18} />}
+            <span className="sync-notification-sr-only">{labels[state]}</span>
         </button>
     );
 }
