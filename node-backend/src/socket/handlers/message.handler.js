@@ -3,6 +3,8 @@ import { Message } from "../../models/message.model.js";
 import { User } from "../../models/user.model.js";
 import { isValidCloudinaryUrl, pickMedia } from "../../utils/cloudinary.js";
 import { isObjectId } from "../../utils/helpers.js";
+import { Notification } from "../../models/notification.model.js";
+import { sendPushToUser } from "../../services/push.service.js";
 
 const ALLOWED_TYPES = ["text", "image", "video", "audio", "file"];
 const MAX_TEXT = 4000;
@@ -165,6 +167,26 @@ export const registerMessageHandlers = (io, socket) => {
                     $inc: inc
                 }
             );
+
+            // Store + deliver durable notifications to every recipient device.
+            const recipients = conv.members.map(m => m.toString()).filter(id => id !== userId);
+            const preview = type === "text" ? cleanText.slice(0, 160) : `Sent a ${type}`;
+            await Promise.all(recipients.map(async recipientId => {
+                const notification = await Notification.create({
+                    recipient: recipientId,
+                    actor: userId,
+                    type: conv.type === "group" ? "group_message" : "message",
+                    title: conv.type === "group" ? (conv.name || "New group message") : (msg.sender?.fullName || "New message"),
+                    body: preview,
+                    data: { conversationId: String(conv._id), messageId: String(msg._id), url: "/" }
+                });
+                sendPushToUser(recipientId, {
+                    title: notification.title,
+                    body: notification.body,
+                    tag: `conversation-${conv._id}`,
+                    data: notification.data
+                }).catch(err => console.error("[Push notification]", err.message));
+            }));
 
             // প্রেরককে প্রাপ্তিস্বীকার (Ack -> Single Tick ✓)
             ack?.({ ok: true, message: msg });
