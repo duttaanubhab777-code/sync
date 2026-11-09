@@ -28,7 +28,8 @@
     "mongoose": "^9.11.4",
     "mongoose-aggregate-paginate-v2": "^1.1.5",
     "socket.io": "^4.8.4",
-    "zod": "^4.6.7"
+    "zod": "^4.6.7",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
