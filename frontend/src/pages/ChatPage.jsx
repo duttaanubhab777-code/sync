@@ -121,6 +121,7 @@ export default function ChatPage() {
     const [uploadingMedia, setUploadingMedia] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [composerError, setComposerError] = useState("");
+    const [showMicrophoneHelp, setShowMicrophoneHelp] = useState(false);
     const [lightboxUrl, setLightboxUrl] = useState(null);
 
     const [isRecording, setIsRecording] = useState(false);
@@ -356,6 +357,7 @@ export default function ChatPage() {
         }
 
         setComposerError("");
+        setShowMicrophoneHelp(false);
         let stream;
         try {
             // Calling this directly from the microphone button opens the
@@ -452,11 +454,19 @@ export default function ChatPage() {
                 NotFoundError: "No microphone was found on this device.",
                 NotReadableError: "The microphone is already in use by another app."
             };
-            setComposerError(
-                messages[err?.name] ||
-                err?.message ||
-                "Could not access the microphone. Check your browser permissions and try again."
-            );
+            if (
+                err?.name === "NotAllowedError" ||
+                err?.name === "PermissionDeniedError" ||
+                err?.name === "SecurityError"
+            ) {
+                setShowMicrophoneHelp(true);
+            } else {
+                setComposerError(
+                    messages[err?.name] ||
+                    err?.message ||
+                    "Could not access the microphone. Check your browser permissions and try again."
+                );
+            }
         }
     };
 
@@ -1005,6 +1015,54 @@ export default function ChatPage() {
                         </div>
 
                         <footer className="sync-composer-wrap">
+                            {showMicrophoneHelp && (
+                                <div
+                                    className="sync-permission-backdrop"
+                                    role="presentation"
+                                    onClick={() => setShowMicrophoneHelp(false)}
+                                >
+                                    <section
+                                        className="sync-permission-card"
+                                        role="dialog"
+                                        aria-modal="true"
+                                        aria-labelledby="sync-mic-title"
+                                        onClick={event => event.stopPropagation()}
+                                    >
+                                        <div className="sync-permission-icon">
+                                            <Mic size={25} />
+                                        </div>
+                                        <h3 id="sync-mic-title">Allow microphone access</h3>
+                                        <p>
+                                            Sync needs microphone permission to record voice messages.
+                                            Tap Try Again and choose Allow in your browser prompt.
+                                        </p>
+                                        <div className="sync-permission-help">
+                                            <strong>Not seeing an Allow prompt?</strong>
+                                            <span>
+                                                In Chrome, tap the site icon beside the address bar,
+                                                open Permissions or Site settings, set Microphone to Allow,
+                                                then return to Sync.
+                                            </span>
+                                        </div>
+                                        <div className="sync-permission-actions">
+                                            <button
+                                                type="button"
+                                                className="sync-btn ghost"
+                                                onClick={() => setShowMicrophoneHelp(false)}
+                                            >
+                                                Not now
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="sync-btn primary"
+                                                onClick={startVoiceRecording}
+                                            >
+                                                <Mic size={16} /> Try Again
+                                            </button>
+                                        </div>
+                                    </section>
+                                </div>
+                            )}
                             {composerError && (
                                 <div className="sync-composer-banner error">
                                     <span>{composerError}</span>
