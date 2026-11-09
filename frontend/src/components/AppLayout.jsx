@@ -12,6 +12,7 @@ import {
 import Avatar from "./Avatar.jsx";
 import SyncLogo from "./SyncLogo.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
+import EnableNotifications from "./notifications/EnableNotifications.jsx";
 import useSignOut from "../hooks/useSignOut.js";
 import { forceLogout } from "../store/authSlice.js";
 import { fetchConversations, resetChatState } from "../store/chatSlice.js";
@@ -137,6 +138,7 @@ export default function AppLayout() {
                     </nav>
 
                     <div className="sync-nav-footer">
+                        <EnableNotifications />
                         <button
                             type="button"
                             className="sync-nav-user-btn"
