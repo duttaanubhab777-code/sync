@@ -851,7 +851,7 @@ export default function AdminPage() {
                             <article className="sync-dashboard-chart-card sync-dashboard-audience">
                                 <div className="sync-dashboard-chart-heading">
                                     <div><span className="sync-dashboard-eyebrow">AUDIENCE</span><h3><Users size={18} /> Account distribution</h3></div>
-                                    <span className="sync-dashboard-live-label"><Activity size={13} /> Live snapshot</span>
+                                    <span className="sync-dashboard-live-label"><Activity size={13} /> Current totals</span>
                                 </div>
                                 <DashboardDonut total={Number(stats?.users?.total) || 0} segments={[
                                     { label: "Members", value: Math.max(0, (Number(stats?.users?.total) || 0) - (Number(stats?.users?.admins) || 0)), color: "#00c878" },
@@ -888,12 +888,11 @@ export default function AdminPage() {
                             </article>
 
                             <article className="sync-dashboard-chart-card sync-dashboard-reach-card">
-                                <div className="sync-dashboard-chart-heading"><div><span className="sync-dashboard-eyebrow">NOTIFICATIONS</span><h3><Bell size={18} /> Push delivery reach</h3></div></div>
+                                <div className="sync-dashboard-chart-heading"><div><span className="sync-dashboard-eyebrow">NOTIFICATIONS</span><h3><Bell size={18} /> Push subscriptions</h3></div></div>
                                 <div className="sync-dashboard-reach-stats">
                                     <div><strong>{(Number(stats?.notices?.active) || 0).toLocaleString()}</strong><span>Active notices</span></div>
                                     <div><strong>{(Number(stats?.notices?.pushDevices) || 0).toLocaleString()}</strong><span>Subscribed devices</span></div>
                                 </div>
-                                <div className="sync-dashboard-reach-track" aria-label="Push subscription count"><span style={{ width: (Number(stats?.notices?.pushDevices) || 0) > 0 ? "100%" : "0%" }} /></div>
                                 <p className="sync-dashboard-footnote">Registered push subscriptions across user devices.</p>
                             </article>
                         </div>
