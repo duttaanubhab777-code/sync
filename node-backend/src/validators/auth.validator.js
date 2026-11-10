@@ -45,6 +45,9 @@ export const registerSchema = z.object({
     avatar: z.string().url("Avatar must be a valid URL").optional()
 });
 
+// Super Admin নতুন Admin বানানোর সময়: register-এর মতোই, শুধু avatar লাগে না
+export const createAdminSchema = registerSchema.omit({ avatar: true });
+
 export const loginSchema = z.object({
     identifier: z
         .string()

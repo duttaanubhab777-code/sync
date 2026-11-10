@@ -216,6 +216,19 @@ const authSlice = createSlice({
         clearAuthError(state) {
             state.error = null;
         },
+        updateUserRole(state, action) {
+            if (!state.user) return;
+            const { role, isSuperAdmin } = action.payload || {};
+            if (role) state.user.role = role;
+            if (typeof isSuperAdmin === "boolean") {
+                state.user.isSuperAdmin = isSuperAdmin;
+            }
+            try {
+                localStorage.setItem(USER_KEY, JSON.stringify(state.user));
+            } catch {
+                // ignore
+            }
+        },
         forceLogout(state) {
             clearStoredAuth();
             state.user = null;
@@ -299,6 +312,10 @@ const authSlice = createSlice({
     }
 });
 
-export const { setServerWaking, clearAuthError, forceLogout } =
-    authSlice.actions;
+export const {
+    setServerWaking,
+    clearAuthError,
+    updateUserRole,
+    forceLogout
+} = authSlice.actions;
 export default authSlice.reducer;

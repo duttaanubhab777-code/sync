@@ -19,6 +19,78 @@ const POPULATE_REPLY = {
     select: "text type sender media.url deletedForEveryone"
 };
 
+const MEDIA_PREVIEW = {
+    image: "📷 Photo",
+    video: "🎥 Video",
+    audio: "🎤 Voice message",
+    file: "📎 Attachment"
+};
+
+const optimizePushImage = url => {
+    if (!url || !url.includes("/image/upload/")) return "";
+    const [head, tail] = url.split("/image/upload/");
+    if (/^[a-z]{1,3}_[^/]+(,[^/]+)*\//i.test(tail)) return url;
+    return `${head}/image/upload/w_720,c_limit,q_auto/${tail}`;
+};
+
+async function notifyRecipients({
+    conv,
+    msg,
+    type,
+    cleanText,
+    senderId,
+    senderName
+}) {
+    const recipients = conv.members
+        .map(m => m.toString())
+        .filter(id => id !== String(senderId));
+    if (recipients.length === 0) return;
+
+    const isGroup = conv.type === "group";
+    const basePreview =
+        type === "text"
+            ? cleanText.slice(0, 160)
+            : cleanText
+              ? `${MEDIA_PREVIEW[type] || "Attachment"}: ${cleanText.slice(0, 120)}`
+              : MEDIA_PREVIEW[type] || `Sent a ${type}`;
+
+    const title = isGroup
+        ? conv.groupName || "Group chat"
+        : senderName || "New message";
+    const body = isGroup
+        ? `${senderName || "Someone"}: ${basePreview}`
+        : basePreview;
+    const targetUrl = `/chats/${conv._id}`;
+    const data = {
+        conversationId: String(conv._id),
+        messageId: String(msg._id),
+        url: targetUrl
+    };
+    const pushPayload = {
+        type: isGroup ? "group_message" : "message",
+        title,
+        body,
+        icon: msg.sender?.avatar || "/icons/icon-192.png",
+        image: type === "image" ? optimizePushImage(msg.media?.url) : "",
+        tag: `conversation-${conv._id}`,
+        data
+    };
+
+    await Promise.allSettled(
+        recipients.map(async recipientId => {
+            await Notification.create({
+                recipient: recipientId,
+                actor: senderId,
+                type: isGroup ? "group_message" : "message",
+                title,
+                body,
+                data
+            });
+            await sendPushToUser(recipientId, pushPayload);
+        })
+    );
+}
+
 export const registerMessageHandlers = (io, socket) => {
     const userId = socket.user.id;
     let sentAt = [];
@@ -168,27 +240,9 @@ export const registerMessageHandlers = (io, socket) => {
                 }
             );
 
-            // Store + deliver durable notifications to every recipient device.
-            const recipients = conv.members.map(m => m.toString()).filter(id => id !== userId);
-            const preview = type === "text" ? cleanText.slice(0, 160) : `Sent a ${type}`;
-            await Promise.all(recipients.map(async recipientId => {
-                const notification = await Notification.create({
-                    recipient: recipientId,
-                    actor: userId,
-                    type: conv.type === "group" ? "group_message" : "message",
-                    title: conv.type === "group" ? (conv.name || "New group message") : (msg.sender?.fullName || "New message"),
-                    body: preview,
-                    data: { conversationId: String(conv._id), messageId: String(msg._id), url: "/" }
-                });
-                sendPushToUser(recipientId, {
-                    title: notification.title,
-                    body: notification.body,
-                    tag: `conversation-${conv._id}`,
-                    data: notification.data
-                }).catch(err => console.error("[Push notification]", err.message));
-            }));
-
             // প্রেরককে প্রাপ্তিস্বীকার (Ack -> Single Tick ✓)
+            // notification-এর কাজ ack-এর পরে (নিচে) হয়, তাই notification-এ কোনো সমস্যা হলেও
+            // মেসেজ "ব্যর্থ" দেখায় না আর দ্বিতীয়বার পাঠিয়ে duplicate-ও হয় না
             ack?.({ ok: true, message: msg });
 
             // সব সদস্যের সব ডিভাইসে রিয়েল-টাইম মেসেজ (যে socket থেকে পাঠানো হলো সেটা বাদে)
@@ -197,6 +251,15 @@ export const registerMessageHandlers = (io, socket) => {
                 message: msg,
                 conversationId
             });
+
+            notifyRecipients({
+                conv,
+                msg,
+                type,
+                cleanText,
+                senderId: userId,
+                senderName: msg.sender?.fullName || socket.user.fullName
+            }).catch(err => console.error("[Message notify]", err.message));
         } catch (error) {
             console.error("[Socket message:send Error]:", error.message);
             ack?.({ ok: false, error: "SERVER_ERROR" });

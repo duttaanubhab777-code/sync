@@ -1,6 +1,7 @@
 import { io } from "socket.io-client";
 import { getStoredToken, refreshAccessToken } from "./api.js";
 import { store } from "../store/index.js";
+import { updateUserRole } from "../store/authSlice.js";
 import {
     addOptimisticMessage,
     applyConversationRead,
@@ -200,6 +201,31 @@ export const connectSocket = () => {
 
     socket.on("story:viewed", payload => {
         store.dispatch(recordRealtimeStoryView(payload));
+    });
+
+    // রিয়েল-টাইমে নতুন নোটিস বা ডিলিট হওয়া নোটিস
+    socket.on("notice:new", payload => {
+        if (!payload?.notice) return;
+        window.dispatchEvent(
+            new CustomEvent("sync:notice-new", { detail: payload.notice })
+        );
+    });
+
+    socket.on("notice:removed", payload => {
+        if (!payload?.noticeId) return;
+        window.dispatchEvent(
+            new CustomEvent("sync:notice-removed", { detail: payload.noticeId })
+        );
+    });
+
+    // রিয়েল-টাইমে রোল আপডেট বা ব্লক হলে সাথে সাথে কার্যকর
+    socket.on("user:role_updated", payload => {
+        if (!payload) return;
+        store.dispatch(updateUserRole(payload));
+    });
+
+    socket.on("user:blocked", () => {
+        window.dispatchEvent(new CustomEvent("sync:unauthorized"));
     });
 
     return socket;

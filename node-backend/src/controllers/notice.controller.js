@@ -52,12 +52,22 @@ export const acknowledgeNotice = asyncHandler(async (req, res) => {
 
 // ---------------- শুধু Admin / Super Admin ----------------
 
-// push notification-এর জন্য "Ends tomorrow at 11:58 PM" লাইন ডিভাইসেই বানানো হয় (timezone-এর জন্য)
+// Cloudinary ছবি push-এ বড় আকারে দেখানোর আগে ছোট করে নেওয়া (দ্রুত লোড, ডেটা কম)
+const optimizeForPush = url => {
+    if (!url || !url.includes("/image/upload/")) return url || "";
+    const [head, tail] = url.split("/image/upload/");
+    // আগে থেকেই transformation থাকলে (যেমন w_500,...) আর হাত দেওয়া হয় না
+    if (/^[a-z]{1,3}_[^/]+(,[^/]+)*\//i.test(tail)) return url;
+    return `${head}/image/upload/w_1024,c_limit,q_auto/${tail}`;
+};
+
+// push notification-এর জন্য "Ends tomorrow at 11:58 PM" লাইন ডিভাইসেই (service worker) বানানো হয়,
+// কারণ তখন ইউজারের নিজের timezone জানা থাকে
 const buildPushPayload = notice => ({
     type: "notice",
     title: notice.title,
     body: notice.body.slice(0, 240),
-    image: notice.image?.url || "",
+    image: optimizeForPush(notice.image?.url),
     endsAt: notice.countdownTo ? new Date(notice.countdownTo).toISOString() : null,
     tag: `notice-${notice._id}`,
     requireInteraction: true,
@@ -116,11 +126,14 @@ export const createNotice = asyncHandler(async (req, res) => {
         expiresAt: notice.expiresAt
     });
 
-    // ১. এই মুহূর্তে অনলাইনে থাকা সবার কাছে real-time popup
-    req.app.get("io")?.emit("notice:new", { notice: toClientNotice(notice) });
+    // ১. এই মুহূর্তে অনলাইনে থাকা সবার কাছে real-time popup (যে পাঠিয়েছে সে বাদে)
+    req.app
+        .get("io")
+        ?.except(`user:${req.user._id}`)
+        .emit("notice:new", { notice: toClientNotice(notice) });
 
-    // ২. অফলাইন/ব্যাকগ্রাউন্ডে থাকাদের কাছে push (response আটকে রাখা হয় না)
-    sendPushToAll(buildPushPayload(notice))
+    // ২. অফলাইন/ব্যাকগ্রাউন্ডে থাকাদের কাছে push (যে পাঠিয়েছে সে বাদে, response আটকে রাখা হয় না)
+    sendPushToAll(buildPushPayload(notice), { excludeUserId: req.user._id })
         .then(r => console.log(`[Notice] push sent ${r.sent}/${r.total}`))
         .catch(err => console.error("[Notice push]", err.message));
 

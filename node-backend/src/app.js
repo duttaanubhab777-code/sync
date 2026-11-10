@@ -144,7 +144,13 @@ if (hasFrontend) {
             index: "index.html",
             extensions: ["html"],
             setHeaders: (res, filePath) => {
-                if (filePath.endsWith(".html")) {
+                // service worker ও manifest যেন কখনো পুরনো না থাকে (নইলে push-এর নতুন কোড ডিভাইসে পৌঁছায় না)
+                if (
+                    filePath.endsWith(".html") ||
+                    filePath.endsWith(`${path.sep}sw.js`) ||
+                    filePath.endsWith(`${path.sep}service-worker.js`) ||
+                    filePath.endsWith(`${path.sep}manifest.webmanifest`)
+                ) {
                     res.setHeader("Cache-Control", "no-cache");
                 } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
                     res.setHeader(

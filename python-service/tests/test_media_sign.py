@@ -91,6 +91,7 @@ class SignatureHappyPathTests(unittest.TestCase):
             "avatar": "sync/avatars",
             "story": "sync/stories",
             "group": "sync/groups",
+            "notice": "sync/notices",
         }
         client = make_client(RATE_LIMIT_PER_MINUTE="100")
         for purpose, folder in expected.items():

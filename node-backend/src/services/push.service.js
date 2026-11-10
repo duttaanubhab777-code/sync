@@ -88,17 +88,20 @@ export const sendPushToUser = async (userId, payload, options = {}) => {
     return results.filter(Boolean).length;
 };
 
-// সব ইউজারের সব ডিভাইসে (block করা ইউজার বাদে) পাঠানো, ৫০টা করে একসাথে
+// সব ইউজারের সব ডিভাইসে (block করা ইউজার ও excludeUserId বাদে) পাঠানো, ৫০টা করে একসাথে
 export const sendPushToAll = async (payload, options = {}) => {
     if (!configure()) return { sent: 0, total: 0, skipped: true };
 
+    const { excludeUserId, ...pushOptions } = options;
     const blocked = await User.find({ isBlocked: true }, { _id: 1 }).lean();
-    const filter = blocked.length
-        ? { user: { $nin: blocked.map(u => u._id) } }
+    const excludedIds = blocked.map(u => u._id);
+    if (excludeUserId) excludedIds.push(excludeUserId);
+    const filter = excludedIds.length
+        ? { user: { $nin: excludedIds } }
         : {};
 
     const body = JSON.stringify(payload);
-    const opts = { TTL: 60 * 60 * 24, urgency: "high", ...options };
+    const opts = { TTL: 60 * 60 * 24, urgency: "high", ...pushOptions };
     const BATCH = 50;
 
     let sent = 0;

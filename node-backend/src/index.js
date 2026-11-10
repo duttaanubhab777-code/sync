@@ -13,6 +13,7 @@ import "./models/notification.model.js";
 import "./models/push-subscription.model.js";
 import "./models/notice.model.js";
 import { User } from "./models/user.model.js";
+import { getSuperAdminEmails } from "./utils/superAdmin.js";
 
 const port = process.env.PORT || 8000;
 
@@ -36,22 +37,42 @@ server.listen(port, "0.0.0.0", () => {
 (async () => {
     await connectDB();
     await prepareDatabase();
-    await ensureSuperAdmin();
+    await ensureSuperAdmins();
 })();
 
-// SUPER_ADMIN_EMAIL দেওয়া ইমেইলের অ্যাকাউন্ট আগে থেকেই থাকলেও Super Admin বানিয়ে দেওয়া
-// (আগে শুধু নতুন register করার সময় হতো, তাই আগের অ্যাকাউন্ট কখনো admin হতো না)
-async function ensureSuperAdmin() {
-    const email = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
-    if (!email) return;
+// .env-এর SUPER_ADMIN_EMAILS তালিকার সাথে ডাটাবেস মিলিয়ে নেওয়া:
+//  - তালিকার ইমেইলের অ্যাকাউন্ট আগে থেকে থাকলেও Super Admin হয়ে যায়
+//  - তালিকা থেকে সরানো ইমেইলের Super Admin অধিকার চলে যায় (সাধারণ user হয়ে যায়)
+//  - তালিকা পুরো ফাঁকা থাকলে কাউকে নামানো হয় না (ভুলে সবাই admin-হীন হয়ে না যায়)
+async function ensureSuperAdmins() {
+    const emails = getSuperAdminEmails();
+    if (emails.length === 0) return;
     try {
-        const res = await User.updateOne(
-            { email, $or: [{ isSuperAdmin: { $ne: true } }, { role: { $ne: "superAdmin" } }] },
+        const promoted = await User.updateMany(
+            {
+                email: { $in: emails },
+                $or: [
+                    { isSuperAdmin: { $ne: true } },
+                    { role: { $ne: "superAdmin" } },
+                    { isBlocked: true }
+                ]
+            },
             { $set: { isSuperAdmin: true, role: "superAdmin", isBlocked: false } }
         );
-        if (res.modifiedCount) console.log(`[Admin] ${email} is now the Super Admin`);
+        const demoted = await User.updateMany(
+            {
+                email: { $nin: emails },
+                $or: [{ isSuperAdmin: true }, { role: "superAdmin" }]
+            },
+            { $set: { isSuperAdmin: false, role: "user" } }
+        );
+        if (promoted.modifiedCount || demoted.modifiedCount) {
+            console.log(
+                `[Admin] Super Admins synced from env (promoted: ${promoted.modifiedCount}, demoted: ${demoted.modifiedCount})`
+            );
+        }
     } catch (err) {
-        console.error("[Admin] ensureSuperAdmin failed:", err.message);
+        console.error("[Admin] ensureSuperAdmins failed:", err.message);
     }
 }
 

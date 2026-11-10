@@ -8,6 +8,7 @@ import {
     getRefreshSecret,
     getAccessExpiry
 } from "../utils/token.js";
+import { isSuperAdminEmail } from "../utils/superAdmin.js";
 
 const userSchema = new mongoose.Schema(
     {
@@ -106,9 +107,8 @@ const userSchema = new mongoose.Schema(
 
 // validate এর আগেই role ঠিক করা হয়, যাতে role/isSuperAdmin কখনো অসঙ্গত না হয়
 userSchema.pre("validate", function () {
-    const superAdminEmail = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
-
-    if (this.isNew && superAdminEmail && this.email === superAdminEmail) {
+    // SUPER_ADMIN_EMAILS (.env) তালিকার ইমেইলে register বা save করলেই Super Admin
+    if (isSuperAdminEmail(this.email)) {
         this.isSuperAdmin = true;
     }
 

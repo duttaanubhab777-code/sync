@@ -2,13 +2,14 @@ import { User } from "../models/user.model.js";
 import { Conversation } from "../models/conversation.model.js";
 import { Message } from "../models/message.model.js";
 import { Story } from "../models/story.model.js";
-import { Notice } from "../models/notice.model.js";
+import { Notice, NoticeAck } from "../models/notice.model.js";
 import { PushSubscription } from "../models/push-subscription.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { assertObjectId, escapeRegex, isObjectId } from "../utils/helpers.js";
 import { getOnlineUserIds, isUserOnline } from "../socket/store.js";
+import { isSuperAdminEmail } from "../utils/superAdmin.js";
 import { emitToUsers, getContactIds } from "../services/conversation.service.js";
 
 /*
@@ -47,6 +48,7 @@ export const getStats = asyncHandler(async (_req, res) => {
         totalUsers,
         blockedUsers,
         admins,
+        superAdmins,
         newThisWeek,
         groups,
         directChats,
@@ -60,6 +62,7 @@ export const getStats = asyncHandler(async (_req, res) => {
         User.countDocuments(),
         User.countDocuments({ isBlocked: true }),
         User.countDocuments({ role: { $in: ["admin", "superAdmin"] } }),
+        User.countDocuments({ $or: [{ isSuperAdmin: true }, { role: "superAdmin" }] }),
         User.countDocuments({ createdAt: { $gte: weekAgo } }),
         Conversation.countDocuments({ type: "group" }),
         Conversation.countDocuments({ type: "direct" }),
@@ -78,6 +81,7 @@ export const getStats = asyncHandler(async (_req, res) => {
                 online: getOnlineUserIds().length,
                 blocked: blockedUsers,
                 admins,
+                superAdmins,
                 newThisWeek
             },
             chats: { groups, direct: directChats, messages: totalMessages },
@@ -142,6 +146,7 @@ const setBlocked = blocked =>
 
         if (blocked) {
             const io = req.app.get("io");
+            io?.to(`user:${id}`).emit("user:blocked");
             // চলতি socket কেটে দেওয়া, আর push subscription মুছে দেওয়া
             io?.in(`user:${id}`).disconnectSockets(true);
             await PushSubscription.deleteMany({ user: id });
@@ -176,6 +181,15 @@ export const setUserRole = asyncHandler(async (req, res) => {
 
     await User.updateOne({ _id: id }, { $set: { role } });
     const fresh = await User.findById(id).select(ADMIN_USER_FIELDS).lean();
+
+    req.app
+        .get("io")
+        ?.to(`user:${id}`)
+        .emit("user:role_updated", {
+            role: fresh.role,
+            isSuperAdmin: Boolean(fresh.isSuperAdmin)
+        });
+
     res.status(200).json(
         new ApiResponse(
             200,
@@ -183,6 +197,78 @@ export const setUserRole = asyncHandler(async (req, res) => {
             role === "admin" ? "User is now an admin" : "Admin access removed"
         )
     );
+});
+
+// POST /api/admin/admins   (শুধু Super Admin) — সরাসরি নতুন Admin অ্যাকাউন্ট বানানো
+// body: { fullName, username, email, phoneNumber, password }  (validate: createAdminSchema)
+export const createAdmin = asyncHandler(async (req, res) => {
+    const { username, fullName, email, phoneNumber, password } = req.body;
+
+    if (isSuperAdminEmail(email)) {
+        throw new ApiError(
+            400,
+            "This email is listed as a Super Admin in the server settings. Register it normally instead."
+        );
+    }
+
+    const existing = await User.findOne({
+        $or: [{ email }, { username }, { phoneNumber }]
+    })
+        .select("email username phoneNumber")
+        .lean();
+    if (existing) {
+        const field =
+            existing.email === email
+                ? "Email"
+                : existing.username === username
+                  ? "Username"
+                  : "Phone number";
+        throw new ApiError(409, `${field} is already registered`);
+    }
+
+    let admin;
+    try {
+        admin = await User.create({
+            username,
+            fullName,
+            email,
+            phoneNumber,
+            password,
+            role: "admin",
+            isSuperAdmin: false
+        });
+    } catch (err) {
+        if (err?.code === 11000) {
+            throw new ApiError(409, "Account already exists with these details");
+        }
+        throw err;
+    }
+
+    const fresh = await User.findById(admin._id).select(ADMIN_USER_FIELDS).lean();
+    res.status(201).json(
+        new ApiResponse(201, withOnline(fresh), "New admin account created")
+    );
+});
+
+// DELETE /api/admin/users/:id — ইউজার অ্যাকাউন্ট স্থায়ীভাবে মুছে ফেলা
+export const deleteUserByAdmin = asyncHandler(async (req, res) => {
+    const id = assertObjectId(req.params.id, "user id");
+    const target = await User.findById(id).select(ADMIN_USER_FIELDS);
+    if (!target) throw new ApiError(404, "User not found");
+    assertCanManage(req.user, target);
+
+    const io = req.app.get("io");
+    io?.to(`user:${id}`).emit("user:blocked");
+    io?.in(`user:${id}`).disconnectSockets(true);
+
+    await Promise.all([
+        PushSubscription.deleteMany({ user: id }),
+        Story.deleteMany({ author: id }),
+        NoticeAck.deleteMany({ user: id }),
+        User.deleteOne({ _id: id })
+    ]);
+
+    res.status(200).json(new ApiResponse(200, { deletedId: id }, "User deleted"));
 });
 
 // ---------- Media (শুধু image ও video, কখনো লেখা নয়) ----------
@@ -365,4 +451,21 @@ export const listGroups = asyncHandler(async (req, res) => {
             }))
         )
     );
+});
+
+// DELETE /api/admin/groups/:id — আপত্তিকর গ্রুপ মুছে ফেলা
+export const deleteGroupByAdmin = asyncHandler(async (req, res) => {
+    const id = assertObjectId(req.params.id, "group id");
+    const conv = await Conversation.findOneAndDelete({
+        _id: id,
+        type: "group"
+    }).lean();
+    if (!conv) throw new ApiError(404, "Group not found");
+
+    await Message.deleteMany({ conversationId: id });
+    emitToUsers(req.app.get("io"), conv.members || [], "conversation:removed", {
+        conversationId: id
+    });
+
+    res.status(200).json(new ApiResponse(200, { deletedId: id }, "Group deleted"));
 });

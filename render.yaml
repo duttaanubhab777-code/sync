@@ -13,6 +13,7 @@ services:
       paths:
         - node-backend/**
         - frontend/**
+        - assets/**
         - package.json
         - render.yaml
       ignoredPaths:
@@ -34,7 +35,6 @@ services:
       # JWT_SECRET must exactly match python-service/config.py on PythonAnywhere.
       # Cloudinary API credentials (API_KEY and API_SECRET) belong ONLY on PythonAnywhere,
       # never in this Render service or the frontend. Only CLOUDINARY_CLOUD_NAME is needed here.
-      # (SERVICE_KEY এখন কোথাও ব্যবহার হয় না, তাই সরানো হয়েছে; ভবিষ্যতে /scan যোগ হলে আবার লাগবে)
       - key: MONGODB_URI
         sync: false
       - key: JWT_SECRET
@@ -44,6 +44,9 @@ services:
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: PYTHON_SERVICE_URL
+        sync: false
+      # একাধিক Super Admin দিতে চাইলে কমা দিয়ে আলাদা করে দাও: a@gmail.com,b@gmail.com
+      - key: SUPER_ADMIN_EMAILS
         sync: false
       - key: SUPER_ADMIN_EMAIL
         sync: false

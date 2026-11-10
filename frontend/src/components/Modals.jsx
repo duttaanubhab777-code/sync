@@ -670,7 +670,7 @@ export function ChatInfoDrawer({ conversation, onClose }) {
                                 onSubmit={handleSaveGroup}
                             >
                                 <span className="sync-section-label">
-                                    Group Settings (Admin)
+                                    Group Settings (Group Admin)
                                 </span>
                                 <div className="sync-field">
                                     <label>Group Name</label>
@@ -815,7 +815,7 @@ export function ChatInfoDrawer({ conversation, onClose }) {
                                             </div>
                                             {memberIsAdmin && (
                                                 <span className="sync-admin-pill">
-                                                    Admin
+                                                    Group Admin
                                                 </span>
                                             )}
                                             {isAdmin && !isMe && (

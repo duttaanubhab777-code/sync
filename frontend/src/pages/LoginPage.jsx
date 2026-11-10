@@ -4,11 +4,12 @@ import { useDispatch, useSelector } from "react-redux";
 import { Lock, UserRound, Loader2, Eye, EyeOff, LogIn } from "lucide-react";
 import AuthShell from "../components/AuthShell.jsx";
 import { clearAuthError, loginUser } from "../store/authSlice.js";
+import { isPlatformAdmin } from "../App.jsx";
 
 export default function LoginPage() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
-    const { loading, error, isAuthenticated, serverWaking } = useSelector(
+    const { loading, error, isAuthenticated, user, serverWaking } = useSelector(
         state => state.auth
     );
 
@@ -20,11 +21,14 @@ export default function LoginPage() {
         dispatch(clearAuthError());
     }, [dispatch]);
 
+    // একই লগইন থেকে ইউজার নাকি Admin/Super Admin তা চিনে সেই অনুযায়ী ইন্টারফেসে পাঠানো
     useEffect(() => {
-        if (isAuthenticated) {
-            navigate("/chats", { replace: true });
+        if (isAuthenticated && user) {
+            navigate(isPlatformAdmin(user) ? "/admin" : "/chats", {
+                replace: true
+            });
         }
-    }, [isAuthenticated, navigate]);
+    }, [isAuthenticated, user, navigate]);
 
     const handleSubmit = async e => {
         e.preventDefault();
@@ -36,7 +40,10 @@ export default function LoginPage() {
             })
         );
         if (loginUser.fulfilled.match(res)) {
-            navigate("/chats", { replace: true });
+            const loggedInUser = res.payload?.user;
+            navigate(isPlatformAdmin(loggedInUser) ? "/admin" : "/chats", {
+                replace: true
+            });
         }
     };
 

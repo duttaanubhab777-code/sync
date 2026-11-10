@@ -471,6 +471,8 @@ input[type="checkbox"] {
 .sync-field input[type="tel"],
 .sync-field input[type="password"],
 .sync-field input[type="search"],
+.sync-field input[type="number"],
+.sync-field input[type="datetime-local"],
 .sync-field textarea {
     width: 100%;
     min-height: 50px;

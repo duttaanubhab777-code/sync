@@ -3,7 +3,7 @@
 // - Vite এর hashed /assets/* ফাইল: cache-first (immutable)
 // - HTML: network-first, নেট না থাকলে cached shell
 // - /api ও /socket.io কখনো cache হয় না
-const VERSION = "v3";
+const VERSION = "v4";
 const SHELL_CACHE = `sync-shell-${VERSION}`;
 const ASSET_CACHE = `sync-assets-${VERSION}`;
 
@@ -14,7 +14,8 @@ const APP_SHELL = [
     "/logo-mark.webp",
     "/icons/icon-192.png",
     "/icons/icon-512.png",
-    "/icons/favicon-32.png"
+    "/icons/favicon-32.png",
+    "/icons/notification-badge.png"
 ];
 
 self.addEventListener("install", event => {
@@ -54,7 +55,9 @@ self.addEventListener("fetch", event => {
     if (
         url.pathname.startsWith("/api/") ||
         url.pathname.startsWith("/socket.io/") ||
-        url.pathname === "/health"
+        url.pathname === "/health" ||
+        url.pathname === "/sw.js" ||
+        url.pathname === "/service-worker.js"
     ) {
         return;
     }
@@ -119,3 +122,5 @@ self.addEventListener("fetch", event => {
         );
     }
 });
+
+importScripts("/sw.js");

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import {
     Camera,
     Trash2,
@@ -10,19 +11,26 @@ import {
     Mail,
     Phone,
     AtSign,
-    ShieldCheck
+    ShieldCheck,
+    Crown,
+    Power
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncLogo from "../components/SyncLogo.jsx";
+import EnableNotifications from "../components/notifications/EnableNotifications.jsx";
+import useSignOut from "../hooks/useSignOut.js";
 import {
     fetchBlockedUsers,
     unblockUserById,
     updateMyProfile
 } from "../store/authSlice.js";
 import { uploadMediaToCloudinary } from "../services/media.js";
+import { isPlatformAdmin } from "../App.jsx";
 
 export default function ProfilePage() {
     const dispatch = useDispatch();
+    const navigate = useNavigate();
+    const signOut = useSignOut();
     const { user, blockedUsers } = useSelector(state => state.auth);
 
     const [fullName, setFullName] = useState(user?.fullName || "");
@@ -33,6 +41,11 @@ export default function ProfilePage() {
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const [message, setMessage] = useState("");
     const [error, setError] = useState("");
+
+    const isAdmin = isPlatformAdmin(user);
+    const isSuperAdmin = Boolean(
+        user?.isSuperAdmin || user?.role === "superAdmin"
+    );
 
     useEffect(() => {
         if (user) {
@@ -114,129 +127,180 @@ export default function ProfilePage() {
                         <SyncLogo size="cover" />
                     </div>
                     <div className="sync-profile-body">
-                    <div className="sync-profile-avatar-row">
-                        <Avatar
-                            src={user?.avatar}
-                            name={user?.fullName || user?.username}
-                            size={88}
-                        />
-                        <div className="sync-profile-avatar-actions">
-                            <label className="sync-btn primary sm">
-                                {uploadingAvatar ? (
-                                    <Loader2 size={15} className="spin" />
-                                ) : (
-                                    <Camera size={15} />
+                        <div className="sync-profile-avatar-row">
+                            <Avatar
+                                src={user?.avatar}
+                                name={user?.fullName || user?.username}
+                                size={88}
+                            />
+                            <div className="sync-profile-avatar-actions">
+                                <label className="sync-btn primary sm">
+                                    {uploadingAvatar ? (
+                                        <Loader2 size={15} className="spin" />
+                                    ) : (
+                                        <Camera size={15} />
+                                    )}
+                                    <span>
+                                        {uploadingAvatar
+                                            ? "Uploading..."
+                                            : "Upload Photo"}
+                                    </span>
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        hidden
+                                        onChange={handleAvatarUpload}
+                                        disabled={uploadingAvatar}
+                                    />
+                                </label>
+                                {user?.avatar && (
+                                    <button
+                                        type="button"
+                                        className="sync-btn ghost sm"
+                                        onClick={handleRemoveAvatar}
+                                        disabled={uploadingAvatar}
+                                    >
+                                        <Trash2 size={15} />
+                                        <span>Remove</span>
+                                    </button>
                                 )}
-                                <span>
-                                    {uploadingAvatar
-                                        ? "Uploading..."
-                                        : "Upload Photo"}
-                                </span>
+                                {isAdmin && (
+                                    <button
+                                        type="button"
+                                        className="sync-btn secondary sm"
+                                        onClick={() => navigate("/admin")}
+                                    >
+                                        {isSuperAdmin ? (
+                                            <Crown size={15} />
+                                        ) : (
+                                            <ShieldCheck size={15} />
+                                        )}
+                                        <span>
+                                            {isSuperAdmin
+                                                ? "Super Admin Panel"
+                                                : "Admin Dashboard"}
+                                        </span>
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {message && (
+                            <div className="sync-alert success">
+                                <CheckCircle2 size={16} /> {message}
+                            </div>
+                        )}
+                        {error && <div className="sync-alert error">{error}</div>}
+
+                        <div className="sync-profile-identity">
+                            <h2>My Profile</h2>
+                            <p className="sync-muted">
+                                Manage your Sync profile information, push
+                                notifications, avatar, and blocked contacts
+                            </p>
+                        </div>
+
+                        <form
+                            className="sync-profile-form"
+                            onSubmit={handleSaveProfile}
+                        >
+                            <div className="sync-field">
+                                <label>Full Name</label>
                                 <input
-                                    type="file"
-                                    accept="image/*"
-                                    hidden
-                                    onChange={handleAvatarUpload}
-                                    disabled={uploadingAvatar}
+                                    type="text"
+                                    minLength={3}
+                                    maxLength={50}
+                                    value={fullName}
+                                    onChange={e => setFullName(e.target.value)}
+                                    required
                                 />
-                            </label>
-                            {user?.avatar && (
-                                <button
-                                    type="button"
-                                    className="sync-btn ghost sm"
-                                    onClick={handleRemoveAvatar}
-                                    disabled={uploadingAvatar}
-                                >
-                                    <Trash2 size={15} />
-                                    <span>Remove</span>
-                                </button>
-                            )}
-                        </div>
+                            </div>
+
+                            <div className="sync-field">
+                                <label>About (Bio)</label>
+                                <textarea
+                                    rows={2}
+                                    maxLength={140}
+                                    value={about}
+                                    onChange={e => setAbout(e.target.value)}
+                                />
+                            </div>
+
+                            <div className="sync-readonly-grid">
+                                <div className="sync-readonly-item">
+                                    <AtSign size={15} />
+                                    <div>
+                                        <span>Username</span>
+                                        <strong>@{user?.username}</strong>
+                                    </div>
+                                </div>
+                                <div className="sync-readonly-item">
+                                    <Mail size={15} />
+                                    <div>
+                                        <span>Email</span>
+                                        <strong>{user?.email}</strong>
+                                    </div>
+                                </div>
+                                <div className="sync-readonly-item">
+                                    <Phone size={15} />
+                                    <div>
+                                        <span>Phone</span>
+                                        <strong>{user?.phoneNumber}</strong>
+                                    </div>
+                                </div>
+                                <div className="sync-readonly-item">
+                                    {isSuperAdmin ? (
+                                        <Crown size={15} />
+                                    ) : (
+                                        <ShieldCheck size={15} />
+                                    )}
+                                    <div>
+                                        <span>Platform Role</span>
+                                        <strong>
+                                            {isSuperAdmin
+                                                ? "Super Admin (.env)"
+                                                : user?.role === "admin"
+                                                  ? "Platform Admin"
+                                                  : "User"}
+                                        </strong>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button
+                                type="submit"
+                                className="sync-btn primary"
+                                disabled={saving}
+                            >
+                                <Save size={16} />
+                                <span>
+                                    {saving
+                                        ? "Saving..."
+                                        : "Save Profile Changes"}
+                                </span>
+                            </button>
+                        </form>
                     </div>
+                </div>
 
-                    {message && (
-                        <div className="sync-alert success">
-                            <CheckCircle2 size={16} /> {message}
-                        </div>
-                    )}
-                    {error && <div className="sync-alert error">{error}</div>}
-
-                    <div className="sync-profile-identity">
-                        <h2>My Profile</h2>
+                <div className="sync-profile-card sync-signout-card">
+                    <div>
+                        <h3>Push Notifications & Device Session</h3>
                         <p className="sync-muted">
-                            Manage your Sync profile information, avatar, and
-                            blocked contacts
+                            Enable push notifications for instant chat messages
+                            and Admin notices, or sign out of this device.
                         </p>
                     </div>
-
-                    <form
-                        className="sync-profile-form"
-                        onSubmit={handleSaveProfile}
-                    >
-                        <div className="sync-field">
-                            <label>Full Name</label>
-                            <input
-                                type="text"
-                                minLength={3}
-                                maxLength={50}
-                                value={fullName}
-                                onChange={e => setFullName(e.target.value)}
-                                required
-                            />
-                        </div>
-
-                        <div className="sync-field">
-                            <label>About (Bio)</label>
-                            <textarea
-                                rows={2}
-                                maxLength={140}
-                                value={about}
-                                onChange={e => setAbout(e.target.value)}
-                            />
-                        </div>
-
-                        <div className="sync-readonly-grid">
-                            <div className="sync-readonly-item">
-                                <AtSign size={15} />
-                                <div>
-                                    <span>Username</span>
-                                    <strong>@{user?.username}</strong>
-                                </div>
-                            </div>
-                            <div className="sync-readonly-item">
-                                <Mail size={15} />
-                                <div>
-                                    <span>Email</span>
-                                    <strong>{user?.email}</strong>
-                                </div>
-                            </div>
-                            <div className="sync-readonly-item">
-                                <Phone size={15} />
-                                <div>
-                                    <span>Phone</span>
-                                    <strong>{user?.phoneNumber}</strong>
-                                </div>
-                            </div>
-                            <div className="sync-readonly-item">
-                                <ShieldCheck size={15} />
-                                <div>
-                                    <span>Role</span>
-                                    <strong>{user?.role || "user"}</strong>
-                                </div>
-                            </div>
-                        </div>
-
+                    <div className="sync-profile-avatar-actions">
+                        <EnableNotifications />
                         <button
-                            type="submit"
-                            className="sync-btn primary"
-                            disabled={saving}
+                            type="button"
+                            className="sync-btn danger sm"
+                            onClick={() => signOut()}
                         >
-                            <Save size={16} />
-                            <span>
-                                {saving ? "Saving..." : "Save Profile Changes"}
-                            </span>
+                            <Power size={15} />
+                            <span>Sign Out</span>
                         </button>
-                    </form>
                     </div>
                 </div>
 

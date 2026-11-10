@@ -19,6 +19,7 @@ PURPOSE_FOLDERS: Dict[str, str] = {
     "avatar": "avatars",   # profile pictures
     "story": "stories",    # story images and videos
     "group": "groups",     # group icons
+    "notice": "notices",   # admin notice banners
 }
 DEFAULT_PURPOSE = "chat"
 
@@ -31,6 +32,7 @@ _AUDIO_FORMATS = "webm,ogg,oga,opus,mp3,m4a,aac,wav,mp4,weba"
 ALLOWED_FORMATS_BY_PURPOSE: Dict[str, str] = {
     "avatar": _IMAGE_FORMATS,
     "group": _IMAGE_FORMATS,
+    "notice": _IMAGE_FORMATS,
     "story": f"{_IMAGE_FORMATS},{_VIDEO_FORMATS}",
     "voice": _AUDIO_FORMATS,
 }

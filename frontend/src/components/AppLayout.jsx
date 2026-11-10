@@ -5,6 +5,8 @@ import {
     MessageCircle,
     Aperture,
     UserRound,
+    ShieldCheck,
+    Crown,
     Power,
     WifiOff,
     Loader2
@@ -12,12 +14,14 @@ import {
 import Avatar from "./Avatar.jsx";
 import SyncLogo from "./SyncLogo.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
+import NoticePopup from "./NoticePopup.jsx";
 import EnableNotifications from "./notifications/EnableNotifications.jsx";
 import useSignOut from "../hooks/useSignOut.js";
 import { forceLogout } from "../store/authSlice.js";
 import { fetchConversations, resetChatState } from "../store/chatSlice.js";
 import { fetchStories } from "../store/storySlice.js";
 import { connectSocket, disconnectSocket } from "../services/socket.js";
+import { isPlatformAdmin } from "../App.jsx";
 
 export default function AppLayout() {
     const dispatch = useDispatch();
@@ -35,6 +39,11 @@ export default function AppLayout() {
 
     const [confirmLogout, setConfirmLogout] = useState(false);
     const [loggingOut, setLoggingOut] = useState(false);
+
+    const isAdmin = isPlatformAdmin(user);
+    const isSuperAdmin = Boolean(
+        user?.isSuperAdmin || user?.role === "superAdmin"
+    );
 
     const totalUnread = conversations.reduce(
         (acc, c) => acc + Number(c.unread || 0),
@@ -99,6 +108,30 @@ export default function AppLayout() {
                     </div>
 
                     <nav className="sync-nav-links" aria-label="Main">
+                        {isAdmin && (
+                            <NavLink
+                                to="/admin"
+                                className={navClass}
+                                title={
+                                    isSuperAdmin
+                                        ? "Super Admin Dashboard"
+                                        : "Admin Dashboard"
+                                }
+                            >
+                                <div className="sync-nav-icon-wrap">
+                                    {isSuperAdmin ? (
+                                        <Crown size={23} />
+                                    ) : (
+                                        <ShieldCheck size={23} />
+                                    )}
+                                    <span className="sync-nav-dot admin-dot" />
+                                </div>
+                                <span className="sync-nav-label">
+                                    {isSuperAdmin ? "Super" : "Admin"}
+                                </span>
+                            </NavLink>
+                        )}
+
                         <NavLink to="/chats" className={navClass} title="Chats">
                             <div className="sync-nav-icon-wrap">
                                 <MessageCircle size={23} />
@@ -170,6 +203,9 @@ export default function AppLayout() {
                     <Outlet />
                 </main>
             </div>
+
+            {/* ৫ সেকেন্ড কাউন্টডাউন সহ গ্লোবাল Notice Popup */}
+            <NoticePopup />
 
             {confirmLogout && (
                 <ConfirmDialog

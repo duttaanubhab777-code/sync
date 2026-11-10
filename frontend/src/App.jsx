@@ -10,6 +10,15 @@ import RegisterPage from "./pages/RegisterPage.jsx";
 import ChatPage from "./pages/ChatPage.jsx";
 import StoriesPage from "./pages/StoriesPage.jsx";
 import ProfilePage from "./pages/ProfilePage.jsx";
+import AdminPage from "./pages/AdminPage.jsx";
+
+export const isPlatformAdmin = user =>
+    Boolean(
+        user &&
+            (user.isSuperAdmin ||
+                user.role === "superAdmin" ||
+                user.role === "admin")
+    );
 
 function ProtectedRoute({ children }) {
     const { isAuthenticated, initializing, serverWaking } = useSelector(
@@ -40,6 +49,21 @@ function ProtectedRoute({ children }) {
     return children;
 }
 
+function AdminRoute({ children }) {
+    const user = useSelector(state => state.auth.user);
+    if (!isPlatformAdmin(user)) {
+        return <Navigate to="/chats" replace />;
+    }
+    return children;
+}
+
+function HomeRedirect() {
+    const user = useSelector(state => state.auth.user);
+    return (
+        <Navigate to={isPlatformAdmin(user) ? "/admin" : "/chats"} replace />
+    );
+}
+
 export default function App() {
     const dispatch = useDispatch();
 
@@ -60,14 +84,22 @@ export default function App() {
                     </ProtectedRoute>
                 }
             >
-                <Route index element={<Navigate to="/chats" replace />} />
+                <Route index element={<HomeRedirect />} />
                 <Route path="chats" element={<ChatPage />} />
                 <Route path="chats/:conversationId" element={<ChatPage />} />
                 <Route path="stories" element={<StoriesPage />} />
                 <Route path="profile" element={<ProfilePage />} />
+                <Route
+                    path="admin"
+                    element={
+                        <AdminRoute>
+                            <AdminPage />
+                        </AdminRoute>
+                    }
+                />
             </Route>
 
-            <Route path="*" element={<Navigate to="/chats" replace />} />
+            <Route path="*" element={<HomeRedirect />} />
         </Routes>
     );
 }
