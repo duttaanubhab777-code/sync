@@ -9,7 +9,8 @@ import {
     Crown,
     Power,
     WifiOff,
-    Loader2
+    Loader2,
+    Mail
 } from "lucide-react";
 import Avatar from "./Avatar.jsx";
 import SyncLogo from "./SyncLogo.jsx";
@@ -156,6 +157,17 @@ export default function AppLayout() {
                                 )}
                             </div>
                             <span className="sync-nav-label">Stories</span>
+                        </NavLink>
+
+                        <NavLink
+                            to="/contact"
+                            className={navClass}
+                            title="Contact Sync"
+                        >
+                            <div className="sync-nav-icon-wrap">
+                                <Mail size={21} />
+                            </div>
+                            <span className="sync-nav-label">Contact</span>
                         </NavLink>
 
                         <NavLink
