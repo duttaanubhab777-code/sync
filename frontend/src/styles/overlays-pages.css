@@ -985,3 +985,6 @@
 .sync-dashboard-footnote { margin-top: 10px; color: var(--text-2); font-size: 0.72rem; line-height: 1.5; }
 @media (max-width: 720px) { .sync-dashboard-analytics { grid-template-columns: 1fr; } .sync-dashboard-chart-card { padding: 17px; border-radius: 19px; } }
 @media (max-width: 420px) { .sync-dashboard-donut-wrap { justify-content: space-between; gap: 8px; } .sync-dashboard-donut-wrap svg { width: 116px; } .sync-dashboard-legend { gap: 9px; } .sync-dashboard-legend > div { font-size: 0.7rem; } .sync-dashboard-chart-heading { flex-wrap: wrap; } }
+
+.sync-stat-label { display: inline-flex; align-items: center; gap: 7px; }
+.sync-stat-label svg { flex: 0 0 auto; color: var(--mongo); }
