@@ -1,688 +1,296 @@
-# 💬 Sync
+<div align="center">
 
-WhatsApp-style real-time chat app, দুই বন্ধু মিলে বানানো।
-**Node.js** রিয়েল-টাইম চ্যাট ধরে রাখে, **Python** মিডিয়ার কাজ সামলায়, **MongoDB** ডেটা রাখে, **Cloudinary** ছবি/ভিডিও/ভয়েস রাখে।
+<img src="docs/assets/banner.svg" alt="Sync — real-time messenger" width="100%"/>
 
-![status](https://img.shields.io/badge/status-in%20development-orange)
-![node](https://img.shields.io/badge/Node.js-Express%20%2B%20Socket.io-339933?logo=node.js&logoColor=white)
-![python](https://img.shields.io/badge/Python-Flask-3776AB?logo=python&logoColor=white)
-![mongodb](https://img.shields.io/badge/MongoDB-Atlas-47A248?logo=mongodb&logoColor=white)
-![cloudinary](https://img.shields.io/badge/Cloudinary-media-3448C5?logo=cloudinary&logoColor=white)
+<img src="docs/assets/typing.svg" alt="Sync highlights" width="700"/>
 
----
+<p>
+  <a href="https://sync-5lfm.onrender.com"><img alt="Live demo" src="https://img.shields.io/badge/Live%20Demo-sync--5lfm.onrender.com-22e57d?style=for-the-badge&logo=render&logoColor=white&labelColor=031512"/></a>
+</p>
 
-## 📑 সূচিপত্র
+<p>
+  <img alt="Node.js" src="https://img.shields.io/badge/Node.js-%E2%89%A5%2020-339933?style=flat-square&logo=node.js&logoColor=white"/>
+  <img alt="Express" src="https://img.shields.io/badge/Express-5-000000?style=flat-square&logo=express&logoColor=white"/>
+  <img alt="Socket.IO" src="https://img.shields.io/badge/Socket.IO-4-010101?style=flat-square&logo=socket.io&logoColor=white"/>
+  <img alt="React" src="https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black"/>
+  <img alt="Vite" src="https://img.shields.io/badge/Vite-5-646CFF?style=flat-square&logo=vite&logoColor=white"/>
+  <img alt="MongoDB" src="https://img.shields.io/badge/MongoDB-Atlas-47A248?style=flat-square&logo=mongodb&logoColor=white"/>
+  <img alt="Flask" src="https://img.shields.io/badge/Flask-Media%20Service-000000?style=flat-square&logo=flask&logoColor=white"/>
+  <img alt="Cloudinary" src="https://img.shields.io/badge/Cloudinary-Media-3448C5?style=flat-square&logo=cloudinary&logoColor=white"/>
+  <img alt="PWA" src="https://img.shields.io/badge/PWA-Installable-5A0FC8?style=flat-square&logo=pwa&logoColor=white"/>
+</p>
 
-1. [নোটেশন (কে কোনটা করবে)](#-নোটেশন)
-2. [আর্কিটেকচার](#-আর্কিটেকচার)
-3. [Repo structure](#-repo-structure)
-4. [কাজের ভাগ: Node vs Python vs Frontend](#-কাজের-ভাগ)
-5. [Frontend কোথায় করব](#-frontend-কোথায়-করব)
-6. [Data structure](#-data-structure)
-7. [Build order (ধাপে ধাপে)](#-build-order)
-8. [Flow diagram](#-flow-diagram)
-9. [API contract](#-api-contract)
-10. [মূল কোডের নমুনা](#-মূল-কোডের-নমুনা)
-11. [সম্ভাব্য সমস্যা ও সমাধান](#-সম্ভাব্য-সমস্যা-ও-সমাধান)
-12. [Security checklist](#-security-checklist)
-13. [Environment variables](#-environment-variables)
-14. [Deploy](#-deploy)
-15. [Git workflow](#-git-workflow-দুজনের-জন্য)
-16. [Roadmap checklist](#-roadmap-checklist)
+<p><b>Sync</b> is a modern, installable, real-time messenger with private and group chats, 24-hour stories,<br/>web push notifications and a powerful Super Admin control center.</p>
 
----
+<p>
+  <a href="#overview">Overview</a> ·
+  <a href="#screenshots">Screenshots</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#getting-started">Getting Started</a> ·
+  <a href="#deployment">Deployment</a> ·
+  <a href="#team">Team</a>
+</p>
 
-## 🏷 নোটেশন
+<img src="docs/assets/divider.svg" alt="" width="100%" height="24"/>
 
-পুরো README-তে এই ট্যাগগুলো দেখবে:
+</div>
 
-| ট্যাগ      | মানে                                                       | কে                           |
-| ---------- | ---------------------------------------------------------- | ---------------------------- |
-| 🟦 **[N]** | Node.js কাজ (Render)                                       | Jarvis                       |
-| 🟨 **[P]** | Python কাজ (PythonAnywhere)                                | বন্ধু                        |
-| 🟩 **[F]** | Frontend কাজ                                               | যে ফ্রি থাকে (শুরুতে Jarvis) |
-| 🟥 **[C]** | Contract: দুজনে একসাথে ঠিক করতে হবে, `API.md`-তে লিখতে হবে | দুজনেই                       |
+<a id="overview"></a>
+<img src="docs/assets/headers/overview.svg" alt="Overview" height="64"/>
 
-Socket event নাম রাখার নিয়ম: `জিনিস:কাজ`, যেমন `message:send`, `typing:start`।
+Sync is a WhatsApp-style messenger built as a small, deployable monorepo. A single **Node.js** service serves the REST API, the Socket.IO real-time layer and the compiled **React** frontend. A tiny **Flask** service handles signed media uploads, **MongoDB Atlas** stores the data and **Cloudinary** hosts images, videos and voice notes.
 
----
+The interface uses a dark green theme drawn from the Sync logo, is fully responsive across phone and desktop, and can be installed as a standalone app (PWA).
 
-## 🏗 আর্কিটেকচার
+> [!NOTE]
+> The live demo runs on free hosting tiers, so the first request after a period of inactivity can take a few seconds while the server wakes up.
 
-```mermaid
-flowchart LR
-    F["🟩 Frontend<br/>HTML / CSS / JS"]
-    N["🟦 Node.js · Render<br/>Express + Socket.io"]
-    P["🟨 Python · PythonAnywhere<br/>Flask"]
-    M[("🍃 MongoDB Atlas")]
-    C["☁️ Cloudinary"]
+<a id="screenshots"></a>
+<img src="docs/assets/headers/screenshots.svg" alt="Screenshots" height="64"/>
 
-    F <-->|"WebSocket + REST"| N
-    F -->|"REST: upload signature চাওয়া"| P
-    F -->|"ফাইল সরাসরি আপলোড"| C
-    N <--> M
-    P -.->|"signature বানায়"| C
-    N -.->|"পরে: স্ক্যান request"| P
-```
+<div align="center">
 
-**মূল সিদ্ধান্ত (কেন এভাবে):**
+<img src="docs/screenshots/chat-conversation.jpg" alt="Real-time conversation with replies and read receipts" width="92%"/>
 
-- **টেক্সট মেসেজ** শুধু Node-এর মধ্য দিয়ে যায়। Python এখানে নেই, তাই চ্যাট দ্রুত।
-- **ফাইল** Python-এর মধ্য দিয়ে যায় না। Python শুধু একটা _signed upload signature_ দেয়, আর frontend সরাসরি Cloudinary-তে আপলোড করে। এতে Render-এর RAM আর PythonAnywhere-এর CPU/bandwidth লিমিট কোনোটাই ফাইলের চাপ নেয় না।
-- **Python থেকে Node-কে ডাকার দরকার নেই।** PythonAnywhere ফ্রি প্ল্যানে বাইরের সাইটে রিকোয়েস্ট পাঠানো সীমিত (whitelist), তাই ডিজাইন এমন রাখা হয়েছে যাতে Python শুধু _রিকোয়েস্ট রিসিভ_ করে, নিজে বাইরে ডাকে না।
-- ফাইল আপলোড শেষ হলে frontend URL-টা Socket.io দিয়ে Node-কে পাঠায়, Node সেটা MongoDB-তে রাখে।
+<sub><b>Real-time conversations</b> — replies, delivery and read receipts, typing indicators and live presence.</sub>
 
----
+<br/><br/>
 
-## 📁 Repo structure
+<table>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/chats-home.jpg" alt="Chats home"/><br/><sub><b>Chats</b> — search, filters and quick actions</sub></td>
+    <td width="50%" align="center"><img src="docs/screenshots/stories.jpg" alt="Stories"/><br/><sub><b>Stories</b> — 24-hour status updates</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/profile.jpg" alt="Profile"/><br/><sub><b>Profile</b> — avatar, bio and account settings</sub></td>
+    <td width="50%" align="center"><img src="docs/screenshots/install-pwa.jpg" alt="Install as an app"/><br/><sub><b>Installable PWA</b> — runs in its own window</sub></td>
+  </tr>
+</table>
 
-```
+<br/>
+
+<img src="docs/screenshots/admin-dashboard.jpg" alt="Super Admin control center" width="92%"/>
+
+<sub><b>Super Admin control center</b> — platform statistics, user management, media moderation and notices.</sub>
+
+</div>
+
+<a id="features"></a>
+<img src="docs/assets/headers/features.svg" alt="Features" height="64"/>
+
+### Messaging
+
+- **Direct and group chats** with member management, group icons and leave/remove actions
+- **Swipe-to-reply** threads, message deletion and per-message **delivered / seen** receipts
+- **Typing indicators** and **live online presence**
+- **Rich media:** photos, videos, files and **voice messages** recorded in the browser
+- **Chat search** with *All*, *Unread* and *Groups* filters
+- **Offline-safe delivery:** client message IDs prevent duplicates and missed messages are re-synced on reconnect
+- **Block and unblock** users
+
+### Stories
+
+- Share text, photos or videos as **24-hour stories** that expire automatically (MongoDB TTL index)
+- See exactly **who viewed** each story
+
+### Notifications
+
+- **Web Push** (VAPID) alerts that work even when the app is closed
+- In-app notification center with read / read-all controls
+- **Broadcast notices:** a popup with an optional banner image and a live countdown, where the *OK* button unlocks after 5 seconds, plus a matching push notification
+
+### Super Admin control center
+
+- **Platform overview:** users, admins, media, active notices and conversations at a glance
+- **Users and admins:** block, unblock, delete and promote or demote roles
+- **Media moderation:** review images and videos from chats and stories and remove inappropriate files for everyone with one click
+- **Groups and notices management**
+- **Privacy by design:** private chat text and story captions are never shown in the admin panel
+- **Role hierarchy:** `Super Admin (.env)` › `Platform Admin` › `Group Admin` (the last applies to a single chat group only)
+
+### Experience
+
+- Smooth animations and a consistent **Sync green gradient** theme
+- Responsive layout for phones, tablets and desktops
+- **Installable PWA** with a service worker, maskable icons and a clean "Sync" app name
+
+<a id="architecture"></a>
+<img src="docs/assets/headers/architecture.svg" alt="Architecture" height="64"/>
+
+<div align="center">
+  <img src="docs/assets/architecture.svg" alt="Sync architecture: browser, Node.js, MongoDB, Flask media service and Cloudinary" width="100%"/>
+</div>
+
+| Component | Hosted on | Responsibility |
+| --- | --- | --- |
+| **Node.js + Express + Socket.IO** | Render | REST API, real-time events, authentication, admin tools, serves `frontend/dist` |
+| **React + Redux + Vite** | Served by Node | Chat UI, stories, profile, admin panel, PWA |
+| **Flask media service** | PythonAnywhere | Issues short-lived Cloudinary **signed-upload** signatures; never touches the files themselves |
+| **MongoDB Atlas** | Atlas | Users, conversations, messages, stories, notices, push subscriptions |
+| **Cloudinary** | Cloudinary | Image, video and voice storage |
+
+**How a media upload works:** the browser asks the Flask service for a signature, uploads the file **directly to Cloudinary**, then sends only the resulting URL to the Node.js backend, which validates it and stores the message.
+
+<a id="tech-stack"></a>
+<img src="docs/assets/headers/tech-stack.svg" alt="Tech Stack" height="64"/>
+
+| Layer | Technologies |
+| --- | --- |
+| **Frontend** | React 18, Redux Toolkit, React Router 6, Socket.IO Client, Axios, Lucide icons, Vite 5 |
+| **Backend** | Node.js (≥ 20), Express 5, Socket.IO 4, Mongoose, Zod, JWT, bcrypt, Helmet, `web-push` |
+| **Media service** | Python, Flask, Cloudinary SDK |
+| **Database** | MongoDB Atlas |
+| **Hosting** | Render (web service), PythonAnywhere (media service) |
+
+<a id="project-structure"></a>
+<img src="docs/assets/headers/project-structure.svg" alt="Project Structure" height="64"/>
+
+```text
 sync/
-├── node-backend/            # 🟦 Render
-│   ├── src/
-│   │   ├── controllers/     # auth, user, conversation, message (HTTP)
-│   │   ├── socket/
-│   │   │   ├── index.js           # io setup + socket auth
-│   │   │   ├── store.js           # userId → সংযুক্ত socket সংখ্যা (presence)
-│   │   │   └── handlers/
-│   │   │       ├── message.js     # message:send / message:new
-│   │   │       ├── presence.js    # online/offline, typing
-│   │   │       └── status.js      # delivered / seen
-│   │   ├── db/              # MongoDB connection
-│   │   ├── middlewares/     # auth (HTTP + socket), rate limit, error
-│   │   ├── models/          # user, conversation, message
-│   │   ├── routes/
-│   │   ├── services/        # business logic (message.service.js ...)
-│   │   ├── utils/
-│   │   ├── app.js           # Express
-│   │   ├── constants.js
-│   │   └── index.js         # http server + Socket.io attach
-│   └── .env.example
-├── python-service/          # 🟨 PythonAnywhere
-│   ├── routes/              # /health, /media/sign, (পরে) /scan
-│   ├── services/            # cloudinary, scanner
-│   ├── utils/               # JWT যাচাই, shared-secret যাচাই
-│   ├── app.py
-│   ├── config.example.py
-│   └── requirements.txt
-├── frontend/                # 🟩
-├── API.md                   # 🟥 দুজনের চুক্তি
+├── assets/            # PWA manifest, service workers, icons, logo
+├── docs/
+│   ├── assets/        # README graphics (animated SVGs, logo)
+│   ├── screenshots/   # README screenshots (replace to update)
+│   └── DEVELOPMENT_GUIDE.md
+├── frontend/          # React + Redux + Vite application
+│   └── src/
+│       ├── components/  pages/  store/  services/  styles/
+├── node-backend/      # Express + Socket.IO API
+│   └── src/
+│       ├── controllers/  models/  routes/  socket/  services/
+│       └── middlewares/  validators/  utils/
+├── python-service/    # Flask Cloudinary signature service
+├── render.yaml        # Render blueprint
+├── API.md             # API contract
 └── README.md
 ```
 
----
+<a id="getting-started"></a>
+<img src="docs/assets/headers/getting-started.svg" alt="Getting Started" height="64"/>
 
-## 🤝 কাজের ভাগ
+### Prerequisites
 
-### 🟦 Node.js (Render)
+- Node.js **20.19** or newer
+- A MongoDB Atlas connection string
+- A Cloudinary account (for media uploads)
+- Python 3.10+ (only if you want to run the media service locally)
 
-- Express সার্ভার, auth (register/login, JWT), Email-Sender-এর কোড থেকে নেওয়া যাবে
-- MongoDB মডেল ও ইনডেক্স
-- Conversation/Message REST API (ইতিহাস, pagination, sync)
-- Socket.io: auth, মেসেজ পাঠানো/রিসিভ, typing, online/offline, delivered/seen
-- Reconnect-এর পর মিস হওয়া মেসেজ ফেরত দেওয়া
-- মিডিয়া মেসেজ সেভ করার আগে URL যাচাই করা
-- `/health` endpoint (cold start জাগাতে)
-
-### 🟨 Python (PythonAnywhere)
-
-- `GET /health`
-- `POST /media/sign`: লগইন করা ইউজারকে Cloudinary signed upload signature দেওয়া
-- (পরে) `POST /scan`: ছবির NSFW স্ক্যান, Node এই endpoint-কে ডাকবে
-- JWT যাচাই (Node-এর দেওয়া token, একই `JWT_SECRET`)
-- CORS সেটআপ (`flask-cors`)
-
-### 🟩 Frontend
-
-- Login/Register পেজ, চ্যাট লিস্ট, চ্যাট স্ক্রিন
-- Socket সংযোগ, reconnect UI ("সার্ভার জাগছে..."), মেসেজ queue
-- মিডিয়া সিলেক্ট → Python থেকে signature → Cloudinary-তে আপলোড → Node-কে URL পাঠানো
-- লোকাল cache (`localStorage`/IndexedDB), শেষ দেখা মেসেজ মনে রাখা
-
----
-
-## 🖥 Frontend কোথায় করব
-
-**✅ সিদ্ধান্ত: `frontend/` ফোল্ডার Node সার্ভিসই serve করে। Frontend আর Node backend একটাই Render web service-এ ডিপ্লয় হয়।** (নিচের টেবিলের "Node-এর `public/` থেকে serve" অপশন, শুধু ফোল্ডারটা `frontend/`।) এতে CORS লাগে না আর API/Socket-এর ঠিকানা সবসময় `/api` ও `/socket.io`। ফ্রি Render ঘুমালে পেজও দেরিতে খোলে, তাই UptimeRobot দিয়ে `/health` ping করা ভালো।
-
-<details><summary>আগের সুপারিশ (আলাদা static হোস্টিং)</summary>
-
-আলাদা static হোস্টিংয়ে ডিপ্লয়:
-
-| অপশন                                                                                                      | ভালো দিক                                                                    | খারাপ দিক                                                   |
-| --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| **`frontend/` + আলাদা static host** (Vercel / Netlify / Cloudflare Pages, Root Directory = `frontend`) ✅ | পেজ সাথে সাথে লোড হয়, Render ঘুমিয়ে থাকলেও "সার্ভার জাগছে" UI দেখানো যায় | CORS সেটআপ লাগে                                             |
-| Node-এর `public/` থেকে serve                                                                              | CORS লাগে না, এক জায়গায় ডিপ্লয়                                           | Render ঘুমালে পেজই খোলে না (cold start ৩০-৬০ সেকেন্ডের মতো) |
-| আলাদা repo                                                                                                | ডিপ্লয় পরিষ্কার                                                            | `API.md` সিঙ্ক রাখার ঝামেলা                                 |
-
-- মোবাইলে কোডিং করছ বলে শুরুতে **vanilla HTML/CSS/JS** রাখো, কোনো build tool লাগবে না। Socket.io client CDN থেকে নেওয়া যায়।
-- GitHub Pages শুধু root বা `/docs` ফোল্ডার serve করে, তাই `frontend/` সরাসরি দিতে চাইলে Vercel/Netlify/Cloudflare Pages সহজ।
-
-</details>
-
-- **কখন শুরু করবে:** Phase 3-এ একটা খুব সাদামাটা টেস্ট পেজ (login + মেসেজ বক্স), আসল ডিজাইন Phase 4-এর পরে।
-
----
-
-## 🧱 Data structure
-
-```mermaid
-erDiagram
-    USER ||--o{ CONVERSATION : "সদস্য"
-    CONVERSATION ||--o{ MESSAGE : "ধারণ করে"
-    USER ||--o{ MESSAGE : "পাঠায়"
-
-    USER {
-        ObjectId _id PK
-        string name
-        string email UK
-        string passwordHash
-        string avatarUrl
-        date lastSeen
-    }
-    CONVERSATION {
-        ObjectId _id PK
-        string type "direct | group"
-        ObjectId[] members
-        string pairKey UK "শুধু direct-এ"
-        object lastMessage "snapshot"
-        map unread "userId → সংখ্যা"
-    }
-    MESSAGE {
-        ObjectId _id PK
-        ObjectId conversationId FK
-        ObjectId sender FK
-        string clientMsgId "duplicate ঠেকাতে"
-        string type "text | image | video | audio | file"
-        string text
-        object media
-        string status "sent | delivered | seen"
-        date createdAt
-    }
-```
-
-### Mongoose schema-র মূল কাঠামো
-
-```js
-// models/message.model.js
-{
-  conversationId: { type: ObjectId, ref: "Conversation", required: true },
-  sender:         { type: ObjectId, ref: "User", required: true },
-  clientMsgId:    { type: String, required: true },   // frontend-এর বানানো UUID
-  type:           { type: String, enum: ["text","image","video","audio","file"], default: "text" },
-  text:           { type: String, maxlength: 4000 },
-  media: {
-    url: String, publicId: String, mime: String,
-    bytes: Number, width: Number, height: Number, duration: Number
-  },
-  status:         { type: String, enum: ["sent","delivered","seen"], default: "sent" },
-  hidden:         { type: Boolean, default: false }    // পরে স্ক্যানে ধরা পড়লে
-}
-// + timestamps: true
-```
-
-```js
-// models/conversation.model.js
-{
-  type:    { type: String, enum: ["direct","group"], default: "direct" },
-  members: [{ type: ObjectId, ref: "User" }],
-  pairKey: { type: String, unique: true, sparse: true }, // sort করা দুই id জুড়ে: "idA_idB"
-  lastMessage: { text: String, type: String, sender: ObjectId, createdAt: Date },
-  unread:  { type: Map, of: Number, default: {} }
-}
-```
-
-### ইনডেক্স (না দিলে ধীর হবে বা duplicate ঢুকবে)
-
-```js
-messageSchema.index({ conversationId: 1, _id: -1 }); // ইতিহাস + pagination
-messageSchema.index({ sender: 1, clientMsgId: 1 }, { unique: true }); // idempotency
-conversationSchema.index({ members: 1, updatedAt: -1 }); // চ্যাট লিস্ট
-```
-
-### Server memory-তে রাখা জিনিস
-
-```js
-// socket/store.js
-const online = new Map(); // userId -> সংযুক্ত socket সংখ্যা (একাধিক ট্যাব/ডিভাইসের জন্য)
-```
-
-### Socket rooms
-
-- `user:<userId>`: ওই ইউজারের সব ডিভাইস। মেসেজ পাঠানো হয় এখানে।
-- `conv:<conversationId>`: typing ও presence এখানে যায়।
-
----
-
-## 🪜 Build order
-
-ক্রমটা গুরুত্বপূর্ণ: প্রতিটা ধাপ আগেরটার ওপর দাঁড়ায়। একটা ধাপ ঠিকমতো না চললে পরেরটায় যেও না।
-
-```mermaid
-flowchart TD
-    P0["Phase 0 · Setup 🟥<br/>repo, API.md, env"] --> P1
-    P1["Phase 1 · Base 🟦🟨<br/>Express+Mongo+auth / Flask+health"] --> P2
-    P2["Phase 2 · Models + REST 🟦<br/>user, conversation, message"] --> P3
-    P3["Phase 3 · Socket text chat 🟦🟩<br/>message:send ↔ message:new"] --> P4
-    P4["Phase 4 · Presence + status 🟦<br/>typing, online, delivered, seen, reconnect sync"] --> P5
-    P5["Phase 5 · Media 🟨🟦🟩<br/>sign → Cloudinary → message"] --> P6
-    P6["Phase 6 · Polish 🟦🟩<br/>unread, pagination, reply, delete"] --> P7
-    P7["Phase 7 · Hardening + Deploy 🟦🟨<br/>rate limit, validation, keep-alive"]
-```
-
-| Phase | 🟦 Node                                                                                                     | 🟨 Python                                   | 🟩 Frontend                                  |
-| ----- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------- | -------------------------------------------- |
-| **0** | repo push ✅, `API.md`-তে event/endpoint তালিকা                                                             | একই                                         | —                                            |
-| **1** | Express, Mongo connect, `/health`, register/login/JWT                                                       | Flask skeleton, `/health`, JWT verify, CORS | —                                            |
-| **2** | মডেল + ইনডেক্স, `GET /conversations`, `GET /messages` (pagination), user search, direct conversation বানানো | `/media/sign` লেখা ও টেস্ট (Postman)        | —                                            |
-| **3** | Socket auth, `message:send` + ack, `message:new`, idempotency                                               | Cloudinary signature টেস্ট                  | ছোট টেস্ট পেজ (login, মেসেজ পাঠানো/দেখা)     |
-| **4** | typing, online/offline, delivered/seen, `GET /sync`                                                         | —                                           | আসল চ্যাট UI, reconnect + "সার্ভার জাগছে" UI |
-| **5** | media URL যাচাই + সেভ                                                                                       | `/media/sign` ফাইনাল (size/type নিয়ম)      | মিডিয়া সিলেক্ট, progress bar, preview       |
-| **6** | unread count, reply, soft delete                                                                            | (ঐচ্ছিক) `/scan`                            | UI পলিশ                                      |
-| **7** | helmet, rate-limit, validation, error handler, logging                                                      | rate-limit, লগ                              | PWA/ইনস্টল (ঐচ্ছিক)                          |
-
-> 💡 **পরামর্শ:** Phase 3-এর শেষে দুজন দুটো আলাদা browser/ফোনে লগইন করে মেসেজ পাঠালে যদি অপর পাশে সাথে সাথে আসে, তাহলে প্রজেক্টের সবচেয়ে কঠিন অংশ পেরিয়ে গেছ।
-
----
-
-## 🔄 Flow diagram
-
-### ১) টেক্সট মেসেজ
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant A as 🟩 A (sender)
-    participant N as 🟦 Node
-    participant DB as 🍃 MongoDB
-    participant B as 🟩 B (receiver)
-
-    A->>N: message:send {conversationId, clientMsgId, text}
-    N->>N: validate + সদস্য কিনা যাচাই
-    N->>DB: Message সেভ (clientMsgId unique)
-    DB-->>N: saved
-    N-->>A: ack {ok: true, message}
-    N->>B: message:new {message}
-    B->>N: message:delivered {messageId}
-    N->>A: message:status_bulk {messageIds, "delivered"}
-    B->>N: message:seen {conversationId, upToMessageId}
-    N->>A: message:status_bulk {messageIds, "seen"}
-```
-
-### ২) ছবি/ভিডিও/ভয়েস পাঠানো
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant F as 🟩 Frontend
-    participant P as 🟨 Python
-    participant C as ☁️ Cloudinary
-    participant N as 🟦 Node
-
-    F->>P: POST /media/sign (Authorization: Bearer JWT)
-    P->>P: JWT যাচাই, signature বানানো
-    P-->>F: {cloudName, apiKey, timestamp, folder, signature}
-    F->>C: POST /auto/upload (file + signature)
-    C-->>F: {secure_url, public_id, bytes, ...}
-    F->>N: message:send {type:"image", media:{url, publicId, ...}}
-    N->>N: URL আমাদের Cloudinary account-এর কিনা যাচাই
-    N-->>F: ack {ok: true}
-    N->>N: receiver-কে message:new পাঠানো
-```
-
-### ৩) Render ঘুমিয়ে থাকলে (cold start) ও reconnect
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant F as 🟩 Frontend
-    participant N as 🟦 Node (ঘুমন্ত)
-
-    F->>N: GET /health (জাগানোর জন্য)
-    Note over F,N: ৩০-৬০ সেকেন্ড লাগতে পারে → UI: "সার্ভার জাগছে..."
-    N-->>F: 200 OK
-    F->>N: socket connect (auth: token)
-    N-->>F: connected
-    F->>N: GET /sync?after=<শেষ দেখা messageId>
-    N-->>F: মিস হওয়া সব মেসেজ
-    F->>F: UI আপডেট + pending queue পাঠানো
-```
-
----
-
-## 📡 API contract
-
-> 🟥 এই অংশের বিস্তারিত ও আপডেট থাকবে `API.md`-তে। বদলাতে হলে দুজনেই জানাবে।
-
-### 🟦 Node: REST
-
-| Method | Path                                                   | কাজ                             |
-| ------ | ------------------------------------------------------ | ------------------------------- |
-| GET    | `/health`                                              | জীবিত কিনা                      |
-| POST   | `/api/auth/register`                                   | নতুন ইউজার                      |
-| POST   | `/api/auth/login`                                      | JWT দেয়                        |
-| GET    | `/api/users?search=`                                   | ইউজার খোঁজা                     |
-| GET    | `/api/conversations`                                   | আমার চ্যাট লিস্ট                |
-| POST   | `/api/conversations`                                   | direct চ্যাট শুরু (`{userId}`)  |
-| GET    | `/api/conversations/:id/messages?before=<id>&limit=30` | ইতিহাস                          |
-| GET    | `/api/sync?after=<messageId>`                          | reconnect-এর পর মিস হওয়া মেসেজ |
-
-### 🟦 Node: Socket events
-
-| Event                          | দিক                      | Payload                                              |
-| ------------------------------ | ------------------------ | ---------------------------------------------------- |
-| `message:send`                 | client → server (ack সহ) | `{conversationId, clientMsgId, type, text?, media?}` |
-| `message:new`                  | server → client          | `{message}`                                          |
-| `message:delivered`            | client → server          | `{messageId}`                                        |
-| `message:seen`                 | client → server          | `{conversationId, upToMessageId}`                    |
-| `message:status_bulk`          | server → client          | `{conversationId, messageIds, status, by, at}`       |
-| `typing:start` / `typing:stop` | client → server          | `{conversationId}`                                   |
-| `typing`                       | server → client          | `{conversationId, userId, isTyping}`                 |
-| `presence:update`              | server → client          | `{userId, online, lastSeen?}`                        |
-
-Ack-এর আকার সবসময় এক রকম রাখো: `{ ok: true, ... }` অথবা `{ ok: false, error: "CODE" }`।
-
-### 🟨 Python: REST
-
-| Method | Path            | Auth            | কাজ                  |
-| ------ | --------------- | --------------- | -------------------- |
-| GET    | `/health`       | —               | জীবিত কিনা           |
-| POST   | `/media/sign`   | `Bearer JWT`    | Cloudinary signature |
-| POST   | `/scan` _(পরে)_ | `X-Service-Key` | ছবি স্ক্যান          |
-
----
-
-## 💻 মূল কোডের নমুনা
-
-শুধু কাঠামো বোঝার জন্য, পুরো কোড নিজেরা লিখবে।
-
-### 🟦 Socket auth ও connection (`socket/index.js`)
-
-```js
-io.use((socket, next) => {
-    try {
-        const token = socket.handshake.auth?.token;
-        socket.user = jwt.verify(token, process.env.JWT_SECRET); // { id }
-        next();
-    } catch {
-        next(new Error("UNAUTHORIZED"));
-    }
-});
-
-io.on("connection", socket => {
-    socket.join(`user:${socket.user.id}`); // এক ইউজারের সব ডিভাইস এক room-এ
-    // ইউজারের সব conversation-এর `conv:<id>` room-এও join করাও
-    registerMessageHandlers(io, socket);
-    registerPresenceHandlers(io, socket);
-});
-```
-
-### 🟦 মেসেজ পাঠানোর ধাপ (`handlers/message.js`)
-
-```js
-socket.on("message:send", async (data, ack) => {
-    try {
-        // 1) data validate (type, text length, media)
-        // 2) socket.user.id এই conversation-এর সদস্য কিনা
-        // 3) media থাকলে URL যাচাই (নিচের "Security" দেখো)
-        // 4) সেভ করো; (sender, clientMsgId) duplicate হলে আগেরটাই ফেরত দাও
-        const msg = await messageService.create({
-            senderId: socket.user.id,
-            ...data
-        });
-
-        ack?.({ ok: true, message: msg });
-        io.to(memberRooms)
-            .except(socket.id)
-            .emit("message:new", { message: msg });
-    } catch (e) {
-        ack?.({ ok: false, error: e.code || "SERVER_ERROR" });
-    }
-});
-```
-
-### 🟨 Cloudinary signature (`python-service/routes/media.py`)
-
-```python
-import time
-from cloudinary import utils
-from flask import Blueprint, jsonify
-from utils.auth import require_jwt
-from config import CLOUD_NAME, API_KEY, API_SECRET
-
-bp = Blueprint("media", __name__)
-
-@bp.post("/media/sign")
-@require_jwt
-def sign():
-    params = {"timestamp": int(time.time()), "folder": "sync/chat"}
-    signature = utils.api_sign_request(params, API_SECRET)
-    return jsonify({**params, "signature": signature,
-                    "cloudName": CLOUD_NAME, "apiKey": API_KEY})
-```
-
-### 🟩 Frontend: সংযোগ ও reconnect
-
-```js
-// সার্ভার জাগানো, তারপর socket
-await fetch(`${NODE_URL}/health`).catch(() => {});
-
-const socket = io(NODE_URL, {
-    auth: { token },
-    transports: ["websocket"],
-    reconnectionDelayMax: 5000
-});
-
-socket.on("connect", syncMissedMessages); // GET /api/sync?after=lastId
-socket.on("disconnect", () => showBanner("সংযোগ বিচ্ছিন্ন..."));
-```
-
-### 🟩 Frontend: Cloudinary-তে সরাসরি আপলোড
-
-```js
-const s = await (
-    await fetch(`${PY_URL}/media/sign`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` }
-    })
-).json();
-
-const fd = new FormData();
-fd.append("file", file);
-fd.append("api_key", s.apiKey);
-fd.append("timestamp", s.timestamp);
-fd.append("folder", s.folder);
-fd.append("signature", s.signature);
-
-const res = await fetch(
-    `https://api.cloudinary.com/v1_1/${s.cloudName}/auto/upload`,
-    { method: "POST", body: fd }
-);
-const media = await res.json(); // secure_url, public_id, bytes ...
-```
-
----
-
-## 🚧 সম্ভাব্য সমস্যা ও সমাধান
-
-| #   | সমস্যা                                         | কেন হয়                                                          | সমাধান                                                                                                                                          |
-| --- | ---------------------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Render cold start**                          | ফ্রি প্ল্যানে কিছুক্ষণ রিকোয়েস্ট না এলে সার্ভার ঘুমায়          | অ্যাপ খুললেই আগে `/health` ডাকো + "সার্ভার জাগছে" UI। চাইলে UptimeRobot দিয়ে ৫ মিনিট পরপর `/health` ping (Render-এর ফ্রি ঘণ্টার সীমা দেখে নিও) |
-| 2   | **Socket কেটে গেলে মেসেজ হারানো**              | সার্ভার রিস্টার্টে memory মুছে যায়                              | Socket.io-র built-in recovery-র ওপর ভরসা করো না। DB-ভিত্তিক `GET /sync?after=` রাখো, `connect` ইভেন্টে সবসময় চালাও                             |
-| 3   | **একই মেসেজ দুইবার**                           | নেটওয়ার্ক ফেলে ক্লায়েন্ট আবার পাঠায়                           | ক্লায়েন্ট `clientMsgId` (UUID) বানায়, DB-তে `(sender, clientMsgId)` unique index                                                              |
-| 4   | **মেসেজের ক্রম গোলমাল**                        | দুজন একসাথে পাঠায়                                               | ক্রম ঠিক করে সার্ভারের `createdAt` + `_id`, ক্লায়েন্টের সময় নয়। UI-তে optimistic মেসেজ আগে "pending" দেখাও                                   |
-| 5   | **অফলাইন ইউজারের মেসেজ**                       | Receiver অনলাইন নেই                                              | মেসেজ আগে DB-তে, socket পরে। সে ফিরে এলে `/sync` দেবে                                                                                           |
-| 6   | **একাধিক ট্যাব/ডিভাইস**                        | `userId → socketId` Map এক জায়গায় ওভাররাইট হয়                 | `user:<id>` room ব্যবহার করো। presence-এ socket _গণনা_ রাখো, ০ হলে offline                                                                      |
-| 7   | **PythonAnywhere-এর outbound সীমা**            | ফ্রি প্ল্যানে whitelist                                          | ডিজাইনে Python কাউকে ডাকে না। `/media/sign`-এ বাইরে কল লাগে না, শুধু গণনা                                                                       |
-| 8   | **PythonAnywhere ফ্রি অ্যাপ বন্ধ হয়ে যাওয়া** | নিয়মিত Web tab-এ "Run until 3 months from today" বাটন চাপতে হয় | ক্যালেন্ডারে রিমাইন্ডার রাখো                                                                                                                    |
-| 9   | **CORS error**                                 | Frontend আলাদা domain-এ                                          | Node-এ `cors({origin: [FRONTEND_URL]})` ও Socket.io `cors` অপশন, Flask-এ `flask-cors`। `*` ব্যবহার করো না                                       |
-| 10  | **বড় ফাইল**                                   | ভিডিও/ভয়েস                                                      | Frontend-এ আগেই size/type যাচাই, Cloudinary dashboard-এও limit দেখো। Python/Node-এর মধ্য দিয়ে ফাইল না যাওয়ায় সার্ভারের RAM বাঁচে             |
-| 11  | **নকল মিডিয়া URL**                            | কেউ যেকোনো URL পাঠিয়ে দিতে পারে                                 | Node যাচাই করবে URL `https://res.cloudinary.com/<CLOUD_NAME>/` দিয়ে শুরু কিনা                                                                  |
-| 12  | **XSS**                                        | মেসেজে `<script>`                                                | Frontend-এ সবসময় `textContent`, `innerHTML` নয়                                                                                                |
-| 13  | **Spam/flood**                                 | অনেক দ্রুত মেসেজ                                                 | Socket-এ ইউজার প্রতি rate limit (যেমন ১০ সেকেন্ডে ২০টা)                                                                                         |
-| 14  | **একাধিক Render instance**                     | Socket state এক instance-এর memory-তে                            | এখন এক instance-ই যথেষ্ট। বাড়াতে হলে Redis adapter + sticky session                                                                            |
-| 15  | **একই দুজনের দুটো direct chat**                | race condition                                                   | `pairKey` (sort করা id জোড়া) unique index                                                                                                      |
-| 16  | **JWT মেয়াদ শেষ হলে socket কেটে যাওয়া**      | Token expire                                                     | Access token ছোট মেয়াদ + refresh endpoint; reconnect-এর আগে token নবায়ন                                                                       |
-| 17  | **Secret leak**                                | `.env`/`config.py` commit                                        | `.gitignore`-এ আছে ✅। ভুল করে commit হলে key সাথে সাথে বদলাও                                                                                   |
-
----
-
-## 🔐 Security checklist
-
-- [ ] পাসওয়ার্ড `bcrypt` দিয়ে hash
-- [ ] `helmet`, `express-rate-limit`
-- [ ] Input validation (`zod` বা `joi`) HTTP ও socket দুটোতেই
-- [ ] প্রতিটা socket event-এ "এই ইউজার কি conversation-এর সদস্য?" যাচাই
-- [ ] CORS allowlist
-- [ ] Media URL যাচাই
-- [ ] Python → `X-Service-Key` / JWT যাচাই
-- [ ] `.env`, `config.py` কখনো commit নয়
-- [ ] Error response-এ stack trace নয়
-
----
-
-## 🔑 Environment variables
-
-**🟦 `node-backend/.env`**
-
-```
-PORT=5000
-NODE_ENV=production
-MONGODB_URI=
-JWT_SECRET=
-JWT_EXPIRES_IN=15m
-REFRESH_TOKEN_SECRET=
-REFRESH_TOKEN_EXPIRY=30d
-FRONTEND_URL=          # একই service-এ ফাঁকা রাখো (লোকাল আলাদা পোর্টে চালালে তবেই দাও)
-CLOUDINARY_CLOUD_NAME=
-PYTHON_SERVICE_URL=    # CSP-তে connect-src হিসেবে খোলা হয়
-ALLOW_INLINE_SCRIPTS=false
-```
-
-পুরো তালিকা ও ব্যাখ্যা: `node-backend/.env.example`
-
-**🟨 `python-service/config.py`** (`config.example.py` কপি করে বানাও, GitHub-এ দেবে না)
-
-```python
-JWT_SECRET = ""              # Render-এর JWT_SECRET-এর সাথে হুবহু এক
-CLOUDINARY_CLOUD_NAME = ""   # Render-এর CLOUDINARY_CLOUD_NAME-এর সাথে এক
-CLOUDINARY_API_KEY = ""
-CLOUDINARY_API_SECRET = ""   # শুধু Python-এর কাছে থাকবে
-ALLOWED_ORIGINS = "https://sync-5lfm.onrender.com"
-```
-
-> `CLOUDINARY_API_SECRET` শুধু Python-এ থাকবে, Node-এ লাগবে না।
-> `SERVICE_KEY` এখন কোথাও ব্যবহার হয় না (ভবিষ্যতের `/scan`-এর জন্য ভাবা হয়েছিল), তাই কোনো জায়গাতেই দিতে হবে না।
-> পুরো ধাপে ধাপে নির্দেশনা: [`PYTHONANYWHERE_DEPLOYMENT_GUIDE.md`](PYTHONANYWHERE_DEPLOYMENT_GUIDE.md)
-
----
-
-## 🚀 Deploy
-
-**🟦 Render**
-
-- Root Directory: **ফাঁকা রাখো** (repo root), কারণ `frontend/` ফোল্ডারও লাগবে
-- Build: `npm install --prefix node-backend`
-- Start: `npm start --prefix node-backend`
-- Environment-এ উপরের সব ভ্যারিয়েবল (`NODE_ENV=production` সহ)
-- চাইলে _Build Filter_-এ `node-backend/**` আর `frontend/**` দাও, যাতে Python ফোল্ডারের commit-এ রিডিপ্লয় না হয়
-- Frontend-এ `<script src="/socket.io/socket.io.js">` ব্যবহার করো (CDN লাগবে না), আর fetch-এ `/api/...` লেখো
-
-**🟨 PythonAnywhere**
-
-শুধু `python-service/`-এর ভেতরের ফাইল আলাদা ফোল্ডারে (`~/sync-media-service`) রাখা হয়, পুরো প্রজেক্ট নয়।
-বিস্তারিত বাংলা গাইড: [`PYTHONANYWHERE_DEPLOYMENT_GUIDE.md`](PYTHONANYWHERE_DEPLOYMENT_GUIDE.md)
+### Run locally
 
 ```bash
-mkvirtualenv --python=/usr/bin/python3.10 sync-media-env
-cd ~/sync-media-service
-pip install -r requirements.txt
-cp config.example.py config.py   # তারপর মান বসাও
-python verify_install.py         # সব OK কিনা দেখো
+# 1. Clone the repository
+git clone https://github.com/duttaanubhab777-code/sync.git sync
+cd sync
+
+# 2. Install dependencies
+npm run install:backend
+npm run install:frontend
+
+# 3. Configure the backend
+cp node-backend/.env.example node-backend/.env
+#    then fill in MONGODB_URI, JWT_SECRET, CLOUDINARY_CLOUD_NAME, ...
+
+# 4. Start the API (http://localhost:5000)
+npm run dev:backend
+
+# 5. In a second terminal, start the frontend (http://localhost:5173)
+npm run dev:frontend
 ```
 
-- Web tab → Manual configuration, Virtualenv path, আর WSGI ফাইলে `pythonanywhere_wsgi.py`-এর কোড
-- আপডেটে: নতুন ফাইল আপলোড → Web tab-এ **Reload** (`config.py` মুছো না)
+The Vite dev server proxies `/api`, `/health` and `/socket.io` to the backend, so no extra frontend configuration is needed.
 
-**🟩 Frontend**
+### Production build
 
-- আলাদা ডিপ্লয় লাগে না। `frontend/` ফোল্ডার উপরের Render service থেকেই serve হয়
+```bash
+npm run build   # installs, builds the frontend and installs backend dependencies
+npm start       # serves the API, Socket.IO and the built frontend on one port
+```
 
----
+<a id="configuration"></a>
+<img src="docs/assets/headers/configuration.svg" alt="Configuration" height="64"/>
 
-## 🌿 Git workflow (দুজনের জন্য)
+Create `node-backend/.env` from `.env.example`.
 
-- নিজের ফোল্ডারেই কাজ করো: Jarvis → `node-backend/`, বন্ধু → `python-service/`। এতে conflict প্রায় হয় না।
-- `main` সবসময় চলনসই রাখো। নতুন কাজ আলাদা branch-এ: `node/socket-auth`, `python/media-sign`।
-- Commit বার্তার ধরন: `feat(node): add message:send handler`, `fix(python): cors origin`
-- `API.md` বদলালে commit-এ জানিয়ে দাও, কারণ এটাই দুজনের চুক্তি।
-- মার্জের আগে অপর জন একবার দেখে নিলে ভালো (Pull Request)।
+| Variable | Required | Description |
+| --- | :---: | --- |
+| `MONGODB_URI` | ✅ | MongoDB Atlas connection string |
+| `JWT_SECRET` | ✅ | Access-token secret. Must be **identical** to `JWT_SECRET` in the Python service |
+| `REFRESH_TOKEN_SECRET` | ✅ | Separate secret for refresh tokens |
+| `JWT_EXPIRES_IN` | | Access-token lifetime (default `15m`) |
+| `REFRESH_TOKEN_EXPIRY` | | Refresh-token lifetime (default `30d`) |
+| `CLOUDINARY_CLOUD_NAME` | ✅ | Cloud name used to validate media URLs |
+| `PYTHON_SERVICE_URL` | ✅ | Base URL of the Flask media service |
+| `SUPER_ADMIN_EMAILS` | ✅ | Comma-separated emails that become **Super Admins** on registration |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | ✅ | Web Push keys — generate with `npx web-push generate-vapid-keys` |
+| `VAPID_SUBJECT` | | `mailto:` contact for push |
+| `FRONTEND_URL` | | Extra allowed origin when running the frontend separately |
+| `NODE_ENV`, `PORT`, `TRUST_PROXY` | | Standard server settings |
 
----
+> [!IMPORTANT]
+> Cloudinary **API key and secret** belong only on the Python service. Never place them in the Node.js service or the frontend.
 
-## ✅ Roadmap checklist
+<a id="deployment"></a>
+<img src="docs/assets/headers/deployment.svg" alt="Deployment" height="64"/>
 
-**Phase 0 · Setup**
+**Render (Node.js + frontend)** — the included [`render.yaml`](render.yaml) defines the whole service:
 
-- [x] Repo বানানো ও structure push
-- [ ] 🟥 `API.md`-তে endpoint ও event তালিকা লেখা
+- Leave *Root Directory* empty (repository root)
+- Build: `npm --prefix frontend install --include=dev && npm --prefix frontend run build && npm --prefix node-backend install`
+- Start: `npm --prefix node-backend start`
+- Health check: `/health`
+- Add the environment variables listed above in the Render dashboard
 
-**Phase 1 · Base**
+**PythonAnywhere (media service)** — upload only the contents of `python-service/`, copy `config.example.py` to `config.py`, fill in the values and reload the web app. See the step-by-step [PythonAnywhere deployment guide](PYTHONANYWHERE_DEPLOYMENT_GUIDE.md).
 
-- [ ] 🟦 Express + MongoDB connect + `/health`
-- [ ] 🟦 Register / Login / JWT
-- [ ] 🟨 Flask + `/health` + JWT যাচাই + CORS
+<a id="api"></a>
+<img src="docs/assets/headers/api.svg" alt="API Reference" height="64"/>
 
-**Phase 2 · Models + REST**
+All endpoints are served from the same origin under `/api`. Authenticate with `Authorization: Bearer <accessToken>` or the session cookie.
 
-- [ ] 🟦 User, Conversation, Message মডেল ও ইনডেক্স
-- [ ] 🟦 Conversations ও messages API (pagination)
-- [ ] 🟨 `/media/sign` Postman-এ টেস্ট
+| Area | Base path | Highlights |
+| --- | --- | --- |
+| Auth | `/api/auth` | register, login, refresh, logout, current user |
+| Users | `/api/users` | search, public profile, update profile, block / unblock |
+| Conversations | `/api/conversations` | direct and group chats, members, read state, message history |
+| Stories | `/api/stories` | feed, create, view, viewers, delete |
+| Notifications | `/api/notifications` | list, mark read, push subscriptions |
+| Notices | `/api/notices` | pending notices and acknowledgement |
+| Admin | `/api/admin` | stats, users, roles, media moderation, groups, notices |
+| Sync | `/api/sync` | fetch messages missed while offline |
 
-**Phase 3 · Socket text chat**
+**Socket.IO events:** `message:send`, `message:new`, `message:delete`, `message:deleted`, `message:delivered`, `message:seen`, `typing:start`, `typing:stop`, `presence:snapshot`, `presence:update`.
 
-- [ ] 🟦 Socket auth + rooms
-- [ ] 🟦 `message:send` / `message:new` + ack + idempotency
-- [ ] 🟩 টেস্ট পেজে দুই ফোনে চ্যাট
+The complete request and response contract lives in [`API.md`](API.md).
 
-**Phase 4 · Presence + status**
+<a id="security"></a>
+<img src="docs/assets/headers/security.svg" alt="Security" height="64"/>
 
-- [ ] 🟦 typing, online/offline
-- [ ] 🟦 delivered / seen
-- [ ] 🟦 `/sync` + 🟩 reconnect UI
+- Short-lived **JWT access tokens** with rotating **refresh tokens**; up to five active devices per account
+- Passwords hashed with **bcrypt**
+- Request validation with **Zod** on every write endpoint
+- **Rate limiting** on the API and stricter limits on login and registration
+- Hardened HTTP headers with **Helmet** and a strict allow-list **CORS** policy on the media service
+- Media URLs are accepted only from the project's own **Cloudinary** account
+- Admin tools can moderate images and videos but **cannot read private message text**
+- Secrets live in environment variables and are excluded through `.gitignore`
 
-**Phase 5 · Media**
+<a id="team"></a>
+<img src="docs/assets/headers/team.svg" alt="Meet the Team" height="64"/>
 
-- [ ] 🟩 আপলোড ফ্লো (sign → Cloudinary → message)
-- [ ] 🟦 media URL যাচাই
-- [ ] 🟩 preview, progress, ভয়েস রেকর্ড
+<div align="center">
 
-**Phase 6 · Polish**
+<img src="docs/assets/team.svg" alt="Created by Anubhab Dutta and Arnab Adhikari" width="860"/>
 
-- [ ] unread count, reply, মেসেজ মুছা, আসল UI
+<table>
+  <tr>
+    <td align="center"><a href="https://github.com/duttaanubhab777-code"><b>Anubhab Dutta</b></a><br/><sub>Node.js backend · Frontend</sub></td>
+    <td align="center"><a href="https://github.com/arnabadhikari777"><b>Arnab Adhikari</b></a><br/><sub>Python service · Super Admin</sub></td>
+  </tr>
+</table>
 
-**Phase 7 · Hardening + Deploy**
+<br/>
 
-- [ ] rate limit, validation, error handler
-- [ ] Render + PythonAnywhere + Frontend ডিপ্লয়
-- [ ] Keep-alive ping
+<img src="docs/assets/footer.svg" alt="Made with love by Anubhab Dutta and Arnab Adhikari" width="100%"/>
 
-**ভবিষ্যতে**
-
-- [ ] 🟨 NSFW স্ক্যান (`/scan`)
-- [ ] গ্রুপ চ্যাট
-- [ ] Redis adapter (একাধিক instance)
-- [ ] Push notification
-
----
-
-## 👥 Team
-
-| নাম                                                              | দায়িত্ব                |
-| ---------------------------------------------------------------- | ----------------------- |
-| [@duttaanubhab777-code](https://github.com/duttaanubhab777-code) | 🟦 Node.js, 🟩 Frontend |
-| [@arnabadhikari777](https://github.com/arnabadhikari777)         | 🟨 Python               |
-
----
-
-<p align="center">Made with ❤️ by two friends</p>
+</div>

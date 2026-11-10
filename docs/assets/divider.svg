@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 24" width="1200" height="24" preserveAspectRatio="none">
+<defs><linearGradient id="d" x1="0" x2="1"><stop offset="0" stop-color="#22e57d" stop-opacity="0"/><stop offset="0.5" stop-color="#22e57d"/><stop offset="1" stop-color="#14b8a6" stop-opacity="0"/></linearGradient></defs>
+<path d="M0 12 Q50 0 100 12 T200 12 T300 12 T400 12 T500 12 T600 12 T700 12 T800 12 T900 12 T1000 12 T1100 12 T1200 12" fill="none" stroke="url(#d)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="60 30"><animate attributeName="stroke-dashoffset" values="0;-180" dur="3s" repeatCount="indefinite"/></path>
+<circle r="5" fill="#4ade80"><animateMotion dur="5s" repeatCount="indefinite" path="M0 12 L1200 12"/></circle>
+</svg>
