@@ -25,7 +25,12 @@ import {
     Sparkles,
     MessageCircle,
     Eye,
-    AlertTriangle
+    AlertTriangle,
+    Activity,
+    Bell,
+    Camera,
+    MessageSquare,
+    TrendingUp
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncLogo from "../components/SyncLogo.jsx";
@@ -45,6 +50,63 @@ const toLocalDatetimeInput = date => {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
         d.getHours()
     )}:${pad(d.getMinutes())}`;
+};
+
+
+const DashboardBar = ({ label, value = 0, maxValue = 0, detail }) => {
+    const numericValue = Number(value) || 0;
+    const percentage = maxValue > 0
+        ? Math.min(100, Math.max(numericValue > 0 ? 2 : 0, (numericValue / maxValue) * 100))
+        : 0;
+
+    return (
+        <div className="sync-dashboard-bar-row">
+            <div className="sync-dashboard-bar-meta">
+                <span>{label}</span>
+                <strong>{numericValue.toLocaleString()}</strong>
+            </div>
+            <div className="sync-dashboard-bar-track" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={maxValue || 0} aria-valuenow={numericValue}>
+                <span style={{ width: String(percentage) + "%" }} />
+            </div>
+            {detail && <small>{detail}</small>}
+        </div>
+    );
+};
+
+const DashboardDonut = ({ segments, total }) => {
+    const radius = 42;
+    const circumference = 2 * Math.PI * radius;
+    let offset = 0;
+
+    return (
+        <div className="sync-dashboard-donut-wrap">
+            <svg viewBox="0 0 112 112" role="img" aria-label={"User distribution: " + total + " accounts"}>
+                <circle cx="56" cy="56" r={radius} fill="none" stroke="var(--line)" strokeWidth="13" />
+                {segments.map(segment => {
+                    const value = Math.max(0, Number(segment.value) || 0);
+                    const length = total > 0 ? (value / total) * circumference : 0;
+                    const currentOffset = offset;
+                    offset += length;
+                    return (
+                        <circle key={segment.label} cx="56" cy="56" r={radius} fill="none" stroke={segment.color} strokeWidth="13"
+                            strokeDasharray={String(length) + " " + String(circumference - length)}
+                            strokeDashoffset={-currentOffset} transform="rotate(-90 56 56)" />
+                    );
+                })}
+                <text x="56" y="53" textAnchor="middle" className="sync-dashboard-donut-total">{total.toLocaleString()}</text>
+                <text x="56" y="67" textAnchor="middle" className="sync-dashboard-donut-caption">accounts</text>
+            </svg>
+            <div className="sync-dashboard-legend">
+                {segments.map(segment => (
+                    <div key={segment.label}>
+                        <span style={{ background: segment.color }} />
+                        <span>{segment.label}</span>
+                        <strong>{(Number(segment.value) || 0).toLocaleString()}</strong>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
 };
 
 export default function AdminPage() {
@@ -743,7 +805,7 @@ export default function AdminPage() {
                                         (stats?.media?.videos ?? 0)}
                                 </strong>
                                 <small className="sync-stat-sub">
-                                    📷 {stats?.media?.images ?? 0} photos · 🎥{" "}
+                                    <Camera size={13} /> {stats?.media?.images ?? 0} photos · <Video size={13} /> 
                                     {stats?.media?.videos ?? 0} videos ·{" "}
                                     {stats?.media?.activeStories ?? 0} active
                                     stories
@@ -761,7 +823,7 @@ export default function AdminPage() {
                                     {stats?.notices?.active ?? "—"}
                                 </strong>
                                 <small className="sync-stat-sub">
-                                    🔔 {stats?.notices?.pushDevices ?? 0} push
+                                    <Bell size={13} /> {stats?.notices?.pushDevices ?? 0} push
                                     subscribed devices
                                 </small>
                             </div>
@@ -782,6 +844,57 @@ export default function AdminPage() {
                                     (encrypted/hidden)
                                 </small>
                             </div>
+                        </div>
+
+                        
+                        <div className="sync-dashboard-analytics">
+                            <article className="sync-dashboard-chart-card sync-dashboard-audience">
+                                <div className="sync-dashboard-chart-heading">
+                                    <div><span className="sync-dashboard-eyebrow">AUDIENCE</span><h3><Users size={18} /> Account distribution</h3></div>
+                                    <span className="sync-dashboard-live-label"><Activity size={13} /> Current totals</span>
+                                </div>
+                                <DashboardDonut total={Number(stats?.users?.total) || 0} segments={[
+                                    { label: "Members", value: Math.max(0, (Number(stats?.users?.total) || 0) - (Number(stats?.users?.admins) || 0)), color: "#00c878" },
+                                    { label: "Admins", value: Math.max(0, (Number(stats?.users?.admins) || 0) - (Number(stats?.users?.superAdmins) || 0)), color: "#6d8cff" },
+                                    { label: "Super Admins", value: Number(stats?.users?.superAdmins) || 0, color: "#f2b84b" }
+                                ]} />
+                            </article>
+
+                            <article className="sync-dashboard-chart-card">
+                                <div className="sync-dashboard-chart-heading"><div><span className="sync-dashboard-eyebrow">COMMUNITY</span><h3><TrendingUp size={18} /> User activity</h3></div><span className="sync-dashboard-chart-note">Current metrics</span></div>
+                                <div className="sync-dashboard-bars">
+                                    <DashboardBar label="Online now" value={stats?.users?.online} maxValue={Math.max(Number(stats?.users?.online) || 0, Number(stats?.users?.newThisWeek) || 0, Number(stats?.users?.blocked) || 0, 1)} />
+                                    <DashboardBar label="Joined this week" value={stats?.users?.newThisWeek} maxValue={Math.max(Number(stats?.users?.online) || 0, Number(stats?.users?.newThisWeek) || 0, Number(stats?.users?.blocked) || 0, 1)} />
+                                    <DashboardBar label="Blocked accounts" value={stats?.users?.blocked} maxValue={Math.max(Number(stats?.users?.online) || 0, Number(stats?.users?.newThisWeek) || 0, Number(stats?.users?.blocked) || 0, 1)} />
+                                </div>
+                            </article>
+
+                            <article className="sync-dashboard-chart-card">
+                                <div className="sync-dashboard-chart-heading"><div><span className="sync-dashboard-eyebrow">CONTENT</span><h3><Camera size={18} /> Media overview</h3></div><span className="sync-dashboard-chart-note">Published content</span></div>
+                                <div className="sync-dashboard-bars">
+                                    <DashboardBar label="Images" value={stats?.media?.images} maxValue={Math.max(Number(stats?.media?.images) || 0, Number(stats?.media?.videos) || 0, Number(stats?.media?.activeStories) || 0, 1)} />
+                                    <DashboardBar label="Videos" value={stats?.media?.videos} maxValue={Math.max(Number(stats?.media?.images) || 0, Number(stats?.media?.videos) || 0, Number(stats?.media?.activeStories) || 0, 1)} />
+                                    <DashboardBar label="Active stories" value={stats?.media?.activeStories} maxValue={Math.max(Number(stats?.media?.images) || 0, Number(stats?.media?.videos) || 0, Number(stats?.media?.activeStories) || 0, 1)} />
+                                </div>
+                            </article>
+
+                            <article className="sync-dashboard-chart-card">
+                                <div className="sync-dashboard-chart-heading"><div><span className="sync-dashboard-eyebrow">MESSAGING</span><h3><MessageSquare size={18} /> Conversation activity</h3></div><span className="sync-dashboard-chart-note">Platform totals</span></div>
+                                <div className="sync-dashboard-bars">
+                                    <DashboardBar label="Group conversations" value={stats?.chats?.groups} maxValue={Math.max(Number(stats?.chats?.groups) || 0, Number(stats?.chats?.direct) || 0, Number(stats?.chats?.messages) || 0, 1)} />
+                                    <DashboardBar label="Direct conversations" value={stats?.chats?.direct} maxValue={Math.max(Number(stats?.chats?.groups) || 0, Number(stats?.chats?.direct) || 0, Number(stats?.chats?.messages) || 0, 1)} />
+                                    <DashboardBar label="Messages" value={stats?.chats?.messages} maxValue={Math.max(Number(stats?.chats?.groups) || 0, Number(stats?.chats?.direct) || 0, Number(stats?.chats?.messages) || 0, 1)} />
+                                </div>
+                            </article>
+
+                            <article className="sync-dashboard-chart-card sync-dashboard-reach-card">
+                                <div className="sync-dashboard-chart-heading"><div><span className="sync-dashboard-eyebrow">NOTIFICATIONS</span><h3><Bell size={18} /> Push subscriptions</h3></div></div>
+                                <div className="sync-dashboard-reach-stats">
+                                    <div><strong>{(Number(stats?.notices?.active) || 0).toLocaleString()}</strong><span>Active notices</span></div>
+                                    <div><strong>{(Number(stats?.notices?.pushDevices) || 0).toLocaleString()}</strong><span>Subscribed devices</span></div>
+                                </div>
+                                <p className="sync-dashboard-footnote">Registered push subscriptions across user devices.</p>
+                            </article>
                         </div>
 
                         <div className="sync-admin-quick-cards">

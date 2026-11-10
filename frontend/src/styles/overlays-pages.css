@@ -951,3 +951,40 @@
         border-radius: 22px;
     }
 }
+
+
+/* ---------- Admin analytics dashboard ---------- */
+.sync-dashboard-analytics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.sync-dashboard-chart-card { min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 22px; background: linear-gradient(145deg, var(--bg-1), var(--bg-2)); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08); }
+.sync-dashboard-chart-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.sync-dashboard-chart-heading h3 { display: flex; align-items: center; gap: 8px; margin-top: 5px; font-size: 1rem; font-weight: 800; letter-spacing: -0.02em; }
+.sync-dashboard-chart-heading h3 svg { color: var(--mongo); }
+.sync-dashboard-eyebrow { color: var(--text-2); font-size: 0.66rem; font-weight: 800; letter-spacing: 0.13em; }
+.sync-dashboard-live-label, .sync-dashboard-chart-note { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; padding: 6px 9px; border: 1px solid var(--line); border-radius: 999px; color: var(--text-2); font-size: 0.68rem; font-weight: 700; }
+.sync-dashboard-live-label { color: var(--mongo); background: rgba(0, 237, 100, 0.07); }
+.sync-dashboard-donut-wrap { display: flex; align-items: center; justify-content: center; gap: clamp(12px, 3vw, 28px); min-height: 150px; }
+.sync-dashboard-donut-wrap svg { width: 144px; max-width: 42%; overflow: visible; }
+.sync-dashboard-donut-total { fill: var(--text); font-size: 16px; font-weight: 800; }
+.sync-dashboard-donut-caption { fill: var(--text-2); font-size: 8px; }
+.sync-dashboard-legend { display: flex; flex: 1; flex-direction: column; gap: 12px; min-width: 0; }
+.sync-dashboard-legend > div { display: grid; grid-template-columns: 9px minmax(0, 1fr) auto; align-items: center; gap: 8px; font-size: 0.78rem; color: var(--text-2); }
+.sync-dashboard-legend > div > span:first-child { width: 8px; height: 8px; border-radius: 50%; }
+.sync-dashboard-legend strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.sync-dashboard-bars { display: flex; flex-direction: column; gap: 17px; }
+.sync-dashboard-bar-row { display: flex; flex-direction: column; gap: 7px; }
+.sync-dashboard-bar-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--text-2); font-size: 0.8rem; }
+.sync-dashboard-bar-meta strong { color: var(--text); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.sync-dashboard-bar-track, .sync-dashboard-reach-track { height: 9px; overflow: hidden; border-radius: 999px; background: var(--bg-chat); border: 1px solid var(--line); }
+.sync-dashboard-bar-track > span, .sync-dashboard-reach-track > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #00a95b, #69e5a6); transition: width 0.45s ease; }
+.sync-dashboard-bar-row:nth-child(2) .sync-dashboard-bar-track > span { background: linear-gradient(90deg, #5276df, #8ca8ff); }
+.sync-dashboard-bar-row:nth-child(3) .sync-dashboard-bar-track > span { background: linear-gradient(90deg, #d69b35, #f3ca72); }
+.sync-dashboard-reach-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0 18px; }
+.sync-dashboard-reach-stats > div { display: flex; flex-direction: column; gap: 4px; padding: 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--bg-chat); }
+.sync-dashboard-reach-stats strong { font-size: 1.55rem; font-weight: 800; letter-spacing: -0.04em; color: var(--text); font-variant-numeric: tabular-nums; }
+.sync-dashboard-reach-stats span { color: var(--text-2); font-size: 0.74rem; }
+.sync-dashboard-footnote { margin-top: 10px; color: var(--text-2); font-size: 0.72rem; line-height: 1.5; }
+@media (max-width: 720px) { .sync-dashboard-analytics { grid-template-columns: 1fr; } .sync-dashboard-chart-card { padding: 17px; border-radius: 19px; } }
+@media (max-width: 420px) { .sync-dashboard-donut-wrap { justify-content: space-between; gap: 8px; } .sync-dashboard-donut-wrap svg { width: 116px; } .sync-dashboard-legend { gap: 9px; } .sync-dashboard-legend > div { font-size: 0.7rem; } .sync-dashboard-chart-heading { flex-wrap: wrap; } }
+
+.sync-stat-label { display: inline-flex; align-items: center; gap: 7px; }
+.sync-stat-label svg { flex: 0 0 auto; color: var(--mongo); }
