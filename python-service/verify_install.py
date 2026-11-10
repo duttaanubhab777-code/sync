@@ -1,10 +1,11 @@
-"""Quick self-check for the Sync Media Service. Run it in a PythonAnywhere Bash console:
+"""Quick self-check for the Sync Media + Mail Service. Run it in a PythonAnywhere Bash console:
 
     cd ~/sync-media-service
     workon sync-media-env        # (only if the virtualenv is not already active)
     python verify_install.py
 
 It prints OK / PROBLEM lines. It never prints secret values and never contacts the internet.
+(To really test Gmail login, open the /mail/diag URL described in config.example.py after reloading the web app.)
 """
 import hashlib
 import sys
@@ -46,6 +47,13 @@ else:
 for item in settings.warnings:
     print("WARNING  " + item)
 ok("allowed origins: " + (", ".join(settings.allowed_origins) or "NONE (browsers will be blocked)"))
+
+# --- mail relay (needed for the signup OTP emails) ---
+if settings.mail_configured:
+    ok("mail relay configuration is complete (sender: %s)" % settings.gmail_user)
+else:
+    for item in settings.mail_problems:
+        bad("mail relay: " + item + "  -> edit config.py (see config.example.py)")
 
 try:
     from cloudinary import utils as cloudinary_utils

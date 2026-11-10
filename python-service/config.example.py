@@ -28,8 +28,34 @@ CLOUDINARY_API_SECRET = ""  # secret: lives ONLY here, never in Render or React
 ALLOWED_ORIGINS = "https://sync-5lfm.onrender.com"
 
 # ---------------------------------------------------------------------------
+# REQUIRED FOR SIGNUP OTP EMAILS (mail relay)
+# Render's free plan cannot send email, so Render asks THIS service to send it.
+# ---------------------------------------------------------------------------
+
+# The Gmail address that will send the OTP emails (e.g. sync93346@gmail.com).
+GMAIL_USER = ""
+
+# NOT your normal Gmail password. Google Account -> Security -> turn on 2-Step Verification
+# -> search "App passwords" -> create one. It looks like: abcd efgh ijkl mnop (spaces are fine).
+GMAIL_APP_PASSWORD = ""
+
+# A long random text (at least 24 characters, letters and numbers only is easiest).
+# Must be EXACTLY the same text as MAIL_RELAY_SECRET in Render (Environment tab).
+# Nobody without this text can make the relay send mail.
+MAIL_RELAY_SECRET = ""
+
+# ---------------------------------------------------------------------------
 # OPTIONAL - the defaults are fine, leave these lines alone if unsure
 # ---------------------------------------------------------------------------
+
+# Name shown as the sender of the OTP email.
+# MAIL_FROM_NAME = "Sync"
+
+# Gmail SMTP port: "auto" tries 465 then 587. Pin one only if /mail/diag tells you to.
+# SMTP_MODE = "auto"
+
+# Max mails to ONE address per 10 minutes (stops someone using Sync to spam an inbox).
+# MAIL_PER_RECIPIENT_LIMIT = 6
 
 # Max signature requests per user per minute.
 # RATE_LIMIT_PER_MINUTE = 30

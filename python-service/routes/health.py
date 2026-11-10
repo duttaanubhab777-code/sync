@@ -22,6 +22,8 @@ def health():
             "timestamp": datetime.now(timezone.utc).isoformat(),
             # A yes/no only: lets the owner see at a glance whether config.py was filled in.
             "configured": runtime.settings.is_configured,
+            # Same idea for the mail relay (Gmail login + relay key present).
+            "mailConfigured": runtime.settings.mail_configured,
         }
     )
     response.headers["Cache-Control"] = "no-store"

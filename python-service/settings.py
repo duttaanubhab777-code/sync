@@ -18,7 +18,7 @@ from typing import Any, Mapping, Optional
 from utils.security import normalize_origin
 
 SERVICE_NAME = "sync-media-service"
-SERVICE_VERSION = "1.0.0"
+SERVICE_VERSION = "1.1.0"
 
 # Used only when ALLOWED_ORIGINS is not configured at all.
 DEFAULT_ALLOWED_ORIGINS = ("https://sync-5lfm.onrender.com",)
@@ -31,6 +31,7 @@ _CLOUD_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,98}$")
 _API_KEY_RE = re.compile(r"^\d{6,20}$")
 _FOLDER_ROOT_RE = re.compile(r"^[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*$")
 _PLACEHOLDER_PREFIXES = ("PASTE_", "CHANGE_ME", "YOUR_", "<")
+_EMAIL_RE = re.compile(r"^[^\s@<>\",;]+@[^\s@<>\",;]+\.[^\s@<>\",;]{2,}$")
 _TRUE_VALUES = {"1", "true", "yes", "on"}
 
 
@@ -50,11 +51,26 @@ class Settings:
     client_ip_header: str = "X-Real-IP"
     problems: tuple = ()
     warnings: tuple = ()
+    # ---- mail relay (OTP emails). Separate from the media settings above, so a missing
+    # ---- Gmail setting never breaks uploads and a missing Cloudinary setting never breaks mail.
+    gmail_user: str = ""
+    gmail_app_password: str = field(default="", repr=False)
+    mail_relay_secret: str = field(default="", repr=False)
+    mail_from_name: str = "Sync"
+    smtp_host: str = "smtp.gmail.com"
+    smtp_mode: str = "auto"  # auto | 465 | 587
+    mail_per_recipient_limit: int = 6  # max mails to one address per 10 minutes
+    mail_problems: tuple = ()
 
     @property
     def is_configured(self) -> bool:
-        """True only when every required secret is present and well-formed."""
+        """True only when every required secret is present and well-formed (media signing)."""
         return not self.problems
+
+    @property
+    def mail_configured(self) -> bool:
+        """True only when the mail relay can work."""
+        return not self.mail_problems
 
 
 def _load_file_values(path: Path) -> dict:
@@ -176,6 +192,34 @@ def load_settings(
         warnings.append("CLIENT_IP_HEADER is invalid; using X-Real-IP")
         ip_header = "X-Real-IP"
 
+    # ---------- mail relay ----------
+    mail_problems: list = []
+    gmail_user = _clean(raw("GMAIL_USER")).lower()
+    if not gmail_user:
+        mail_problems.append("GMAIL_USER is missing")
+    elif not _EMAIL_RE.match(gmail_user):
+        mail_problems.append("GMAIL_USER is not a valid email address")
+
+    # Google shows the app password as 4 groups of 4 letters; copying it with spaces is fine.
+    gmail_app_password = re.sub(r"\s+", "", _clean(raw("GMAIL_APP_PASSWORD")))
+    if not gmail_app_password:
+        mail_problems.append("GMAIL_APP_PASSWORD is missing")
+    elif len(gmail_app_password) != 16:
+        warnings.append("GMAIL_APP_PASSWORD is usually exactly 16 characters; check you copied all of it")
+
+    mail_relay_secret = _clean(raw("MAIL_RELAY_SECRET"))
+    if not mail_relay_secret:
+        mail_problems.append("MAIL_RELAY_SECRET is missing")
+    elif len(mail_relay_secret) < 24:
+        mail_problems.append("MAIL_RELAY_SECRET must be at least 24 characters (use a long random text)")
+
+    smtp_mode = (_clean(raw("SMTP_MODE")) or "auto").lower()
+    if smtp_mode not in ("auto", "465", "587"):
+        warnings.append("SMTP_MODE must be auto, 465 or 587; using auto")
+        smtp_mode = "auto"
+
+    mail_from_name = " ".join((_clean(raw("MAIL_FROM_NAME")) or "Sync").split())[:80] or "Sync"
+
     return Settings(
         jwt_secret=jwt_secret,
         cloud_name=cloud_name,
@@ -196,4 +240,14 @@ def load_settings(
         client_ip_header=ip_header,
         problems=tuple(problems),
         warnings=tuple(warnings),
+        gmail_user=gmail_user,
+        gmail_app_password=gmail_app_password,
+        mail_relay_secret=mail_relay_secret,
+        mail_from_name=mail_from_name,
+        smtp_host=_clean(raw("SMTP_HOST")) or "smtp.gmail.com",
+        smtp_mode=smtp_mode,
+        mail_per_recipient_limit=_bounded_int(
+            raw("MAIL_PER_RECIPIENT_LIMIT"), 6, 1, 60, "MAIL_PER_RECIPIENT_LIMIT", warnings
+        ),
+        mail_problems=tuple(mail_problems),
     )

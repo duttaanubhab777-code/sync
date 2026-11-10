@@ -1,7 +1,9 @@
 """Sync Media Service - Flask application.
 
-Only creates Cloudinary upload signatures. It stores no files and makes no
-outgoing requests, so it fits the PythonAnywhere free plan.
+Two jobs, both small enough for the PythonAnywhere free plan:
+  1. /media/sign - creates Cloudinary upload signatures (stores no files).
+  2. /mail/send  - mail relay: sends the signup OTP emails through Gmail SMTP,
+                   because Render's free plan cannot send email itself.
 
 PythonAnywhere (WSGI) imports ``app`` from here, see pythonanywhere_wsgi.py.
 For local development:  python app.py
@@ -16,6 +18,7 @@ from flask import Flask, request
 from werkzeug.exceptions import HTTPException
 
 from routes.health import health_bp
+from routes.mail import mail_bp
 from routes.media import media_bp
 from settings import Settings, load_settings
 from utils.responses import error_response
@@ -52,17 +55,23 @@ def create_app(settings: Optional[Settings] = None) -> Flask:
         settings=settings,
         user_limiter=SlidingWindowLimiter(settings.rate_limit_per_minute, 60),
         failure_limiter=SlidingWindowLimiter(settings.auth_failure_limit_per_minute, 60),
+        # mail relay: wrong-key attempts per IP, and mails per recipient address (10 minutes)
+        mail_failure_limiter=SlidingWindowLimiter(10, 60),
+        mail_recipient_limiter=SlidingWindowLimiter(settings.mail_per_recipient_limit, 600),
     )
 
     for problem in settings.problems:
         logger.error("Configuration problem: %s", problem)
     for warning in settings.warnings:
         logger.warning("Configuration warning: %s", warning)
+    for problem in settings.mail_problems:
+        logger.warning("Mail relay not ready: %s", problem)
     if settings.is_configured:
         logger.info("Sync Media Service ready (allowed origins: %s)", ", ".join(settings.allowed_origins) or "none")
 
     app.register_blueprint(health_bp)
     app.register_blueprint(media_bp)
+    app.register_blueprint(mail_bp)
 
     # ---------- CORS (explicit allow-list, never "*") ----------
     @app.before_request
@@ -88,7 +97,7 @@ def create_app(settings: Optional[Settings] = None) -> Flask:
                 response.headers["Access-Control-Max-Age"] = CORS_MAX_AGE_SECONDS
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
-        if request.path == "/media/sign":
+        if request.path == "/media/sign" or request.path.startswith("/mail/"):
             response.headers["Cache-Control"] = "no-store"
         return response
 
