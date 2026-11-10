@@ -1,5 +1,5 @@
 import React from "react";
-import { Zap, ShieldCheck, Users, Loader2, Mail } from "lucide-react";
+import { Zap, ShieldCheck, Users, Loader2 } from "lucide-react";
 import SyncLogo from "./SyncLogo.jsx";
 import BrandTyping from "./BrandTyping.jsx";
 
@@ -67,9 +67,6 @@ export default function AuthShell({ serverWaking = false, children }) {
                     </div>
                 )}
                 <div className="sync-auth-card">{children}</div>
-                <a className="sync-auth-contact-link" href="/contact">
-                    <Mail size={15} /> Contact Sync support
-                </a>
             </main>
         </div>
     );
