@@ -61,3 +61,22 @@ export const loginSchema = z.object({
 
     password: z.string().min(1, "Password is required")
 });
+
+// ---------- OTP দিয়ে register ----------
+const emailField = z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email("Enter a valid email address");
+
+// POST /api/auth/register/verify-otp
+export const verifyOtpSchema = z.object({
+    email: emailField,
+    otp: z
+        .string()
+        .trim()
+        .regex(/^\d{6}$/, "Enter the 6-digit code")
+});
+
+// POST /api/auth/register/resend-otp
+export const resendOtpSchema = z.object({ email: emailField });

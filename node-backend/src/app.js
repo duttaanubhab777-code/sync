@@ -111,6 +111,10 @@ app.get("/health", (_req, res) => {
         dbConnected: mongoose.connection.readyState === 1,
         pythonServiceUrl: process.env.PYTHON_SERVICE_URL || "",
         cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME || "",
+        // OTP ইমেইলের জন্য PYTHON_SERVICE_URL ও MAIL_RELAY_SECRET দুটোই সেট আছে কিনা (secret দেখানো হয় না)
+        mailRelayConfigured: Boolean(
+            process.env.PYTHON_SERVICE_URL && process.env.MAIL_RELAY_SECRET
+        ),
         timestamp: new Date().toISOString()
     });
 });

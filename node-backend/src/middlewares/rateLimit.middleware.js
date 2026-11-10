@@ -24,3 +24,22 @@ export const authLimiter = rateLimit({
     legacyHeaders: false,
     handler: tooMany("Too many attempts, try again after some time")
 });
+
+// OTP ইমেইল পাঠানো: সফল হলেও গোনা হয় (ইমেইল-বোমা ঠেকাতে), প্রতি IP-তে ১৫ মিনিটে ১০টা
+export const otpSendLimiter = rateLimit({
+    windowMs: 15 * 60_000,
+    limit: 10,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    handler: tooMany("Too many code requests, try again after some time")
+});
+
+// OTP যাচাই: প্রতি IP-তে ১৫ মিনিটে ৩০টা ব্যর্থ চেষ্টা (ইমেইল-প্রতি সীমা controller-এ আলাদা আছে)
+export const otpVerifyLimiter = rateLimit({
+    windowMs: 15 * 60_000,
+    limit: 30,
+    skipSuccessfulRequests: true,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    handler: tooMany("Too many attempts, try again after some time")
+});

@@ -45,6 +45,9 @@ services:
         sync: false
       - key: PYTHON_SERVICE_URL
         sync: false
+      # Signup OTP mail: must exactly match MAIL_RELAY_SECRET in python-service/config.py (24+ chars)
+      - key: MAIL_RELAY_SECRET
+        sync: false
       # একাধিক Super Admin দিতে চাইলে কমা দিয়ে আলাদা করে দাও: a@gmail.com,b@gmail.com
       - key: SUPER_ADMIN_EMAILS
         sync: false

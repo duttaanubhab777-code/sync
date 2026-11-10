@@ -12,6 +12,7 @@ import "./models/story.model.js";
 import "./models/notification.model.js";
 import "./models/push-subscription.model.js";
 import "./models/notice.model.js";
+import "./models/pending-signup.model.js";
 import { User } from "./models/user.model.js";
 import { getSuperAdminEmails } from "./utils/superAdmin.js";
 
