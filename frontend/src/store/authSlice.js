@@ -19,6 +19,18 @@ const loadCachedUser = () => {
     }
 };
 
+const extractRetryAfter = err => {
+    const fromErrors = err?.response?.data?.errors?.[0]?.retryAfterSeconds;
+    if (Number.isFinite(Number(fromErrors)) && Number(fromErrors) > 0) {
+        return Number(fromErrors);
+    }
+    const header = err?.response?.headers?.["retry-after"];
+    if (Number.isFinite(Number(header)) && Number(header) > 0) {
+        return Number(header);
+    }
+    return null;
+};
+
 export const initializeApp = createAsyncThunk(
     "auth/initializeApp",
     async (_, { dispatch, rejectWithValue }) => {
@@ -72,21 +84,92 @@ export const initializeApp = createAsyncThunk(
     }
 );
 
-export const registerUser = createAsyncThunk(
-    "auth/registerUser",
+// ধাপ ১: সাইনআপ তথ্য যাচাই করে ইমেইলে ৬-সংখ্যার OTP পাঠানো
+export const sendSignupOtp = createAsyncThunk(
+    "auth/sendSignupOtp",
     async (payload, { dispatch, rejectWithValue }) => {
         const wakeTimer = setTimeout(() => {
             dispatch(setServerWaking(true));
         }, 1500);
         try {
-            const res = await api.post("/api/auth/register", payload);
+            const res = await api.post("/api/auth/register/send-otp", payload);
+            const data = res.data?.data || {};
+            return {
+                email: data.email || payload.email,
+                expiresInSeconds: data.expiresInSeconds || 600,
+                resendAfterSeconds: data.resendAfterSeconds || 60,
+                message:
+                    res.data?.message || "Verification code sent to your email"
+            };
+        } catch (err) {
+            return rejectWithValue({
+                message: extractErrorMessage(
+                    err,
+                    "Could not send verification code"
+                ),
+                retryAfterSeconds: extractRetryAfter(err)
+            });
+        } finally {
+            clearTimeout(wakeTimer);
+            dispatch(setServerWaking(false));
+        }
+    }
+);
+
+// কোড না পৌঁছালে বা মেয়াদ শেষ হলে আবার OTP পাঠানো
+export const resendSignupOtp = createAsyncThunk(
+    "auth/resendSignupOtp",
+    async ({ email }, { dispatch, rejectWithValue }) => {
+        const wakeTimer = setTimeout(() => {
+            dispatch(setServerWaking(true));
+        }, 1500);
+        try {
+            const res = await api.post("/api/auth/register/resend-otp", {
+                email
+            });
+            const data = res.data?.data || {};
+            return {
+                email: data.email || email,
+                expiresInSeconds: data.expiresInSeconds || 600,
+                resendAfterSeconds: data.resendAfterSeconds || 60,
+                message:
+                    res.data?.message ||
+                    "A new verification code was sent to your email"
+            };
+        } catch (err) {
+            return rejectWithValue({
+                message: extractErrorMessage(
+                    err,
+                    "Could not resend verification code"
+                ),
+                retryAfterSeconds: extractRetryAfter(err)
+            });
+        } finally {
+            clearTimeout(wakeTimer);
+            dispatch(setServerWaking(false));
+        }
+    }
+);
+
+// ধাপ ২: ইমেইলে আসা ৬-সংখ্যার OTP মিলিয়ে আসল অ্যাকাউন্ট তৈরি ও লগইন
+export const verifySignupOtp = createAsyncThunk(
+    "auth/verifySignupOtp",
+    async ({ email, otp }, { dispatch, rejectWithValue }) => {
+        const wakeTimer = setTimeout(() => {
+            dispatch(setServerWaking(true));
+        }, 1500);
+        try {
+            const res = await api.post("/api/auth/register/verify-otp", {
+                email,
+                otp
+            });
             const { user, accessToken, refreshToken } = res.data?.data || {};
             setStoredTokens({ accessToken, refreshToken });
             if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
             return { user, accessToken, refreshToken };
         } catch (err) {
             return rejectWithValue(
-                extractErrorMessage(err, "Registration failed")
+                extractErrorMessage(err, "OTP verification failed")
             );
         } finally {
             clearTimeout(wakeTimer);
@@ -94,6 +177,9 @@ export const registerUser = createAsyncThunk(
         }
     }
 );
+
+// পুরনো নামের সাথে সামঞ্জস্য রাখার জন্য alias
+export const registerUser = sendSignupOtp;
 
 export const loginUser = createAsyncThunk(
     "auth/loginUser",
@@ -190,6 +276,12 @@ export const unblockUserById = createAsyncThunk(
     }
 );
 
+const normalizeErrorPayload = payload => {
+    if (!payload) return null;
+    if (typeof payload === "string") return payload;
+    return payload.message || "Something went wrong";
+};
+
 const initialState = {
     user: loadCachedUser(),
     accessToken: getStoredToken(),
@@ -197,7 +289,9 @@ const initialState = {
     initializing: true,
     serverWaking: false,
     loading: false,
+    otpSending: false,
     error: null,
+    pendingSignup: null,
     blockedUsers: [],
     pythonServiceUrl:
         import.meta.env.VITE_PYTHON_SERVICE_URL ||
@@ -214,6 +308,10 @@ const authSlice = createSlice({
             state.serverWaking = Boolean(action.payload);
         },
         clearAuthError(state) {
+            state.error = null;
+        },
+        clearPendingSignup(state) {
+            state.pendingSignup = null;
             state.error = null;
         },
         updateUserRole(state, action) {
@@ -234,6 +332,7 @@ const authSlice = createSlice({
             state.user = null;
             state.accessToken = "";
             state.isAuthenticated = false;
+            state.pendingSignup = null;
             state.blockedUsers = [];
         }
     },
@@ -269,19 +368,50 @@ const authSlice = createSlice({
                 state.accessToken = "";
                 state.isAuthenticated = false;
             })
-            .addCase(registerUser.pending, state => {
+            .addCase(sendSignupOtp.pending, state => {
+                state.loading = true;
+                state.otpSending = true;
+                state.error = null;
+            })
+            .addCase(sendSignupOtp.fulfilled, (state, action) => {
+                state.loading = false;
+                state.otpSending = false;
+                state.error = null;
+                state.pendingSignup = action.payload;
+            })
+            .addCase(sendSignupOtp.rejected, (state, action) => {
+                state.loading = false;
+                state.otpSending = false;
+                state.error = normalizeErrorPayload(action.payload);
+            })
+            .addCase(resendSignupOtp.pending, state => {
+                state.otpSending = true;
+                state.error = null;
+            })
+            .addCase(resendSignupOtp.fulfilled, (state, action) => {
+                state.otpSending = false;
+                state.error = null;
+                state.pendingSignup = action.payload;
+            })
+            .addCase(resendSignupOtp.rejected, (state, action) => {
+                state.otpSending = false;
+                state.error = normalizeErrorPayload(action.payload);
+            })
+            .addCase(verifySignupOtp.pending, state => {
                 state.loading = true;
                 state.error = null;
             })
-            .addCase(registerUser.fulfilled, (state, action) => {
+            .addCase(verifySignupOtp.fulfilled, (state, action) => {
                 state.loading = false;
+                state.error = null;
+                state.pendingSignup = null;
                 state.user = action.payload.user;
                 state.accessToken = action.payload.accessToken;
                 state.isAuthenticated = true;
             })
-            .addCase(registerUser.rejected, (state, action) => {
+            .addCase(verifySignupOtp.rejected, (state, action) => {
                 state.loading = false;
-                state.error = action.payload;
+                state.error = normalizeErrorPayload(action.payload);
             })
             .addCase(loginUser.pending, state => {
                 state.loading = true;
@@ -301,6 +431,7 @@ const authSlice = createSlice({
                 state.user = null;
                 state.accessToken = "";
                 state.isAuthenticated = false;
+                state.pendingSignup = null;
                 state.blockedUsers = [];
             })
             .addCase(updateMyProfile.fulfilled, (state, action) => {
@@ -315,6 +446,7 @@ const authSlice = createSlice({
 export const {
     setServerWaking,
     clearAuthError,
+    clearPendingSignup,
     updateUserRole,
     forceLogout
 } = authSlice.actions;

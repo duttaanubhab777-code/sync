@@ -1,78 +1,53 @@
-# Sync Media Service (Flask)
+# Sync Media & Mail Relay Service (Flask)
 
-> বাংলা নির্দেশনা: প্রজেক্ট রুটের `PYTHONANYWHERE_DEPLOYMENT_GUIDE.md` দেখো।
+> বাংলা নির্দেশনা: প্রজেক্ট রুটের `OTP_AND_MAIL_RELAY_SETUP_GUIDE.md` এবং `docs/PYTHONANYWHERE_DEPLOYMENT_GUIDE.md` দেখো।
 
-A tiny Flask service for PythonAnywhere (free plan). It **only creates Cloudinary signed-upload
-signatures**. It never receives, stores or forwards media files and makes no outgoing requests.
+A lightweight Flask service designed for the PythonAnywhere free plan. It handles two jobs:
+1. **`POST /media/sign`** — Creates Cloudinary signed-upload signatures locally (never receives or stores media files).
+2. **`POST /mail/send` & `GET /mail/diag`** — Sends signup OTP verification emails via Gmail SMTP (`smtp.gmail.com`), because Render's free tier blocks outbound SMTP ports.
 
 ```
-Browser --(Bearer access token)--> POST /media/sign  (this service) --> {cloudName, apiKey, timestamp, folder, signature}
-Browser --(file + signature)-----> Cloudinary                        --> secure_url
-Browser --(url + metadata)-------> Node.js backend (Render)          --> MongoDB
+[Media Upload]
+Browser --(Bearer access token)--> POST /media/sign  (PythonAnywhere) --> {cloudName, apiKey, timestamp, folder, signature}
+Browser --(file + signature)-----> Cloudinary                         --> secure_url
+Browser --(url + metadata)-------> Node.js backend (Render)           --> MongoDB
+
+[Signup OTP Email Relay]
+Browser --(signup form)----------> POST /api/auth/register/send-otp (Render Node.js)
+Node.js --(X-Relay-Key header)---> POST /mail/send (PythonAnywhere)   --> Gmail SMTP (465/587) --> User Inbox
+Browser --(6-digit OTP)----------> POST /api/auth/register/verify-otp --> Account Created + JWT Issued
 ```
 
 ## Endpoints
 
-| Method | Path          | Auth          | Purpose |
-| ------ | ------------- | ------------- | ------- |
-| GET    | `/health`     | none          | `{status, service, version, timestamp, configured}`. No secrets. |
-| POST   | `/media/sign` | Bearer access token | Returns the signed upload parameters. |
+| Method | Path          | Auth                     | Purpose |
+| ------ | ------------- | ------------------------ | ------- |
+| GET    | `/health`     | none                     | `{status, service, version, timestamp, configured, mailConfigured}`. No secrets. |
+| POST   | `/media/sign` | `Bearer <accessToken>`   | Returns Cloudinary signed upload parameters. |
+| POST   | `/mail/send`  | `X-Relay-Key: <secret>`  | Server-to-server email relay for signup OTP codes. Rejects browser `Origin` headers. |
+| GET    | `/mail/diag`  | `X-Relay-Key` or `?key=` | Owner self-test for Gmail SMTP ports (`465`/`587`) and optional `&to=you@gmail.com` test email. |
 
-`POST /media/sign` body: `{}` (what the current frontend sends) or `{"purpose": "chat|voice|avatar|story|group"}`.
-Default purpose is `chat`.
+`POST /media/sign` body: `{}` or `{"purpose": "chat|voice|avatar|story|group|notice"}`. Default purpose is `chat`.
 
-| purpose | Cloudinary folder |
-| ------- | ----------------- |
-| chat (default) | `sync/chat` |
-| voice  | `sync/voice` |
-| avatar | `sync/avatars` |
-| story  | `sync/stories` |
-| group  | `sync/groups` |
+## Configuration (`config.py`)
 
-Status codes: `200` ok, `400` bad body/purpose, `401` missing/invalid/expired/refresh token
-(the frontend refreshes its token on 401 and retries once), `403` origin not allowed, `413` body too big,
-`429` rate limited, `503` service not configured / SDK unavailable.
+Copy `config.example.py` to `config.py` and fill in your values (never commit `config.py`):
 
-## Security summary
+- **Media Signing**:
+  - `JWT_SECRET` — Must match `JWT_SECRET` on Render exactly.
+  - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
+  - `ALLOWED_ORIGINS` — e.g. `"https://sync-5lfm.onrender.com"`
+- **Signup OTP Mail Relay**:
+  - `GMAIL_USER` — Your Gmail address (e.g. `"sync93346@gmail.com"`)
+  - `GMAIL_APP_PASSWORD` — 16-character Google App Password (from Google Account → Security → 2-Step Verification → App passwords)
+  - `MAIL_RELAY_SECRET` — Random secret string (24+ characters); must match `MAIL_RELAY_SECRET` on Render exactly.
 
-* JWT: HS256 only, same `JWT_SECRET` as the Node backend, `exp` required, small clock-skew leeway (10 s),
-  refresh tokens (`tokenType: "refresh"`) refused, user id must be a 24-hex Mongo id.
-* CORS: explicit allow-list (`ALLOWED_ORIGINS`), never `*`; plain `http` only for localhost; unknown browser origins get 403.
-* Rate limits (in memory, fine for one PythonAnywhere worker): per user (`RATE_LIMIT_PER_MINUTE`) and per IP for failed auth.
-* Fails closed: missing/invalid configuration -> `/media/sign` answers 503; `/health` still works and reports `configured: false`.
-* No debug mode, no stack traces in responses, secrets are never logged or returned.
-* What it cannot enforce: file *size* (Cloudinary signed uploads cannot cap size; the frontend limit is 25 MB and the
-  Cloudinary account/plan limits apply) and, unless `ENFORCE_ALLOWED_FORMATS` is on, file *type*.
-
-## Configuration
-
-Copy `config.example.py` to `config.py` and fill it in (never commit `config.py`). Environment variables with the
-same names override `config.py`. Required: `JWT_SECRET`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`,
-`CLOUDINARY_API_SECRET`. Recommended: `ALLOWED_ORIGINS`. Optional values are documented inside `config.example.py`.
-
-## Local development
+## Self-Check & Diagnostics
 
 ```bash
-python -m venv venv && source venv/bin/activate      # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-cp config.example.py config.py                       # fill in values
-python verify_install.py                             # self-check
-python app.py                                        # http://127.0.0.1:5001/health
-python -m unittest discover -s . -t . -p "test_*.py" # run tests (pytest also works)
+python verify_install.py
 ```
 
-To allow the Vite dev server, set `ALLOWED_ORIGINS = "https://sync-5lfm.onrender.com,http://localhost:5173"`.
-
-## Layout
-
-```
-app.py                 Flask app factory + WSGI `app` object (no app.run on import)
-settings.py            config loading/validation (no secrets in logs)
-config.example.py      template; copy to config.py
-pythonanywhere_wsgi.py contents to paste into PythonAnywhere's WSGI file
-verify_install.py      beginner-friendly self-check
-routes/                health.py, media.py
-services/              cloudinary_service.py (signing via the official SDK)
-utils/                 jwt_utils.py, security.py, responses.py
-tests/                 unittest suite
-```
+After reloading your PythonAnywhere Web App, verify in your browser:
+- `https://<YOUR_USERNAME>.pythonanywhere.com/health` → `"configured": true, "mailConfigured": true`
+- `https://<YOUR_USERNAME>.pythonanywhere.com/mail/diag?key=<MAIL_RELAY_SECRET>&to=<YOUR_EMAIL>` → sends a test email and reports port `465`/`587` status.
