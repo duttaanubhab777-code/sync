@@ -102,7 +102,7 @@
     .sync-msg-bubble { max-width: min(86%, 560px); }
 
     .sync-composer-wrap { padding: 6px 10px 10px; padding-bottom: max(10px, var(--safe-bottom)); }
-    .sync-composer-input { font-size: 16px; }
+    .sync-composer-input { font-size: 16px; line-height: 22px; }
 
     .sync-info-drawer { inset: 0; width: 100%; border: 0; border-radius: 0; animation-name: sync-slide-up; }
 

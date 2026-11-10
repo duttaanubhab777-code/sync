@@ -23,7 +23,9 @@ import {
     Lock,
     Loader2,
     MessageSquare,
-    ExternalLink
+    ExternalLink,
+    Volume2,
+    VolumeX
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncBrandBar from "../components/SyncBrandBar.jsx";
@@ -48,6 +50,11 @@ import {
     detectMessageTypeFromFile,
     uploadMediaToCloudinary
 } from "../services/media.js";
+import {
+    isSoundEnabled,
+    playSound,
+    setSoundEnabled
+} from "../services/sounds.js";
 import {
     formatBytes,
     formatChatListTime,
@@ -124,41 +131,55 @@ function MessageLinkContent({ text }) {
     );
 }
 
+// টিক: হোয়াটসঅ্যাপের মতো নয়, আলাদা রঙে আর ছোট ক্যাপসুলের ভেতরে, যাতে সবুজ বাবলেও স্পষ্ট বোঝা যায়
+//   ⏱ পাঠানো হচ্ছে  ·  ✓ সাদা = সার্ভারে গেছে  ·  ✓✓ সাদা = পৌঁছেছে  ·  ✓✓ সোনালি = দেখেছে
 function StatusTick({ status, optimistic, failed }) {
     if (failed) {
         return (
             <span className="sync-tick failed" title="Failed to send">
-                <AlertCircle size={13} />
+                <AlertCircle size={14} />
             </span>
         );
     }
     if (optimistic) {
         return (
             <span className="sync-tick pending" title="Sending...">
-                <Clock size={12} />
+                <Clock size={13} />
             </span>
         );
     }
     if (status === "seen") {
         return (
             <span className="sync-tick seen" title="Seen">
-                <CheckCheck size={15} />
+                <CheckCheck size={16} strokeWidth={2.6} />
             </span>
         );
     }
     if (status === "delivered") {
         return (
             <span className="sync-tick delivered" title="Delivered">
-                <CheckCheck size={15} />
+                <CheckCheck size={16} strokeWidth={2.4} />
             </span>
         );
     }
     return (
         <span className="sync-tick sent" title="Sent">
-            <Check size={14} />
+            <Check size={15} strokeWidth={2.6} />
         </span>
     );
 }
+
+const formatSpeed = bps => {
+    if (!bps || bps < 1) return "";
+    if (bps < 1024 * 1024) return `${(bps / 1024).toFixed(0)} KB/s`;
+    return `${(bps / (1024 * 1024)).toFixed(1)} MB/s`;
+};
+
+const formatEta = seconds => {
+    if (seconds == null) return "";
+    if (seconds < 60) return `${Math.max(1, seconds)}s left`;
+    return `${Math.floor(seconds / 60)}m ${seconds % 60}s left`;
+};
 
 export default function ChatPage() {
     const { conversationId } = useParams();
@@ -188,6 +209,9 @@ export default function ChatPage() {
     const [draftText, setDraftText] = useState("");
     const [uploadingMedia, setUploadingMedia] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
+    const [uploadInfo, setUploadInfo] = useState(null);
+    const [soundOn, setSoundOn] = useState(isSoundEnabled());
+    const composerInputRef = useRef(null);
     const [composerError, setComposerError] = useState("");
     const [showMicrophoneHelp, setShowMicrophoneHelp] = useState(false);
     const [lightboxUrl, setLightboxUrl] = useState(null);
@@ -311,6 +335,14 @@ export default function ChatPage() {
         return true;
     }, [activeConversation, myId]);
 
+    // লেখা বাড়লে ইনপুট বক্স নিজে থেকে উঁচু হয় (সর্বোচ্চ ~5 লাইন), তারপর ভেতরে স্ক্রল
+    useEffect(() => {
+        const el = composerInputRef.current;
+        if (!el) return;
+        el.style.height = "auto";
+        el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
+    }, [draftText, isRecording, activeConversationId]);
+
     const handleTypingChange = val => {
         setDraftText(val);
         if (!activeConversationId) return;
@@ -376,9 +408,17 @@ export default function ChatPage() {
         setComposerError("");
 
         try {
+            setUploadInfo({ name: file.name, size: file.size });
             const media = await uploadMediaToCloudinary(
                 file,
-                setUploadProgress
+                (pct, info) => {
+                    setUploadProgress(pct);
+                    setUploadInfo({
+                        name: file.name,
+                        size: file.size,
+                        ...info
+                    });
+                }
             );
             const msgType = detectMessageTypeFromFile(file);
             const replyTarget = replyingTo;
@@ -408,6 +448,7 @@ export default function ChatPage() {
         } finally {
             setUploadingMedia(false);
             setUploadProgress(0);
+            setUploadInfo(null);
         }
     };
 
@@ -476,9 +517,17 @@ export default function ChatPage() {
                 setUploadingMedia(true);
                 setUploadProgress(0);
                 try {
+                    setUploadInfo({ name: "Voice message", size: audioFile.size });
                     const media = await uploadMediaToCloudinary(
                         audioFile,
-                        setUploadProgress,
+                        (pct, info) => {
+                            setUploadProgress(pct);
+                            setUploadInfo({
+                                name: "Voice message",
+                                size: audioFile.size,
+                                ...info
+                            });
+                        },
                         { purpose: "voice" }
                     );
                     await sendSocketMessage({
@@ -504,6 +553,7 @@ export default function ChatPage() {
                 } finally {
                     setUploadingMedia(false);
                     setUploadProgress(0);
+                    setUploadInfo(null);
                 }
             };
 
@@ -590,6 +640,22 @@ export default function ChatPage() {
                     <SyncBrandBar className="sync-pane-brand" />
                     <h2>Chats</h2>
                     <div className="sync-header-actions">
+                        <button
+                            type="button"
+                            className="sync-icon-btn"
+                            title={soundOn ? "Mute sounds" : "Turn sounds on"}
+                            onClick={() => {
+                                const next = !soundOn;
+                                setSoundEnabled(next);
+                                setSoundOn(next);
+                            }}
+                        >
+                            {soundOn ? (
+                                <Volume2 size={19} />
+                            ) : (
+                                <VolumeX size={19} />
+                            )}
+                        </button>
                         <button
                             type="button"
                             className="sync-icon-btn"
@@ -1145,11 +1211,45 @@ export default function ChatPage() {
 
                             {uploadingMedia && (
                                 <div className="sync-composer-banner uploading">
-                                    <Loader2 size={15} className="spin" />
-                                    <span>
-                                        Uploading media to Cloudinary...{" "}
-                                        {uploadProgress}%
-                                    </span>
+                                    <div className="sync-upload-top">
+                                        <Loader2 size={15} className="spin" />
+                                        <span className="sync-upload-name">
+                                            {uploadInfo?.phase === "processing"
+                                                ? "Finalizing"
+                                                : "Uploading"}{" "}
+                                            {uploadInfo?.name || "file"}
+                                        </span>
+                                        <strong className="sync-upload-pct">
+                                            {uploadProgress}%
+                                        </strong>
+                                    </div>
+                                    <div
+                                        className="sync-upload-bar"
+                                        role="progressbar"
+                                        aria-valuemin={0}
+                                        aria-valuemax={100}
+                                        aria-valuenow={uploadProgress}
+                                    >
+                                        <div
+                                            className="sync-upload-fill"
+                                            style={{ width: `${uploadProgress}%` }}
+                                        />
+                                    </div>
+                                    <div className="sync-upload-meta">
+                                        <span>
+                                            {formatBytes(uploadInfo?.loaded || 0) || "0 B"}
+                                            {" / "}
+                                            {formatBytes(uploadInfo?.total || uploadInfo?.size) || ""}
+                                        </span>
+                                        <span>
+                                            {[
+                                                formatSpeed(uploadInfo?.speed),
+                                                formatEta(uploadInfo?.eta)
+                                            ]
+                                                .filter(Boolean)
+                                                .join(" · ")}
+                                        </span>
+                                    </div>
                                 </div>
                             )}
 
@@ -1230,8 +1330,9 @@ export default function ChatPage() {
                                             </button>
                                         </div>
                                     ) : (
-                                        <input
-                                            type="text"
+                                        <textarea
+                                            ref={composerInputRef}
+                                            rows={1}
                                             className="sync-composer-input"
                                             placeholder="Type a message..."
                                             maxLength={4000}
@@ -1241,6 +1342,20 @@ export default function ChatPage() {
                                                     e.target.value
                                                 )
                                             }
+                                            onKeyDown={e => {
+                                                // কম্পিউটারে Enter = পাঠানো, Shift+Enter = নতুন লাইন। ফোনে Enter নতুন লাইন, পাঠাতে বাটন।
+                                                if (
+                                                    e.key === "Enter" &&
+                                                    !e.shiftKey &&
+                                                    !e.nativeEvent.isComposing &&
+                                                    window.matchMedia(
+                                                        "(pointer: fine)"
+                                                    ).matches
+                                                ) {
+                                                    e.preventDefault();
+                                                    handleSendText(e);
+                                                }
+                                            }}
                                         />
                                     )}
 

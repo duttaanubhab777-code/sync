@@ -1,6 +1,7 @@
 import { io } from "socket.io-client";
 import { getStoredToken, refreshAccessToken } from "./api.js";
 import { store } from "../store/index.js";
+import { playSound } from "./sounds.js";
 import { updateUserRole } from "../store/authSlice.js";
 import {
     addOptimisticMessage,
@@ -106,8 +107,10 @@ export const connectSocket = () => {
         if (myId && senderId !== String(myId)) {
             const cId = String(conversationId || message.conversationId);
             if (activeConvId === cId && document.visibilityState === "visible") {
+                playSound("receive");
                 emitMessageSeen(cId, message._id);
             } else {
+                playSound("notify");
                 socket.emit("message:delivered", { messageId: message._id });
             }
         }
@@ -282,6 +285,7 @@ export const sendSocketMessage = payload => {
     };
 
     store.dispatch(addOptimisticMessage(optimisticMsg));
+    playSound("send");
 
     const wirePayload = {
         conversationId,
@@ -316,6 +320,7 @@ export const sendSocketMessage = payload => {
                         error: ack?.error || "SEND_ERROR"
                     })
                 );
+                playSound("error");
                 resolve(ack || { ok: false, error: "SEND_ERROR" });
             }
         });
