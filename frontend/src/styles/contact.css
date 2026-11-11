@@ -53,3 +53,65 @@
   .sync-contact-brand img{width:27px;height:27px}
   .sync-contact-pill{gap:5px;padding:0 7px;font-size:.67rem}
 }
+
+
+/* Sync × Email Sender collaboration identity */
+.sync-collab-link {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border: 1px solid rgba(0, 237, 100, .22);
+    border-radius: 14px;
+    background: linear-gradient(145deg, rgba(0, 237, 100, .12), rgba(74, 184, 238, .1), rgba(255, 155, 67, .1));
+    color: #75e9bb;
+    box-shadow: 0 8px 24px rgba(0, 237, 100, .09), inset 0 1px rgba(255,255,255,.06);
+    animation: sync-float 5s ease-in-out infinite;
+}
+.sync-collab-link svg {
+    filter: drop-shadow(0 0 7px rgba(0, 237, 100, .25));
+}
+.sync-collab-note {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 8px;
+    max-width: 430px;
+    margin: 11px auto 0;
+    color: var(--text-3);
+    font-size: .7rem;
+    line-height: 1.65;
+    text-align: center;
+}
+.sync-collab-note-icon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    margin-top: 1px;
+    color: #75e9bb;
+}
+.sync-collab-note a {
+    color: #8edfc2;
+    font-weight: 750;
+    text-decoration: none;
+    text-underline-offset: 3px;
+}
+.sync-collab-note a:hover {
+    color: #ffb36f;
+    text-decoration: underline;
+}
+@media(max-width:560px) {
+    .sync-collab-link {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+    }
+    .sync-collab-link svg { width: 21px; height: 21px; }
+    .sync-collab-note {
+        max-width: 310px;
+        font-size: .66rem;
+    }
+}
+@media(prefers-reduced-motion:reduce) {
+    .sync-collab-link { animation: none; }
+}
