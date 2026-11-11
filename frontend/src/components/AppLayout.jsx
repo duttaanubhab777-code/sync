@@ -160,17 +160,6 @@ export default function AppLayout() {
                         </NavLink>
 
                         <NavLink
-                            to="/contact"
-                            className={navClass}
-                            title="Contact Sync"
-                        >
-                            <div className="sync-nav-icon-wrap">
-                                <Mail size={21} />
-                            </div>
-                            <span className="sync-nav-label">Contact</span>
-                        </NavLink>
-
-                        <NavLink
                             to="/profile"
                             className={navClass}
                             title="Profile"

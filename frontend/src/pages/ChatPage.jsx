@@ -25,7 +25,8 @@ import {
     MessageSquare,
     ExternalLink,
     Volume2,
-    VolumeX
+    VolumeX,
+    Mail
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncBrandBar from "../components/SyncBrandBar.jsx";
@@ -655,6 +656,15 @@ export default function ChatPage() {
                             ) : (
                                 <VolumeX size={19} />
                             )}
+                        </button>
+                        <button
+                            type="button"
+                            className="sync-icon-btn"
+                            title="Contact Sync"
+                            aria-label="Contact Sync"
+                            onClick={() => navigate("/contact")}
+                        >
+                            <Mail size={19} />
                         </button>
                         <button
                             type="button"
