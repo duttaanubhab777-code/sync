@@ -14,6 +14,7 @@
 @media(prefers-reduced-motion:reduce){.sync-contact-aurora i,.sync-contact-dust i,.sync-contact-bar i,.sync-cf-send:after{animation:none}}
 
 .sync-contact-nav,.sync-contact-main{position:relative;z-index:1}
+<<<<<<< HEAD
 
 /* ===== contact.html থেকে আনা অ্যানিমেশন ===== */
 @keyframes sync-burst{0%{opacity:1;transform:rotate(var(--a)) translateY(-30px) scale(1)}100%{opacity:0;transform:rotate(var(--a)) translateY(-70px) scale(.3)}}
@@ -35,3 +36,5 @@
 .sync-cf-badge .sync-es-fallback{fill:#ff9b43}
 .sync-cf-badge:hover img,.sync-cf-badge:hover .sync-es-fallback{transform:rotate(-10deg) scale(1.12)}
 @media(prefers-reduced-motion:reduce){.sync-cf-sparks i,.sync-contact-card.is-busy .sync-cf-plane,.sync-collab-tile{animation:none}}
+=======
+>>>>>>> 9e5b82c4e6af81ff0dcffbb621175906d2243d99

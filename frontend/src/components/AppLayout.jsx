@@ -9,7 +9,8 @@ import {
     Crown,
     Power,
     WifiOff,
-    Loader2
+    Loader2,
+    Mail
 } from "lucide-react";
 import Avatar from "./Avatar.jsx";
 import SyncLogo from "./SyncLogo.jsx";

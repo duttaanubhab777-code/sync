@@ -26,6 +26,7 @@
   <a href="#overview">Overview</a> ·
   <a href="#screenshots">Screenshots</a> ·
   <a href="#features">Features</a> ·
+  <a href="#contact">Contact</a> ·
   <a href="#architecture">Architecture</a> ·
   <a href="#getting-started">Getting Started</a> ·
   <a href="#deployment">Deployment</a> ·
@@ -114,6 +115,16 @@ The interface uses a dark green theme drawn from the Sync logo, is fully respons
 - Smooth animations and a consistent **Sync green gradient** theme
 - Responsive layout for phones, tablets and desktops
 - **Installable PWA** with a service worker, maskable icons and a clean "Sync" app name
+
+<a id="contact"></a>
+<img src="docs/assets/headers/contact.svg" alt="Contact Sync" height="64"/>
+
+The public **Contact Sync** page is available at **[`/contact`](https://sync-5lfm.onrender.com/contact)**. Anyone can submit their name, email address, subject and message without signing in. Submissions are sent through the Email Sender service to the inbox configured for the supplied Email Sender access key.
+
+- The page is public and is not part of the login or registration forms.
+- The Email Sender access key is used in the browser, so it is visible to visitors. Use a key intended for public client-side forms, with provider-side restrictions and rate limits where available.
+- The contact form includes basic validation, a hidden anti-spam field and a local retry outbox for temporary network failures.
+- See [Contact page setup](docs/CONTACT_PAGE_SETUP.md) for the Email Sender configuration.
 
 <a id="architecture"></a>
 <img src="docs/assets/headers/architecture.svg" alt="Architecture" height="64"/>
