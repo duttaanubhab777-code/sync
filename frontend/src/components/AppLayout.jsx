@@ -103,29 +103,31 @@ export default function AppLayout() {
                 </div>
             )}
 
-            <header className="sync-global-topbar" aria-label="Quick actions">
-                <div className="sync-global-topbar-spacer" />
-                <div className="sync-global-topbar-actions">
-                    <button
-                        type="button"
-                        className="sync-global-topbar-action"
-                        onClick={() => navigate("/contact")}
-                        title="Contact Sync"
-                        aria-label="Contact Sync"
-                    >
-                        <Mail size={17} />
-                    </button>
-                    <button
-                        type="button"
-                        className="sync-global-topbar-action"
-                        onClick={() => setConfirmLogout(true)}
-                        title="Sign out"
-                        aria-label="Sign out"
-                    >
-                        <LogOut size={17} />
-                    </button>
-                </div>
-            </header>
+            {!location.pathname.startsWith("/chats") && (
+                <header className="sync-global-topbar" aria-label="Quick actions">
+                    <div className="sync-global-topbar-spacer" />
+                    <div className="sync-global-topbar-actions">
+                        <button
+                            type="button"
+                            className="sync-global-topbar-action"
+                            onClick={() => navigate("/contact")}
+                            title="Contact Sync"
+                            aria-label="Contact Sync"
+                        >
+                            <Mail size={17} />
+                        </button>
+                        <button
+                            type="button"
+                            className="sync-global-topbar-action"
+                            onClick={() => setConfirmLogout(true)}
+                            title="Sign out"
+                            aria-label="Sign out"
+                        >
+                            <LogOut size={17} />
+                        </button>
+                    </div>
+                </header>
+            )}
 
             <div className="sync-main-frame">
                 <aside className="sync-nav-rail">
