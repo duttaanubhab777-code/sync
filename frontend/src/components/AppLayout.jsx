@@ -10,8 +10,7 @@ import {
     Power,
     WifiOff,
     Loader2,
-    Mail,
-    LogOut
+    Mail
 } from "lucide-react";
 import Avatar from "./Avatar.jsx";
 import SyncLogo from "./SyncLogo.jsx";
@@ -171,34 +170,20 @@ export default function AppLayout() {
                             <span className="sync-nav-label">Profile</span>
                         </NavLink>
 
-                        <NavLink
-                            to="/contact"
-                            className={navClass}
-                            title="Contact"
-                            aria-label="Contact Sync"
-                        >
-                            <div className="sync-nav-icon-wrap">
-                                <Mail size={20} />
-                            </div>
-                            <span className="sync-nav-label">Contact</span>
-                        </NavLink>
 
-                        <button
-                            type="button"
-                            className="sync-nav-item sync-nav-logout"
-                            onClick={() => setConfirmLogout(true)}
-                            title="Sign out"
-                            aria-label="Sign out"
-                        >
-                            <div className="sync-nav-icon-wrap">
-                                <LogOut size={19} />
-                            </div>
-                            <span className="sync-nav-label">Logout</span>
-                        </button>
                     </nav>
 
                     <div className="sync-nav-footer">
                         <EnableNotifications />
+                        <button
+                            type="button"
+                            className="sync-nav-logout"
+                            onClick={() => setConfirmLogout(true)}
+                            title="Sign out"
+                            aria-label="Sign out"
+                        >
+                            <Power size={19} />
+                        </button>
                         <button
                             type="button"
                             className="sync-nav-user-btn"
