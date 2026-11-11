@@ -59,9 +59,22 @@
     }
 
     .sync-nav-item.active { flex: 2; }
+    .sync-nav-logout {
+        flex: 1;
+        width: auto;
+        height: 100%;
+        min-width: 0;
+        border: 0;
+        border-radius: 20px;
+        background: transparent;
+        color: var(--text-3);
+    }
+    .sync-nav-logout:hover {
+        background: rgba(255, 93, 108, 0.14);
+        color: var(--danger);
+    }
     .sync-nav-label { display: none; font-size: 0.82rem; }
     .sync-nav-item.active .sync-nav-label { display: inline; animation: sync-fade 0.25s both; }
-    .sync-app-shell.in-chat .sync-nav-rail { display: none; }
 
     /* ----- panes ----- */
     .sync-workspace { min-height: 0; overflow: hidden; }
