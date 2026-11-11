@@ -57,20 +57,30 @@
 
 /* Sync × Email Sender collaboration identity */
 .sync-collab-link {
-    width: 42px;
-    height: 42px;
-    display: grid;
-    place-items: center;
-    flex: 0 0 auto;
-    border: 1px solid rgba(0, 237, 100, .22);
-    border-radius: 14px;
-    background: linear-gradient(145deg, rgba(0, 237, 100, .12), rgba(74, 184, 238, .1), rgba(255, 155, 67, .1));
-    color: #75e9bb;
-    box-shadow: 0 8px 24px rgba(0, 237, 100, .09), inset 0 1px rgba(255,255,255,.06);
+    width: 54px;
+    height: 54px;
+    min-width: 54px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 54px;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    border: 1px solid rgba(0, 237, 100, .28);
+    border-radius: 17px;
+    background: linear-gradient(145deg, rgba(0, 237, 100, .14), rgba(74, 184, 238, .12), rgba(255, 155, 67, .12));
+    color: #8af0c8;
+    box-shadow: 0 9px 26px rgba(0, 237, 100, .12), inset 0 1px rgba(255,255,255,.08);
     animation: sync-float 5s ease-in-out infinite;
 }
 .sync-collab-link svg {
-    filter: drop-shadow(0 0 7px rgba(0, 237, 100, .25));
+    display: block;
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    margin: 0;
+    filter: drop-shadow(0 0 8px rgba(0, 237, 100, .28));
 }
 .sync-collab-note {
     display: flex;
@@ -102,11 +112,17 @@
 }
 @media(max-width:560px) {
     .sync-collab-link {
-        width: 36px;
-        height: 36px;
-        border-radius: 12px;
+        width: 46px;
+        height: 46px;
+        min-width: 46px;
+        flex-basis: 46px;
+        border-radius: 15px;
     }
-    .sync-collab-link svg { width: 21px; height: 21px; }
+    .sync-collab-link svg {
+        width: 29px;
+        height: 29px;
+        flex-basis: 29px;
+    }
     .sync-collab-note {
         max-width: 310px;
         font-size: .66rem;
