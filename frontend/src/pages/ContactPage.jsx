@@ -14,7 +14,8 @@ import {
     ShieldCheck,
     RefreshCw,
     CircleAlert,
-    Power
+    Power,
+    Handshake
 } from "lucide-react";
 import {
     EMAIL_SENDER_BASE,
@@ -224,12 +225,8 @@ export default function ContactPage() {
                                     draggable="false"
                                 />
                             </span>
-                            <span className="sync-collab-link">
-                                <i />
-                                <i />
-                                <i />
-                                <i />
-                                <i />
+                            <span className="sync-collab-link" title="Collaboration">
+                                <Handshake size={25} strokeWidth={2.1} />
                             </span>
                             <span className="sync-collab-tile es">
                                 <EmailSenderMark />
@@ -429,6 +426,24 @@ export default function ContactPage() {
                             <span className="orange">Sender</span>
                         </b>
                     </a>
+
+                    <p className="sync-collab-note">
+                        <span className="sync-collab-note-icon">
+                            <Handshake size={15} />
+                        </span>
+                        <span>
+                            A little collaboration, a better connection.
+                            {" "}
+                            <a
+                                href={EMAIL_SENDER_BASE}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                Sync × Email Sender
+                            </a>
+                            {" "}— keeping your messages moving.
+                        </span>
+                    </p>
                 </form>
 
                 <ul className="sync-contact-assure">
