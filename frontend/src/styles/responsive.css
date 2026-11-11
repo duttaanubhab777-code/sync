@@ -48,6 +48,7 @@
     .sync-nav-brand,
     .sync-nav-footer { display: none; }
     .sync-app-shell.in-chat .sync-nav-rail { display: none; }
+    .sync-app-shell.in-chat .sync-nav-rail { display: none; }
     .sync-nav-links { flex: 1; flex-direction: row; gap: 6px; }
 
     .sync-nav-item {
