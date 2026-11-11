@@ -13,13 +13,16 @@ import {
     Send,
     ShieldCheck,
     RefreshCw,
-    CircleAlert
+    CircleAlert,
+    Power
 } from "lucide-react";
 import {
     EMAIL_SENDER_BASE,
     EMAIL_SENDER_LOGO,
     EMAIL_SENDER_LOGO_FALLBACK
 } from "../config/contact.js";
+import ConfirmDialog from "../components/ConfirmDialog.jsx";
+import useSignOut from "../hooks/useSignOut.js";
 import {
     contactErrorMessage,
     flushContactOutbox,
@@ -68,6 +71,14 @@ export default function ContactPage() {
     const [sent, setSent] = useState(false);
     const [error, setError] = useState("");
     const doneRef = useRef(null);
+    const signOut = useSignOut();
+    const [confirmLogout, setConfirmLogout] = useState(false);
+    const [loggingOut, setLoggingOut] = useState(false);
+
+    const handleConfirmLogout = async () => {
+        setLoggingOut(true);
+        await signOut();
+    };
 
     // আগের না-যাওয়া মেসেজ আবার পাঠানো (ট্যাব বন্ধ/অফলাইন থাকলে)
     useEffect(() => {
@@ -155,10 +166,21 @@ export default function ContactPage() {
                 </Link>
                 <nav className="sync-contact-nav-links" aria-label="Account">
                     {isAuthenticated ? (
-                        <Link to="/chats" className="sync-contact-pill">
-                            <MessageCircle size={15} />
-                            <span>Open Sync</span>
-                        </Link>
+                        <>
+                            <Link to="/chats" className="sync-contact-pill">
+                                <MessageCircle size={15} />
+                                <span>Open Sync</span>
+                            </Link>
+                            <button
+                                type="button"
+                                className="sync-contact-pill sync-contact-logout"
+                                onClick={() => setConfirmLogout(true)}
+                                aria-label="Sign out of Sync"
+                            >
+                                <Power size={15} />
+                                <span>Logout</span>
+                            </button>
+                        </>
                     ) : (
                         <>
                             <Link to="/login" className="sync-contact-pill">
@@ -420,6 +442,18 @@ export default function ContactPage() {
                     </li>
                 </ul>
             </main>
+
+            {confirmLogout && (
+                <ConfirmDialog
+                    icon={Power}
+                    title="Sign out of Sync?"
+                    message="You will need to sign in again to read your chats and stories."
+                    confirmLabel="Sign out"
+                    busy={loggingOut}
+                    onConfirm={handleConfirmLogout}
+                    onCancel={() => setConfirmLogout(false)}
+                />
+            )}
         </div>
     );
 }
