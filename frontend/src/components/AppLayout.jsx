@@ -10,7 +10,8 @@ import {
     Power,
     WifiOff,
     Loader2,
-    Mail
+    Mail,
+    LogOut
 } from "lucide-react";
 import Avatar from "./Avatar.jsx";
 import SyncLogo from "./SyncLogo.jsx";
@@ -101,6 +102,30 @@ export default function AppLayout() {
                     <span>Connection lost. Trying to reconnect...</span>
                 </div>
             )}
+
+            <header className="sync-global-topbar" aria-label="Quick actions">
+                <div className="sync-global-topbar-spacer" />
+                <div className="sync-global-topbar-actions">
+                    <button
+                        type="button"
+                        className="sync-global-topbar-action"
+                        onClick={() => navigate("/contact")}
+                        title="Contact Sync"
+                        aria-label="Contact Sync"
+                    >
+                        <Mail size={17} />
+                    </button>
+                    <button
+                        type="button"
+                        className="sync-global-topbar-action"
+                        onClick={() => setConfirmLogout(true)}
+                        title="Sign out"
+                        aria-label="Sign out"
+                    >
+                        <LogOut size={17} />
+                    </button>
+                </div>
+            </header>
 
             <div className="sync-main-frame">
                 <aside className="sync-nav-rail">
