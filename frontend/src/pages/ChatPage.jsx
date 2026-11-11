@@ -26,10 +26,13 @@ import {
     ExternalLink,
     Volume2,
     VolumeX,
-    Mail
+    Mail,
+    LogOut
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncBrandBar from "../components/SyncBrandBar.jsx";
+import ConfirmDialog from "../components/ConfirmDialog.jsx";
+import useSignOut from "../hooks/useSignOut.js";
 import {
     NewDirectChatModal,
     NewGroupChatModal,
@@ -186,6 +189,14 @@ export default function ChatPage() {
     const { conversationId } = useParams();
     const navigate = useNavigate();
     const dispatch = useDispatch();
+    const signOut = useSignOut();
+    const [confirmLogout, setConfirmLogout] = useState(false);
+    const [loggingOut, setLoggingOut] = useState(false);
+
+    const handleConfirmLogout = async () => {
+        setLoggingOut(true);
+        await signOut();
+    };
 
     const currentUser = useSelector(state => state.auth.user);
     const {
@@ -681,6 +692,16 @@ export default function ChatPage() {
                             onClick={() => setShowNewGroup(true)}
                         >
                             <Users size={19} />
+                        </button>
+
+                        <button
+                            type="button"
+                            className="sync-icon-btn sync-chat-signout-btn"
+                            title="Sign out"
+                            aria-label="Sign out"
+                            onClick={() => setConfirmLogout(true)}
+                        >
+                            <LogOut size={19} />
                         </button>
                     </div>
                 </div>
@@ -1432,6 +1453,18 @@ export default function ChatPage() {
                     </button>
                     <img src={lightboxUrl} alt="Full view" />
                 </div>
+            )}
+
+            {confirmLogout && (
+                <ConfirmDialog
+                    icon={LogOut}
+                    title="Sign out of Sync?"
+                    message="You will need to sign in again to read your chats and stories."
+                    confirmLabel="Sign out"
+                    busy={loggingOut}
+                    onConfirm={handleConfirmLogout}
+                    onCancel={() => setConfirmLogout(false)}
+                />
             )}
         </div>
     );
