@@ -11,7 +11,6 @@ import {
     Tag,
     MessageSquareText,
     Send,
-    Loader2,
     ShieldCheck,
     RefreshCw,
     CircleAlert
@@ -32,7 +31,7 @@ const MAX_MESSAGE = 1000;
 const SPARKS = [0, 45, 90, 135, 180, 225, 270, 315];
 
 // Email Sender লোগো: প্রথম URL → fallback URL → ইনলাইন SVG
-function EmailSenderMark() {
+function EmailSenderMark({ size = 88 }) {
     const [stage, setStage] = useState(0);
     if (stage >= 2) {
         return (
@@ -45,8 +44,8 @@ function EmailSenderMark() {
         <img
             src={stage === 0 ? EMAIL_SENDER_LOGO : EMAIL_SENDER_LOGO_FALLBACK}
             alt="Email Sender"
-            width="88"
-            height="88"
+            width={size}
+            height={size}
             decoding="async"
             referrerPolicy="no-referrer"
             onError={() => setStage(s => s + 1)}
@@ -354,11 +353,7 @@ export default function ContactPage() {
                                 <span className="sync-cf-send-text">
                                     {busy ? "Sending..." : "Send message"}
                                 </span>
-                                {busy ? (
-                                    <Loader2 size={19} className="spin" />
-                                ) : (
-                                    <Send size={19} className="sync-cf-plane" />
-                                )}
+                                <Send size={19} className="sync-cf-plane" />
                             </button>
                         </div>
                     )}
@@ -406,6 +401,7 @@ export default function ContactPage() {
                         rel="noopener noreferrer"
                     >
                         <span>Powered by</span>
+                        <EmailSenderMark size={34} />
                         <b>
                             <span className="blue">Email</span>{" "}
                             <span className="orange">Sender</span>

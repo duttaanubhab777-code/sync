@@ -59,6 +59,12 @@ const originOf = url => {
     }
 };
 const pythonOrigin = originOf(process.env.PYTHON_SERVICE_URL);
+// Contact page ফর্ম browser থেকে সরাসরি Email Sender API-তে POST করে।
+// এই origin connect-src-তে না থাকলে browser request ব্লক করে দেয় (মেইল যায় না, অথচ ফর্মে "sent" দেখায়)।
+const DEFAULT_EMAIL_SENDER_URL = "https://email-sender-wy5o.onrender.com";
+const emailSenderOrigin = originOf(
+    process.env.EMAIL_SENDER_URL || DEFAULT_EMAIL_SENDER_URL
+);
 const allowInlineScripts = process.env.ALLOW_INLINE_SCRIPTS === "true";
 
 app.use(
@@ -91,7 +97,8 @@ app.use(
                     "ws:",
                     "wss:",
                     "https://api.cloudinary.com",
-                    ...(pythonOrigin ? [pythonOrigin] : [])
+                    ...(pythonOrigin ? [pythonOrigin] : []),
+                    ...(emailSenderOrigin ? [emailSenderOrigin] : [])
                 ],
                 "upgrade-insecure-requests": isProd() ? [] : null
             }
