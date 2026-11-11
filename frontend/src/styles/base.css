@@ -241,9 +241,47 @@ input[type="checkbox"] {
 .sync-brandbar {
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+}
+
+.sync-brandbar-identity {
+    display: flex;
+    align-items: center;
     gap: 9px;
     min-width: 0;
 }
+
+.sync-brandbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-left: auto;
+}
+
+.sync-brandbar-action {
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    background: var(--bg-2);
+    color: var(--text-2);
+    transition: color .18s, background .18s, border-color .18s, transform .18s;
+}
+
+.sync-brandbar-action:hover {
+    color: var(--mongo);
+    background: var(--bg-3);
+    border-color: rgba(0, 237, 100, .32);
+}
+
+.sync-brandbar-action:active { transform: scale(.94); }
 
 .sync-brandbar-name {
     font-size: 1.28rem;
