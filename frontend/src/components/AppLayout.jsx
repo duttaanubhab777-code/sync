@@ -126,8 +126,8 @@ export default function AppLayout() {
                             <LogOut size={17} />
                         </button>
                     </div>
-             
-            )}   </header>
+                </header>
+            )}
 
             <div className="sync-main-frame">
                 <aside className="sync-nav-rail">
