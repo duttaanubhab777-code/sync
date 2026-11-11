@@ -226,7 +226,7 @@ export default function ContactPage() {
                                 />
                             </span>
                             <span className="sync-collab-link" title="Collaboration">
-                                <Handshake size={25} strokeWidth={2.1} />
+                                <Handshake size={34} strokeWidth={2.15} />
                             </span>
                             <span className="sync-collab-tile es">
                                 <EmailSenderMark />
