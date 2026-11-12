@@ -606,24 +606,157 @@
 .sync-send-btn:hover { transform: scale(1.06) rotate(-6deg); }
 .sync-send-btn:active { transform: scale(0.92); }
 
-.sync-recording-indicator {
-    align-self: center;
+/* ---------- voice recorder (delete · pause · send) ---------- */
+.sync-voice-rec {
     flex: 1;
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 6px 8px 6px 14px;
-    border-radius: 22px;
-    background: rgba(255, 93, 108, 0.1);
-    color: #ff9aa4;
-    font-size: 0.88rem;
-    font-weight: 600;
+    gap: 6px;
+    animation: sync-voice-in 0.38s var(--ease) both;
+    transform-origin: right center;
 }
 
-.sync-recording-indicator .sync-btn { margin-left: auto; }
+.sync-voice-panel {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 14px;
+    overflow: hidden;
+    border-radius: 22px;
+    background: rgba(255, 93, 108, 0.1);
+    box-shadow: inset 0 0 0 1px rgba(255, 93, 108, 0.18);
+    color: #ffb3ba;
+    transition: background-color 0.3s, box-shadow 0.3s, color 0.3s;
+}
+
+/* soft red glow that breathes while recording */
+.sync-voice-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(120% 140% at 0% 50%, rgba(255, 93, 108, 0.22), transparent 60%);
+    opacity: 0;
+    animation: sync-voice-breathe 2.2s ease-in-out infinite;
+    pointer-events: none;
+}
+
+.sync-voice-time {
+    position: relative;
+    flex: 0 0 auto;
+    min-width: 38px;
+    font-size: 0.92rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+}
+
+.sync-voice-wave {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 2px;
+    overflow: hidden;
+}
+
+.sync-voice-wave span {
+    flex: 0 0 3px;
+    width: 3px;
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(180deg, #ff8a95, #ff5d6c);
+    transform: scaleY(0.08);
+    transition: transform 0.09s linear, background-color 0.3s;
+    will-change: transform;
+}
+
+.sync-voice-btn {
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+    transition: transform 0.18s var(--ease), background-color 0.2s, color 0.2s;
+    animation: sync-pop 0.3s var(--ease) both;
+}
+
+.sync-voice-btn:disabled { cursor: default; }
+.sync-voice-btn:active:not(:disabled) { transform: scale(0.88); }
+.sync-voice-btn svg { animation: sync-pop 0.28s var(--ease) both; }
+
+.sync-voice-btn.delete:hover:not(:disabled) { background: rgba(255, 93, 108, 0.16); color: var(--danger); }
+.sync-voice-btn.delete:hover:not(:disabled) svg { animation: sync-voice-wiggle 0.5s ease; }
+
+.sync-voice-btn.pause { background: var(--bg-3); color: var(--text); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.sync-voice-btn.pause:hover:not(:disabled) { background: rgba(0, 237, 100, 0.16); color: var(--mongo); }
+
+.sync-voice-send { animation: sync-pop 0.36s 0.06s var(--ease) both; }
+.sync-voice-send::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 2px solid rgba(0, 237, 100, 0.65);
+    animation: sync-ping 1.8s ease-out infinite;
+    pointer-events: none;
+}
+.sync-voice-send:disabled { opacity: 0.6; }
+
+/* paused state: calm everything down */
+.sync-voice-rec.paused .sync-voice-panel {
+    background: rgba(255, 196, 77, 0.1);
+    box-shadow: inset 0 0 0 1px rgba(255, 196, 77, 0.22);
+    color: #ffd98a;
+}
+.sync-voice-rec.paused .sync-voice-panel::before { animation: none; opacity: 0; }
+.sync-voice-rec.paused .rec-dot { background: #ffc44d; animation: none; }
+.sync-voice-rec.paused .sync-voice-time { animation: sync-pulse 1.1s ease-in-out infinite; }
+.sync-voice-rec.paused .sync-voice-wave span { background: #ffc44d; opacity: 0.7; }
+.sync-voice-rec.paused .sync-voice-send::after { animation: none; opacity: 0; }
+
+.sync-voice-rec.recording .sync-voice-btn.pause svg { color: var(--text); }
+
+/* delete: panel crumples away to the left, trash does a little lid-shake */
+.sync-voice-rec.discarding { pointer-events: none; }
+.sync-voice-rec.discarding .sync-voice-panel { animation: sync-voice-discard 0.38s var(--ease) forwards; }
+.sync-voice-rec.discarding .sync-voice-btn.delete { background: rgba(255, 93, 108, 0.2); color: var(--danger); }
+.sync-voice-rec.discarding .sync-voice-btn.delete svg { animation: sync-voice-wiggle 0.38s ease; }
+.sync-voice-rec.discarding .sync-voice-btn.pause,
+.sync-voice-rec.discarding .sync-voice-send { opacity: 0; transform: scale(0.6); transition: opacity 0.25s, transform 0.25s; }
 
 .rec-dot { position: relative; flex: 0 0 10px; width: 10px; height: 10px; border-radius: 50%; background: var(--danger); animation: sync-pulse 1s infinite; }
+
+@keyframes sync-voice-in { from { opacity: 0; transform: translateX(18px) scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes sync-voice-breathe { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+@keyframes sync-voice-discard {
+    0% { opacity: 1; transform: none; }
+    100% { opacity: 0; transform: translateX(-34px) scale(0.82); }
+}
+@keyframes sync-voice-wiggle {
+    0%, 100% { transform: rotate(0); }
+    25% { transform: rotate(-16deg) scale(1.1); }
+    55% { transform: rotate(13deg) scale(1.1); }
+    80% { transform: rotate(-6deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sync-voice-rec, .sync-voice-btn, .sync-voice-send, .sync-voice-panel::before, .sync-voice-send::after { animation: none !important; }
+    .sync-voice-wave span { transition: none; }
+}
 
 /* ---------- info drawer ---------- */
 .sync-info-drawer {

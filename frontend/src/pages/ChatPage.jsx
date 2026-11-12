@@ -8,7 +8,8 @@ import {
     Send,
     Paperclip,
     Mic,
-    Square,
+    Pause,
+    Play,
     Reply,
     Trash2,
     Info,
@@ -185,6 +186,16 @@ const formatEta = seconds => {
     return `${Math.floor(seconds / 60)}m ${seconds % 60}s left`;
 };
 
+
+const VOICE_BAR_COUNT = 40;
+const MIN_VOICE_MS = 800;
+
+function formatRecTime(totalSeconds) {
+    const m = Math.floor(totalSeconds / 60);
+    const sec = totalSeconds % 60;
+    return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
 export default function ChatPage() {
     const { conversationId } = useParams();
     const navigate = useNavigate();
@@ -228,11 +239,24 @@ export default function ChatPage() {
     const [showMicrophoneHelp, setShowMicrophoneHelp] = useState(false);
     const [lightboxUrl, setLightboxUrl] = useState(null);
 
-    const [isRecording, setIsRecording] = useState(false);
+    // recPhase: "idle" | "recording" | "paused" | "discarding"
+    const [recPhase, setRecPhase] = useState("idle");
     const [recordingSeconds, setRecordingSeconds] = useState(0);
+    const isRecording = recPhase !== "idle";
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
     const recordTimerRef = useRef(null);
+    const recStreamRef = useRef(null);
+    const recAudioCtxRef = useRef(null);
+    const recAnalyserRef = useRef(null);
+    const recRafRef = useRef(0);
+    const recDiscardRef = useRef(false);
+    const recElapsedRef = useRef(0);
+    const recLastTickRef = useRef(0);
+    const recLevelsRef = useRef(new Array(VOICE_BAR_COUNT).fill(0.08));
+    const recBarsRef = useRef([]);
+    const recDiscardTimerRef = useRef(null);
+    const recContextRef = useRef({ conversationId: null, replyingTo: null });
 
     const messagesEndRef = useRef(null);
     const typingStopTimerRef = useRef(null);
@@ -464,7 +488,117 @@ export default function ChatPage() {
         }
     };
 
+    // ---- Voice recording: record → (pause / resume) → Send or Delete ----
+
+    const paintWaveform = () => {
+        const bars = recBarsRef.current;
+        const levels = recLevelsRef.current;
+        for (let i = 0; i < bars.length; i += 1) {
+            const el = bars[i];
+            if (el) el.style.transform = `scaleY(${Math.max(0.08, levels[i] || 0.08)})`;
+        }
+    };
+
+    const teardownRecordingResources = () => {
+        cancelAnimationFrame(recRafRef.current);
+        recRafRef.current = 0;
+        clearInterval(recordTimerRef.current);
+        recordTimerRef.current = null;
+        recStreamRef.current?.getTracks().forEach(track => track.stop());
+        recStreamRef.current = null;
+        recAnalyserRef.current = null;
+        const ctx = recAudioCtxRef.current;
+        recAudioCtxRef.current = null;
+        if (ctx && ctx.state !== "closed") ctx.close().catch(() => {});
+    };
+
+    const startWaveform = stream => {
+        recLevelsRef.current = new Array(VOICE_BAR_COUNT).fill(0.08);
+        paintWaveform();
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (AudioCtx) {
+                const ctx = new AudioCtx();
+                ctx.resume?.().catch(() => {});
+                const analyser = ctx.createAnalyser();
+                analyser.fftSize = 512;
+                ctx.createMediaStreamSource(stream).connect(analyser);
+                recAudioCtxRef.current = ctx;
+                recAnalyserRef.current = analyser;
+            }
+        } catch {
+            recAnalyserRef.current = null;
+        }
+
+        const buffer = new Uint8Array(512);
+        let lastPush = 0;
+        const loop = now => {
+            recRafRef.current = requestAnimationFrame(loop);
+            const recorder = mediaRecorderRef.current;
+            if (!recorder || recorder.state !== "recording") return;
+            if (now - lastPush < 70) return;
+            lastPush = now;
+
+            let level;
+            const analyser = recAnalyserRef.current;
+            if (analyser) {
+                analyser.getByteTimeDomainData(buffer);
+                let sum = 0;
+                for (let i = 0; i < buffer.length; i += 1) {
+                    const v = (buffer[i] - 128) / 128;
+                    sum += v * v;
+                }
+                level = Math.min(1, Math.sqrt(sum / buffer.length) * 4.2);
+            } else {
+                level = 0.2 + Math.random() * 0.5;
+            }
+            const levels = recLevelsRef.current;
+            levels.push(level);
+            levels.shift();
+            paintWaveform();
+        };
+        recRafRef.current = requestAnimationFrame(loop);
+    };
+
+    const uploadAndSendVoice = async (audioFile, conversationId, replyTarget) => {
+        setUploadingMedia(true);
+        setUploadProgress(0);
+        try {
+            setUploadInfo({ name: "Voice message", size: audioFile.size });
+            const media = await uploadMediaToCloudinary(
+                audioFile,
+                (pct, info) => {
+                    setUploadProgress(pct);
+                    setUploadInfo({
+                        name: "Voice message",
+                        size: audioFile.size,
+                        ...info
+                    });
+                },
+                { purpose: "voice" }
+            );
+            await sendSocketMessage({
+                conversationId,
+                clientMsgId: generateClientMsgId(),
+                type: "audio",
+                text: "",
+                media,
+                replyToMessage: replyTarget
+            });
+            if (replyTarget) {
+                dispatch(setReplyTo({ conversationId, message: null }));
+            }
+        } catch (err) {
+            setComposerError(err.message || "Voice message upload failed");
+        } finally {
+            setUploadingMedia(false);
+            setUploadProgress(0);
+            setUploadInfo(null);
+        }
+    };
+
     const startVoiceRecording = async () => {
+        if (recPhase !== "idle") return;
         // getUserMedia requires HTTPS (or localhost) and a user gesture.
         if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
             setComposerError(
@@ -496,88 +630,69 @@ export default function ChatPage() {
             );
             const recordingType = recorder.mimeType || mimeType || "audio/webm";
             audioChunksRef.current = [];
+            recDiscardRef.current = false;
+            recElapsedRef.current = 0;
+            clearTimeout(recDiscardTimerRef.current);
+            recContextRef.current = {
+                conversationId: activeConversationId,
+                replyingTo
+            };
 
             recorder.ondataavailable = evt => {
                 if (evt.data.size > 0) audioChunksRef.current.push(evt.data);
             };
 
             recorder.onerror = () => {
-                stream.getTracks().forEach(track => track.stop());
-                clearInterval(recordTimerRef.current);
-                setIsRecording(false);
+                teardownRecordingResources();
+                recDiscardRef.current = true;
+                setRecPhase("idle");
                 setRecordingSeconds(0);
                 setComposerError("The microphone recording could not be started. Please try again.");
             };
 
-            recorder.onstop = async () => {
-                stream.getTracks().forEach(track => track.stop());
-                clearInterval(recordTimerRef.current);
-                setIsRecording(false);
+            recorder.onstop = () => {
+                // a stale recorder must not tear down a newer recording
+                if (mediaRecorderRef.current === recorder) {
+                    teardownRecordingResources();
+                }
+                const discarded = recDiscardRef.current;
+                const chunks = audioChunksRef.current;
+                audioChunksRef.current = [];
+                if (discarded || chunks.length === 0) return;
+
+                setRecPhase("idle");
                 setRecordingSeconds(0);
 
-                if (audioChunksRef.current.length === 0) return;
-                const blob = new Blob(audioChunksRef.current, {
-                    type: recordingType
-                });
+                const blob = new Blob(chunks, { type: recordingType });
                 const extension = recordingType.includes("mp4") ? "m4a" : "webm";
                 const audioFile = new File(
                     [blob],
                     `voice_${Date.now()}.${extension}`,
                     { type: recordingType }
                 );
-
-                setUploadingMedia(true);
-                setUploadProgress(0);
-                try {
-                    setUploadInfo({ name: "Voice message", size: audioFile.size });
-                    const media = await uploadMediaToCloudinary(
-                        audioFile,
-                        (pct, info) => {
-                            setUploadProgress(pct);
-                            setUploadInfo({
-                                name: "Voice message",
-                                size: audioFile.size,
-                                ...info
-                            });
-                        },
-                        { purpose: "voice" }
-                    );
-                    await sendSocketMessage({
-                        conversationId: activeConversationId,
-                        clientMsgId: generateClientMsgId(),
-                        type: "audio",
-                        text: "",
-                        media,
-                        replyToMessage: replyingTo
-                    });
-                    if (replyingTo) {
-                        dispatch(
-                            setReplyTo({
-                                conversationId: activeConversationId,
-                                message: null
-                            })
-                        );
-                    }
-                } catch (err) {
-                    setComposerError(
-                        err.message || "Voice message upload failed"
-                    );
-                } finally {
-                    setUploadingMedia(false);
-                    setUploadProgress(0);
-                    setUploadInfo(null);
-                }
+                const { conversationId, replyingTo: replyTarget } =
+                    recContextRef.current;
+                uploadAndSendVoice(audioFile, conversationId, replyTarget);
             };
 
             mediaRecorderRef.current = recorder;
+            recStreamRef.current = stream;
             recorder.start();
-            setIsRecording(true);
+            startWaveform(stream);
+            setRecPhase("recording");
             setRecordingSeconds(0);
+            recLastTickRef.current = Date.now();
             recordTimerRef.current = setInterval(() => {
-                setRecordingSeconds(seconds => seconds + 1);
-            }, 1000);
+                const now = Date.now();
+                if (mediaRecorderRef.current?.state === "recording") {
+                    recElapsedRef.current += now - recLastTickRef.current;
+                    setRecordingSeconds(Math.floor(recElapsedRef.current / 1000));
+                }
+                recLastTickRef.current = now;
+            }, 200);
         } catch (err) {
             stream?.getTracks().forEach(track => track.stop());
+            teardownRecordingResources();
             const messages = {
                 NotAllowedError: "Please allow microphone access in your browser to record a voice message.",
                 PermissionDeniedError: "Please allow microphone access in your browser to record a voice message.",
@@ -600,14 +715,83 @@ export default function ChatPage() {
         }
     };
 
-    const stopVoiceRecording = () => {
-        if (
-            mediaRecorderRef.current &&
-            mediaRecorderRef.current.state !== "inactive"
-        ) {
-            mediaRecorderRef.current.stop();
+    const togglePauseVoiceRecording = () => {
+        const recorder = mediaRecorderRef.current;
+        if (!recorder) return;
+        if (recorder.state === "recording") {
+            recElapsedRef.current += Date.now() - recLastTickRef.current;
+            recorder.pause();
+            setRecPhase("paused");
+        } else if (recorder.state === "paused") {
+            recLastTickRef.current = Date.now();
+            recorder.resume();
+            recAudioCtxRef.current?.resume?.().catch(() => {});
+            setRecPhase("recording");
         }
     };
+
+    // Delete: throw the recording away with a short exit animation.
+    const discardVoiceRecording = (silent = false) => {
+        const recorder = mediaRecorderRef.current;
+        recDiscardRef.current = true;
+        audioChunksRef.current = [];
+        if (recorder && recorder.state !== "inactive") {
+            try { recorder.stop(); } catch { /* already stopped */ }
+        }
+        teardownRecordingResources();
+        clearTimeout(recDiscardTimerRef.current);
+        if (silent) {
+            setRecPhase("idle");
+            setRecordingSeconds(0);
+            return;
+        }
+        setRecPhase("discarding");
+        recDiscardTimerRef.current = setTimeout(() => {
+            setRecPhase("idle");
+            setRecordingSeconds(0);
+        }, 380);
+    };
+
+    // Send: only now the voice message is uploaded and delivered.
+    const sendVoiceRecording = () => {
+        const recorder = mediaRecorderRef.current;
+        if (!recorder || recorder.state === "inactive") return;
+        if (recPhase === "recording") {
+            recElapsedRef.current += Date.now() - recLastTickRef.current;
+        }
+        if (recElapsedRef.current < MIN_VOICE_MS) {
+            discardVoiceRecording();
+            setComposerError("Voice message is too short. Hold on a little longer.");
+            return;
+        }
+        recDiscardRef.current = false;
+        recorder.stop();
+    };
+
+    // Leaving the chat (or switching conversation) while recording cancels it.
+    useEffect(() => {
+        return () => {
+            if (mediaRecorderRef.current?.state && mediaRecorderRef.current.state !== "inactive") {
+                recDiscardRef.current = true;
+                try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }
+            }
+            teardownRecordingResources();
+            clearTimeout(recDiscardTimerRef.current);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
+        if (
+            recContextRef.current.conversationId &&
+            String(recContextRef.current.conversationId) !== String(activeConversationId) &&
+            mediaRecorderRef.current?.state &&
+            mediaRecorderRef.current.state !== "inactive"
+        ) {
+            discardVoiceRecording(true);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeConversationId]);
 
     const handleDeleteMessage = async msgId => {
         if (!window.confirm("Delete this message for everyone?")) return;
@@ -1384,34 +1568,96 @@ export default function ChatPage() {
                                     className="sync-composer-bar"
                                     onSubmit={handleSendText}
                                 >
-                                    <label
-                                        className="sync-icon-btn"
-                                        title="Attach Image, Video, Audio or File"
-                                    >
-                                        <Paperclip size={20} />
-                                        <input
-                                            type="file"
-                                            hidden
-                                            onChange={handleFileAttachment}
-                                            disabled={
-                                                uploadingMedia || isRecording
-                                            }
-                                        />
-                                    </label>
+                                    {recPhase === "idle" && (
+                                        <label
+                                            className="sync-icon-btn"
+                                            title="Attach Image, Video, Audio or File"
+                                        >
+                                            <Paperclip size={20} />
+                                            <input
+                                                type="file"
+                                                hidden
+                                                onChange={handleFileAttachment}
+                                                disabled={uploadingMedia}
+                                            />
+                                        </label>
+                                    )}
 
                                     {isRecording ? (
-                                        <div className="sync-recording-indicator">
-                                            <span className="rec-dot" />
-                                            <span>
-                                                Recording voice...{" "}
-                                                {recordingSeconds}s
-                                            </span>
+                                        <div
+                                            className={`sync-voice-rec ${recPhase}`}
+                                            role="group"
+                                            aria-label="Voice message recorder"
+                                        >
                                             <button
                                                 type="button"
-                                                className="sync-btn danger xs"
-                                                onClick={stopVoiceRecording}
+                                                className="sync-voice-btn delete"
+                                                title="Delete recording"
+                                                aria-label="Delete recording"
+                                                onClick={() => discardVoiceRecording()}
+                                                disabled={recPhase === "discarding"}
                                             >
-                                                <Square size={13} /> Stop & Send
+                                                <Trash2 size={19} />
+                                            </button>
+
+                                            <div className="sync-voice-panel">
+                                                <span className="rec-dot" />
+                                                <span
+                                                    className="sync-voice-time"
+                                                    aria-live="off"
+                                                >
+                                                    {formatRecTime(recordingSeconds)}
+                                                </span>
+                                                <div
+                                                    className="sync-voice-wave"
+                                                    aria-hidden="true"
+                                                >
+                                                    {Array.from(
+                                                        { length: VOICE_BAR_COUNT },
+                                                        (_, i) => (
+                                                            <span
+                                                                key={i}
+                                                                ref={el => {
+                                                                    recBarsRef.current[i] = el;
+                                                                }}
+                                                            />
+                                                        )
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <button
+                                                type="button"
+                                                className="sync-voice-btn pause"
+                                                title={
+                                                    recPhase === "paused"
+                                                        ? "Resume recording"
+                                                        : "Pause recording"
+                                                }
+                                                aria-label={
+                                                    recPhase === "paused"
+                                                        ? "Resume recording"
+                                                        : "Pause recording"
+                                                }
+                                                onClick={togglePauseVoiceRecording}
+                                                disabled={recPhase === "discarding"}
+                                            >
+                                                {recPhase === "paused" ? (
+                                                    <Play key="play" size={19} />
+                                                ) : (
+                                                    <Pause key="pause" size={19} />
+                                                )}
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                className="sync-send-btn sync-voice-send"
+                                                title="Send voice message"
+                                                aria-label="Send voice message"
+                                                onClick={sendVoiceRecording}
+                                                disabled={recPhase === "discarding"}
+                                            >
+                                                <Send size={18} />
                                             </button>
                                         </div>
                                     ) : (
@@ -1444,18 +1690,18 @@ export default function ChatPage() {
                                         />
                                     )}
 
-                                    {!draftText.trim() && !isRecording ? (
-                                        <button
-                                            type="button"
-                                            className="sync-icon-btn"
-                                            title="Record Voice Note"
-                                            onClick={startVoiceRecording}
-                                            disabled={uploadingMedia}
-                                        >
-                                            <Mic size={20} />
-                                        </button>
-                                    ) : (
-                                        !isRecording && (
+                                    {!isRecording &&
+                                        (!draftText.trim() ? (
+                                            <button
+                                                type="button"
+                                                className="sync-icon-btn"
+                                                title="Record Voice Note"
+                                                onClick={startVoiceRecording}
+                                                disabled={uploadingMedia}
+                                            >
+                                                <Mic size={20} />
+                                            </button>
+                                        ) : (
                                             <button
                                                 type="submit"
                                                 className="sync-send-btn"
@@ -1463,8 +1709,7 @@ export default function ChatPage() {
                                             >
                                                 <Send size={18} />
                                             </button>
-                                        )
-                                    )}
+                                        ))}
                                 </form>
                             )}
                         </footer>
