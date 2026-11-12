@@ -151,13 +151,16 @@ const storySlice = createSlice({
         },
         // অন্য কেউ আমার story-তে react দিলে (রিয়েল-টাইম)
         recordRealtimeStoryReaction(state, action) {
-            const { storyId, user, emoji, reactedAt, reactionCount } =
+            const { storyId, user, emoji, reactedAt, reactionCount, reactionSummary } =
                 action.payload || {};
             if (!storyId || !user?._id) return;
             const sId = String(storyId);
             const st = findStory(state, sId);
             if (st && typeof reactionCount === "number") {
                 st.reactionCount = reactionCount;
+            }
+            if (st && reactionSummary) {
+                st.reactionSummary = reactionSummary;
             }
             const list = state.viewersByStoryId[sId];
             if (list) {

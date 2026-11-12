@@ -988,3 +988,319 @@
 
 .sync-stat-label { display: inline-flex; align-items: center; gap: 7px; }
 .sync-stat-label svg { flex: 0 0 auto; color: var(--mongo); }
+
+
+/* =========================================================
+   Story: react / reply / emoji burst
+   ========================================================= */
+@keyframes sync-react-pop {
+    0% { opacity: 0; transform: translateY(14px) scale(0.4); }
+    60% { opacity: 1; transform: translateY(-4px) scale(1.18); }
+    100% { opacity: 1; transform: none; }
+}
+@keyframes sync-react-cell-in {
+    from { opacity: 0; transform: scale(0.5); }
+    to { opacity: 1; transform: none; }
+}
+@keyframes sync-react-selected {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(0, 237, 100, 0.55), 0 0 0 0 rgba(0, 237, 100, 0.35); }
+    50% { box-shadow: 0 0 0 2px rgba(0, 237, 100, 0.85), 0 0 0 9px rgba(0, 237, 100, 0); }
+}
+@keyframes sync-burst-main {
+    0% { opacity: 0; transform: translateY(40px) scale(0.2); }
+    22% { opacity: 1; transform: translateY(0) scale(1.35); }
+    38% { transform: translateY(0) scale(1); }
+    78% { opacity: 1; transform: translateY(-26px) scale(1.05); }
+    100% { opacity: 0; transform: translateY(-64px) scale(0.8); }
+}
+@keyframes sync-burst-fly {
+    0% { opacity: 0; transform: translate(0, 0) scale(0.3) rotate(0deg); }
+    12% { opacity: 1; }
+    100% { opacity: 0; transform: translate(var(--x), -62dvh) scale(1.05) rotate(var(--r)); }
+}
+@keyframes sync-toast-in {
+    0% { opacity: 0; transform: translate(-50%, 14px) scale(0.92); }
+    100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+.sync-story-react-footer {
+    width: 100%;
+    max-width: 440px;
+    margin: 0 auto;
+    position: relative;
+    gap: 10px;
+}
+
+.sync-react-bar {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 6px 8px;
+    border-radius: 999px;
+    background: rgba(1, 10, 8, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.sync-react-btn {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: #fff;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    animation: sync-react-pop 0.5s var(--ease) both;
+    transition: transform 0.2s var(--ease), background-color 0.2s;
+}
+
+.sync-react-btn:hover { transform: translateY(-6px) scale(1.3); background: rgba(255, 255, 255, 0.1); }
+.sync-react-btn:active { transform: scale(0.85); }
+
+.sync-react-btn.active {
+    background: rgba(0, 237, 100, 0.18);
+    animation: sync-react-pop 0.5s var(--ease) both, sync-react-selected 1.8s 0.5s ease-in-out infinite;
+}
+
+.sync-react-btn.more { font-size: 1rem; background: rgba(255, 255, 255, 0.12); }
+.sync-react-btn.more svg { transition: transform 0.28s var(--ease); }
+.sync-react-btn.more.open { background: var(--grad-btn); color: var(--on-brand); }
+.sync-react-btn.more.open svg { transform: rotate(135deg); }
+
+.sync-react-picker {
+    width: 100%;
+    max-height: min(38dvh, 300px);
+    overflow-y: auto;
+    padding: 12px 12px 14px;
+    border-radius: 22px;
+    background: rgba(3, 21, 18, 0.94);
+    border: 1px solid var(--line-strong);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    animation: sync-slide-up 0.28s var(--ease) both;
+}
+
+.sync-react-group + .sync-react-group { margin-top: 10px; }
+
+.sync-react-group-label {
+    margin-bottom: 6px;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-3);
+}
+
+.sync-react-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 2px; }
+
+.sync-react-cell {
+    height: 40px;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    font-size: 1.45rem;
+    line-height: 1;
+    cursor: pointer;
+    animation: sync-react-cell-in 0.3s var(--ease) both;
+    transition: transform 0.18s var(--ease), background-color 0.18s;
+}
+
+.sync-react-cell:hover { transform: scale(1.3); background: rgba(255, 255, 255, 0.09); }
+.sync-react-cell:active { transform: scale(0.85); }
+.sync-react-cell.active { background: rgba(0, 237, 100, 0.2); box-shadow: inset 0 0 0 1.5px rgba(0, 237, 100, 0.7); }
+
+.sync-story-reply {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 5px 5px 16px;
+    border-radius: 999px;
+    background: rgba(1, 10, 8, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    transition: border-color 0.2s, background-color 0.2s;
+}
+
+.sync-story-reply:focus-within { border-color: var(--mongo); background: rgba(1, 10, 8, 0.75); }
+
+.sync-story-reply input {
+    flex: 1;
+    min-width: 0;
+    padding: 9px 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: #fff;
+    font-size: 0.92rem;
+}
+
+.sync-story-reply input::placeholder { color: rgba(255, 255, 255, 0.6); }
+
+.sync-story-reply-send {
+    flex: 0 0 auto;
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    background: var(--grad-btn);
+    color: var(--on-brand);
+    cursor: pointer;
+    transition: transform 0.18s var(--ease), opacity 0.2s;
+}
+
+.sync-story-reply-send:hover:not(:disabled) { transform: scale(1.08); }
+.sync-story-reply-send:active:not(:disabled) { transform: scale(0.9); }
+.sync-story-reply-send:disabled { opacity: 0.35; cursor: default; }
+
+.sync-story-reply-error {
+    padding: 6px 14px;
+    border-radius: 12px;
+    background: rgba(255, 93, 108, 0.18);
+    color: #ffb4bb;
+    font-size: 0.8rem;
+    animation: sync-fade 0.2s both;
+}
+
+/* ----- emoji burst ----- */
+.sync-react-burst { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 5; }
+.sync-burst { position: absolute; left: 50%; bottom: 0; width: 0; height: 100%; }
+
+.sync-burst-main {
+    position: absolute;
+    left: 0;
+    bottom: 26%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    transform: translateX(-50%);
+}
+
+.sync-burst-main > span {
+    display: block;
+    font-size: 6rem;
+    line-height: 1;
+    filter: drop-shadow(0 8px 22px rgba(0, 0, 0, 0.5));
+    animation: sync-burst-main 2.2s var(--ease) both;
+}
+
+.sync-burst-main > em {
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: rgba(1, 10, 8, 0.65);
+    color: #fff;
+    font-size: 0.8rem;
+    font-style: normal;
+    font-weight: 700;
+    white-space: nowrap;
+    animation: sync-fade 0.3s both;
+}
+
+.sync-burst-particle {
+    position: absolute;
+    left: 0;
+    bottom: 12%;
+    opacity: 0;
+    animation-name: sync-burst-fly;
+    animation-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1);
+    animation-fill-mode: both;
+}
+
+/* ----- toast ----- */
+.sync-story-toast {
+    position: absolute;
+    left: 50%;
+    bottom: 140px;
+    z-index: 6;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 16px;
+    border-radius: 999px;
+    background: var(--grad-btn);
+    color: var(--on-brand);
+    font-size: 0.85rem;
+    font-weight: 800;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+    animation: sync-toast-in 0.35s var(--ease) both;
+}
+
+/* ----- owner: reaction summary + viewer emoji ----- */
+.sync-react-summary { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+
+.sync-react-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 11px;
+    border-radius: 999px;
+    background: rgba(1, 10, 8, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: #fff;
+    font-size: 0.82rem;
+    animation: sync-react-pop 0.45s var(--ease) both;
+}
+
+.sync-react-chip > span { font-size: 1.1rem; line-height: 1; }
+.sync-viewer-reaction { margin-left: auto; font-size: 1.35rem; line-height: 1; animation: sync-react-pop 0.45s var(--ease) both; }
+
+/* ----- chat: story reply quote ----- */
+.sync-msg-story-quote {
+    display: flex;
+    align-items: stretch;
+    gap: 9px;
+    margin-bottom: 7px;
+    padding: 6px;
+    border-radius: 12px;
+    background: rgba(2, 21, 18, 0.38);
+    font-size: 0.8rem;
+}
+
+.sync-msg-story-quote .story-thumb {
+    flex: 0 0 44px;
+    width: 44px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border-radius: 8px;
+    overflow: hidden;
+    background-size: cover;
+    background-position: center;
+    color: #fff;
+    font-size: 0.5rem;
+    font-weight: 700;
+    line-height: 1.15;
+    text-align: center;
+    word-break: break-word;
+}
+
+.sync-msg-story-quote .story-meta { min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.sync-msg-story-quote .story-label { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.02em; color: var(--mongo); }
+.sync-msg-story-quote .story-text { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; color: rgba(232, 247, 240, 0.78); }
+
+@media (max-width: 720px) {
+    .sync-story-react-footer { max-width: none; }
+    .sync-react-btn { width: 36px; height: 36px; font-size: 1.35rem; }
+    .sync-story-toast { bottom: 150px; }
+    .sync-burst-main > span { font-size: 4.6rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sync-react-btn, .sync-react-cell, .sync-react-chip, .sync-burst-main > span, .sync-burst-particle { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+}

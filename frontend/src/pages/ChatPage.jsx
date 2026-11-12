@@ -994,6 +994,60 @@ export default function ChatPage() {
                                                         </div>
                                                     )}
 
+                                                {msg.storyReply &&
+                                                    !msg.deletedForEveryone && (
+                                                        <div className="sync-msg-story-quote">
+                                                            <div
+                                                                className="story-thumb"
+                                                                style={
+                                                                    msg
+                                                                        .storyReply
+                                                                        .thumbnail
+                                                                        ? {
+                                                                              backgroundImage: `url(${msg.storyReply.thumbnail})`
+                                                                          }
+                                                                        : {
+                                                                              backgroundColor:
+                                                                                  msg
+                                                                                      .storyReply
+                                                                                      .backgroundColor ||
+                                                                                  "#0F4C3A"
+                                                                          }
+                                                                }
+                                                            >
+                                                                {!msg
+                                                                    .storyReply
+                                                                    .thumbnail &&
+                                                                    msg
+                                                                        .storyReply
+                                                                        .type ===
+                                                                        "text" &&
+                                                                    (msg
+                                                                        .storyReply
+                                                                        .caption ||
+                                                                        "")}
+                                                            </div>
+                                                            <div className="story-meta">
+                                                                <span className="story-label">
+                                                                    {isMine
+                                                                        ? "You replied to a story"
+                                                                        : "Replied to your story"}
+                                                                </span>
+                                                                <span className="story-text">
+                                                                    {msg
+                                                                        .storyReply
+                                                                        .caption ||
+                                                                        (msg
+                                                                            .storyReply
+                                                                            .type ===
+                                                                        "video"
+                                                                            ? "Video story"
+                                                                            : "Photo story")}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
                                                 {msg.replyTo &&
                                                     !msg.deletedForEveryone && (
                                                         <div className="sync-msg-reply-quote">

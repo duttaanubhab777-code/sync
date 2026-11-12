@@ -311,6 +311,7 @@ export const reactToStory = asyncHandler(async (req, res) => {
 
     const fresh = await Story.findById(id).select("reactions").lean();
     const reactionCount = fresh?.reactions?.length || 0;
+    const reactionSummary = summarizeReactions(fresh?.reactions);
 
     if (changed) {
         emitToUsers(io, [authorId], "story:reacted", {
@@ -318,7 +319,8 @@ export const reactToStory = asyncHandler(async (req, res) => {
             user: actor,
             emoji: emoji || null,
             reactedAt: now,
-            reactionCount
+            reactionCount,
+            reactionSummary
         });
 
         if (emoji) {
