@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
     Plus,
@@ -9,7 +9,9 @@ import {
     ChevronRight,
     Image as ImageIcon,
     Type,
-    Loader2
+    Loader2,
+    Send,
+    Check
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncBrandBar from "../components/SyncBrandBar.jsx";
@@ -18,7 +20,9 @@ import {
     deleteMyStory,
     fetchStories,
     fetchStoryViewers,
-    markStoryViewed
+    markStoryViewed,
+    reactToStory,
+    replyToStory
 } from "../store/storySlice.js";
 import { uploadMediaToCloudinary } from "../services/media.js";
 import { formatChatListTime, formatTime } from "../utils/format.js";
@@ -31,6 +35,31 @@ const STORY_COLORS = [
     "#831843",
     "#111827",
     "#047857"
+];
+
+// নিচের বারে সরাসরি দেখানো react
+const QUICK_REACTIONS = ["❤", "😂", "😮", "😢", "🔥", "👏", "🙏"];
+
+// "+" চাপলে পুরো তালিকা
+const REACTION_GROUPS = [
+    {
+        label: "Faces",
+        items: [
+            "😀", "😁", "😂", "🤣", "😊", "😍", "🥰", "😘", "😎", "🤩",
+            "🥳", "😜", "🤔", "😮", "😲", "🥺", "😢", "😭", "😡", "🤯"
+        ]
+    },
+    {
+        label: "Hands",
+        items: ["👍", "👎", "👏", "🙌", "🙏", "💪", "👌", "✌", "🤝", "🤞", "👀", "🫶"]
+    },
+    {
+        label: "Love & vibes",
+        items: [
+            "❤", "🧡", "💛", "💚", "💙", "💜", "🖤", "💔", "💯", "🔥",
+            "✨", "🎉", "🎊", "⭐", "💥", "🌹", "🎂", "🏆"
+        ]
+    }
 ];
 
 export default function StoriesPage() {
@@ -51,6 +80,15 @@ export default function StoriesPage() {
     const [viewerState, setViewerState] = useState(null);
     const [showViewersList, setShowViewersList] = useState(false);
 
+    const [replyText, setReplyText] = useState("");
+    const [replying, setReplying] = useState(false);
+    const [replyError, setReplyError] = useState("");
+    const [toast, setToast] = useState("");
+    const [showPicker, setShowPicker] = useState(false);
+    const [bursts, setBursts] = useState([]);
+    const toastTimerRef = useRef(null);
+    const lastReaction = useSelector(state => state.story.lastReaction);
+
     useEffect(() => {
         dispatch(fetchStories());
     }, [dispatch]);
@@ -61,6 +99,23 @@ export default function StoriesPage() {
         activeGroup && viewerState !== null
             ? activeGroup.stories[viewerState.storyIdx]
             : null;
+
+    // অন্য story-তে গেলে reply/picker পরিষ্কার
+    useEffect(() => {
+        setReplyText("");
+        setReplyError("");
+        setShowPicker(false);
+    }, [activeStory?._id]);
+
+    useEffect(() => () => clearTimeout(toastTimerRef.current), []);
+
+    // আমার story-তে কেউ react দিলে সাথে সাথে emoji উড়ে ওঠে
+    useEffect(() => {
+        if (!lastReaction || !activeStory || !activeGroup?.isMine) return;
+        if (String(lastReaction.storyId) !== String(activeStory._id)) return;
+        if (Date.now() - lastReaction.at > 4000) return;
+        launchBurst(lastReaction.emoji, lastReaction.user?.fullName);
+    }, [lastReaction]);
 
     useEffect(() => {
         if (!activeStory || !activeGroup) return;
@@ -121,6 +176,68 @@ export default function StoriesPage() {
                     ? err
                     : err?.message || "Could not post story"
             );
+        }
+    };
+
+    const showToast = text => {
+        setToast(text);
+        clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = setTimeout(() => setToast(""), 2400);
+    };
+
+    // emoji-র ঝাঁক নিচ থেকে উপরে উড়ে যায়
+    const launchBurst = (emoji, label = "") => {
+        const id = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const particles = Array.from({ length: 16 }, (_, i) => ({
+            id: i,
+            x: Math.round((Math.random() - 0.5) * 260),
+            delay: Math.round(Math.random() * 380),
+            size: 22 + Math.round(Math.random() * 24),
+            dur: 1500 + Math.round(Math.random() * 900),
+            rot: Math.round((Math.random() - 0.5) * 60)
+        }));
+        setBursts(prev => [...prev.slice(-2), { id, emoji, label, particles }]);
+        setTimeout(
+            () => setBursts(prev => prev.filter(b => b.id !== id)),
+            2800
+        );
+    };
+
+    const handleReact = emoji => {
+        if (!activeStory || activeGroup?.isMine) return;
+        const same = activeStory.myReaction === emoji;
+        dispatch(
+            reactToStory({
+                storyId: activeStory._id,
+                emoji: same ? null : emoji
+            })
+        );
+        if (!same) launchBurst(emoji);
+        setShowPicker(false);
+    };
+
+    const handleSendReply = async e => {
+        e.preventDefault();
+        const text = replyText.trim();
+        if (!text || replying || !activeStory) return;
+        setReplying(true);
+        setReplyError("");
+        try {
+            await dispatch(
+                replyToStory({ storyId: activeStory._id, text })
+            ).unwrap();
+            setReplyText("");
+            setShowPicker(false);
+            const first = (activeGroup?.author?.fullName || "").split(" ")[0];
+            showToast(first ? `Reply sent to ${first}` : "Reply sent");
+        } catch (err) {
+            setReplyError(
+                typeof err === "string"
+                    ? err
+                    : err?.message || "Could not send reply"
+            );
+        } finally {
+            setReplying(false);
         }
     };
 
@@ -374,7 +491,10 @@ export default function StoriesPage() {
                             </div>
                         </div>
 
-                        <div className="sync-story-content">
+                        <div
+                            className="sync-story-content"
+                            onClick={() => setShowPicker(false)}
+                        >
                             <button
                                 type="button"
                                 className="sync-story-nav prev"
@@ -429,6 +549,180 @@ export default function StoriesPage() {
                             </button>
                         </div>
 
+                        {!activeGroup.isMine && (
+                            <div className="sync-story-footer sync-story-react-footer">
+                                {showPicker && (
+                                    <div className="sync-react-picker">
+                                        {REACTION_GROUPS.map(group => (
+                                            <div
+                                                key={group.label}
+                                                className="sync-react-group"
+                                            >
+                                                <div className="sync-react-group-label">
+                                                    {group.label}
+                                                </div>
+                                                <div className="sync-react-grid">
+                                                    {group.items.map(
+                                                        (emoji, i) => (
+                                                            <button
+                                                                type="button"
+                                                                key={emoji}
+                                                                className={`sync-react-cell ${
+                                                                    activeStory.myReaction ===
+                                                                    emoji
+                                                                        ? "active"
+                                                                        : ""
+                                                                }`}
+                                                                style={{
+                                                                    animationDelay: `${Math.min(
+                                                                        i * 14,
+                                                                        220
+                                                                    )}ms`
+                                                                }}
+                                                                onClick={() =>
+                                                                    handleReact(
+                                                                        emoji
+                                                                    )
+                                                                }
+                                                            >
+                                                                {emoji}
+                                                            </button>
+                                                        )
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <div className="sync-react-bar">
+                                    {activeStory.myReaction &&
+                                        !QUICK_REACTIONS.includes(
+                                            activeStory.myReaction
+                                        ) && (
+                                            <button
+                                                type="button"
+                                                className="sync-react-btn active"
+                                                onClick={() =>
+                                                    handleReact(
+                                                        activeStory.myReaction
+                                                    )
+                                                }
+                                            >
+                                                {activeStory.myReaction}
+                                            </button>
+                                        )}
+                                    {QUICK_REACTIONS.map((emoji, i) => (
+                                        <button
+                                            type="button"
+                                            key={emoji}
+                                            className={`sync-react-btn ${
+                                                activeStory.myReaction === emoji
+                                                    ? "active"
+                                                    : ""
+                                            }`}
+                                            style={{
+                                                animationDelay: `${i * 45}ms`
+                                            }}
+                                            onClick={() => handleReact(emoji)}
+                                            aria-label={`React ${emoji}`}
+                                        >
+                                            {emoji}
+                                        </button>
+                                    ))}
+                                    <button
+                                        type="button"
+                                        className={`sync-react-btn more ${
+                                            showPicker ? "open" : ""
+                                        }`}
+                                        style={{
+                                            animationDelay: `${
+                                                QUICK_REACTIONS.length * 45
+                                            }ms`
+                                        }}
+                                        onClick={() => setShowPicker(v => !v)}
+                                        aria-label="More reactions"
+                                    >
+                                        <Plus size={20} />
+                                    </button>
+                                </div>
+
+                                <form
+                                    className="sync-story-reply"
+                                    onSubmit={handleSendReply}
+                                >
+                                    <input
+                                        type="text"
+                                        placeholder={`Reply to ${
+                                            (
+                                                activeGroup.author?.fullName ||
+                                                ""
+                                            ).split(" ")[0] || "story"
+                                        }...`}
+                                        maxLength={1000}
+                                        value={replyText}
+                                        onChange={e =>
+                                            setReplyText(e.target.value)
+                                        }
+                                        onFocus={() => setShowPicker(false)}
+                                    />
+                                    <button
+                                        type="submit"
+                                        className="sync-story-reply-send"
+                                        disabled={!replyText.trim() || replying}
+                                        aria-label="Send reply"
+                                    >
+                                        {replying ? (
+                                            <Loader2
+                                                size={18}
+                                                className="spin"
+                                            />
+                                        ) : (
+                                            <Send size={18} />
+                                        )}
+                                    </button>
+                                </form>
+                                {replyError && (
+                                    <div className="sync-story-reply-error">
+                                        {replyError}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        <div className="sync-react-burst" aria-hidden="true">
+                            {bursts.map(b => (
+                                <div key={b.id} className="sync-burst">
+                                    <div className="sync-burst-main">
+                                        <span>{b.emoji}</span>
+                                        {b.label && <em>{b.label}</em>}
+                                    </div>
+                                    {b.particles.map(p => (
+                                        <span
+                                            key={p.id}
+                                            className="sync-burst-particle"
+                                            style={{
+                                                "--x": `${p.x}px`,
+                                                "--r": `${p.rot}deg`,
+                                                fontSize: `${p.size}px`,
+                                                animationDelay: `${p.delay}ms`,
+                                                animationDuration: `${p.dur}ms`
+                                            }}
+                                        >
+                                            {b.emoji}
+                                        </span>
+                                    ))}
+                                </div>
+                            ))}
+                        </div>
+
+                        {toast && (
+                            <div className="sync-story-toast" role="status">
+                                <Check size={16} />
+                                <span>{toast}</span>
+                            </div>
+                        )}
+
                         {activeGroup.isMine && (
                             <div className="sync-story-footer">
                                 <button
@@ -447,6 +741,23 @@ export default function StoriesPage() {
                                         views
                                     </span>
                                 </button>
+
+                                {Object.keys(activeStory.reactionSummary || {})
+                                    .length > 0 && (
+                                    <div className="sync-react-summary">
+                                        {Object.entries(
+                                            activeStory.reactionSummary
+                                        ).map(([emoji, count]) => (
+                                            <span
+                                                key={emoji}
+                                                className="sync-react-chip"
+                                            >
+                                                <span>{emoji}</span>
+                                                <b>{count}</b>
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
 
                                 {showViewersList && (
                                     <div className="sync-viewers-sheet">
@@ -483,6 +794,11 @@ export default function StoriesPage() {
                                                             )}
                                                         </div>
                                                     </div>
+                                                    {v.reaction && (
+                                                        <span className="sync-viewer-reaction">
+                                                            {v.reaction}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             ))
                                         )}

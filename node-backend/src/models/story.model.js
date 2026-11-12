@@ -38,6 +38,14 @@ const storySchema = new Schema(
                 viewedAt: { type: Date, default: Date.now }
             }
         ],
+        // কে কোন emoji দিয়ে react করেছে (একজন একটাই react রাখতে পারে)
+        reactions: [
+            {
+                user: { type: Schema.Types.ObjectId, ref: "User" },
+                emoji: { type: String, maxlength: 16 },
+                reactedAt: { type: Date, default: Date.now }
+            }
+        ],
         // ঠিক ২৪ ঘণ্টা পরে র সময় এখা নে সে ট থা কবে
         expiresAt: {
             type: Date,

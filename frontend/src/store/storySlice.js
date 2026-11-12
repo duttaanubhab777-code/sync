@@ -52,6 +52,41 @@ export const fetchStoryViewers = createAsyncThunk(
     }
 );
 
+export const reactToStory = createAsyncThunk(
+    "story/reactToStory",
+    async ({ storyId, emoji }, { dispatch, rejectWithValue }) => {
+        // আগে UI-তে সাথে সাথে দেখাই (optimistic), সার্ভার ফেল করলে ফিরিয়ে আনি
+        dispatch(setMyReaction({ storyId, emoji: emoji || null }));
+        try {
+            const res = await api.post(`/api/stories/${storyId}/react`, {
+                emoji: emoji || null
+            });
+            return { storyId, ...(res.data?.data || {}) };
+        } catch (err) {
+            dispatch(fetchStories());
+            return rejectWithValue(
+                extractErrorMessage(err, "Could not send reaction")
+            );
+        }
+    }
+);
+
+export const replyToStory = createAsyncThunk(
+    "story/replyToStory",
+    async ({ storyId, text }, { rejectWithValue }) => {
+        try {
+            const res = await api.post(`/api/stories/${storyId}/reply`, {
+                text
+            });
+            return res.data?.data;
+        } catch (err) {
+            return rejectWithValue(
+                extractErrorMessage(err, "Could not send reply")
+            );
+        }
+    }
+);
+
 export const deleteMyStory = createAsyncThunk(
     "story/deleteMyStory",
     async (storyId, { dispatch, rejectWithValue }) => {
@@ -72,13 +107,82 @@ const initialState = {
     loading: false,
     posting: false,
     viewersByStoryId: {},
+    lastReaction: null,
     error: null
+};
+
+const findStory = (state, storyId) => {
+    const sId = String(storyId);
+    for (const group of state.storyGroups) {
+        const st = group.stories.find(x => String(x._id) === sId);
+        if (st) return st;
+    }
+    return null;
 };
 
 const storySlice = createSlice({
     name: "story",
     initialState,
     reducers: {
+        // আমি নিজে react দিলে/সরালে
+        setMyReaction(state, action) {
+            const { storyId, emoji } = action.payload || {};
+            const st = findStory(state, storyId);
+            if (!st) return;
+            const prev = st.myReaction || null;
+            if (prev === (emoji || null)) return;
+            st.reactionSummary = st.reactionSummary || {};
+            if (prev) {
+                st.reactionSummary[prev] = Math.max(
+                    0,
+                    (st.reactionSummary[prev] || 1) - 1
+                );
+                if (!st.reactionSummary[prev]) delete st.reactionSummary[prev];
+            }
+            if (emoji) {
+                st.reactionSummary[emoji] =
+                    (st.reactionSummary[emoji] || 0) + 1;
+            }
+            st.reactionCount = Object.values(st.reactionSummary).reduce(
+                (a, b) => a + b,
+                0
+            );
+            st.myReaction = emoji || null;
+        },
+        // অন্য কেউ আমার story-তে react দিলে (রিয়েল-টাইম)
+        recordRealtimeStoryReaction(state, action) {
+            const { storyId, user, emoji, reactedAt, reactionCount } =
+                action.payload || {};
+            if (!storyId || !user?._id) return;
+            const sId = String(storyId);
+            const st = findStory(state, sId);
+            if (st && typeof reactionCount === "number") {
+                st.reactionCount = reactionCount;
+            }
+            const list = state.viewersByStoryId[sId];
+            if (list) {
+                const row = list.find(
+                    v => String(v.user?._id) === String(user._id)
+                );
+                if (row) {
+                    row.reaction = emoji || null;
+                } else {
+                    list.unshift({
+                        user,
+                        viewedAt: reactedAt || new Date().toISOString(),
+                        reaction: emoji || null
+                    });
+                }
+            }
+            if (emoji) {
+                state.lastReaction = {
+                    storyId: sId,
+                    emoji,
+                    user,
+                    at: Date.now()
+                };
+            }
+        },
         recordRealtimeStoryView(state, action) {
             const { storyId, viewer, viewedAt } = action.payload || {};
             if (!storyId) return;
@@ -151,5 +255,9 @@ const storySlice = createSlice({
     }
 });
 
-export const { recordRealtimeStoryView } = storySlice.actions;
+export const {
+    recordRealtimeStoryView,
+    recordRealtimeStoryReaction,
+    setMyReaction
+} = storySlice.actions;
 export default storySlice.reducer;

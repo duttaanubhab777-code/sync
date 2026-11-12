@@ -45,6 +45,15 @@ const messageSchema = new Schema(
             ref: "Message",
             default: null
         },
+        // story-তে reply করলে সেই story-র একটা ছোট snapshot (story মুছে গেলেও চ্যাটে দেখা যাবে)
+        storyReply: {
+            storyId: { type: Schema.Types.ObjectId },
+            authorId: { type: Schema.Types.ObjectId, ref: "User" },
+            type: { type: String, enum: ["text", "image", "video"] },
+            caption: { type: String, maxlength: 160 },
+            backgroundColor: { type: String },
+            thumbnail: { type: String }
+        },
         status: {
             type: String,
             enum: ["sent", "delivered", "seen"],

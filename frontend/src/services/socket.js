@@ -24,7 +24,8 @@ import {
 } from "../store/chatSlice.js";
 import {
     fetchStories,
-    recordRealtimeStoryView
+    recordRealtimeStoryView,
+    recordRealtimeStoryReaction
 } from "../store/storySlice.js";
 
 let socket = null;
@@ -204,6 +205,11 @@ export const connectSocket = () => {
 
     socket.on("story:viewed", payload => {
         store.dispatch(recordRealtimeStoryView(payload));
+    });
+
+    socket.on("story:reacted", payload => {
+        store.dispatch(recordRealtimeStoryReaction(payload));
+        if (payload?.emoji) playSound("notify");
     });
 
     // রিয়েল-টাইমে নতুন নোটিস বা ডিলিট হওয়া নোটিস

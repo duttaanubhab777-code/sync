@@ -48,6 +48,15 @@ export const createStorySchema = z.object({
     media: mediaSchema.optional()
 });
 
+// story-তে react: emoji = null বা "" হলে নিজের react সরে যাবে
+export const reactStorySchema = z.object({
+    emoji: z.string().trim().max(16).nullable().optional()
+});
+
+export const replyStorySchema = z.object({
+    text: z.string().trim().min(1, "Reply cannot be empty").max(1000)
+});
+
 export const updateProfileSchema = z
     .object({
         fullName: z.string().trim().min(3).max(50).optional(),
