@@ -25,7 +25,11 @@ import {
     replyToStory
 } from "../store/storySlice.js";
 import { uploadMediaToCloudinary } from "../services/media.js";
-import { formatChatListTime, formatTime } from "../utils/format.js";
+import {
+    formatChatListTime,
+    formatTime,
+    generateClientMsgId
+} from "../utils/format.js";
 
 const STORY_COLORS = [
     "#0F4C3A",
@@ -76,6 +80,12 @@ export default function StoriesPage() {
     const [mediaFile, setMediaFile] = useState(null);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [createError, setCreateError] = useState("");
+    // Share Story একবার ট্যাপেই সাথে সাথে lock: state async বলে আলাদা ref দিয়ে সিঙ্ক্রোনাস গার্ড
+    const [submitting, setSubmitting] = useState(false);
+    const submittingRef = useRef(false);
+    // এই story-র ইউনিক আইডি: ডাবল ট্যাপ/রিট্রাই হলেও সার্ভারে একবারই সেভ হয়
+    const clientStoryIdRef = useRef(null);
+    const replyingRef = useRef(false);
 
     const [viewerState, setViewerState] = useState(null);
     const [showViewersList, setShowViewersList] = useState(false);
@@ -129,7 +139,25 @@ export default function StoriesPage() {
 
     const handleCreateStory = async e => {
         e.preventDefault();
+        // আগের রিকোয়েস্ট চলতে থাকলে (আপলোড বা সেভ) নতুন ট্যাপ/Enter একদম উপেক্ষা
+        if (submittingRef.current || posting) return;
         setCreateError("");
+
+        if (storyType === "text" ? !caption.trim() : !mediaFile) {
+            setCreateError(
+                storyType === "text"
+                    ? "Please write some text for your story"
+                    : "Please select an image or video"
+            );
+            return;
+        }
+
+        submittingRef.current = true;
+        setSubmitting(true);
+        if (!clientStoryIdRef.current) {
+            clientStoryIdRef.current = generateClientMsgId();
+        }
+        const clientStoryId = clientStoryIdRef.current;
 
         try {
             if (storyType === "text") {
@@ -141,7 +169,8 @@ export default function StoriesPage() {
                     createNewStory({
                         type: "text",
                         caption: caption.trim(),
-                        backgroundColor: bgColor
+                        backgroundColor: bgColor,
+                        clientStoryId
                     })
                 ).unwrap();
             } else {
@@ -162,10 +191,12 @@ export default function StoriesPage() {
                         type: detectedType,
                         caption: caption.trim(),
                         backgroundColor: bgColor,
-                        media
+                        media,
+                        clientStoryId
                     })
                 ).unwrap();
             }
+            clientStoryIdRef.current = null; // পরের story-র জন্য নতুন আইডি
             setCaption("");
             setMediaFile(null);
             setUploadProgress(0);
@@ -176,7 +207,22 @@ export default function StoriesPage() {
                     ? err
                     : err?.message || "Could not post story"
             );
+        } finally {
+            submittingRef.current = false;
+            setSubmitting(false);
         }
+    };
+
+    const openCreateModal = () => {
+        clientStoryIdRef.current = null;
+        setCreateError("");
+        setShowCreateModal(true);
+    };
+
+    // পোস্ট চলার সময় modal বন্ধ করা যাবে না (আপলোড মাঝপথে ছেড়ে গেলে ভুতুড়ে পোস্ট হয়)
+    const closeCreateModal = () => {
+        if (submittingRef.current) return;
+        setShowCreateModal(false);
     };
 
     const showToast = text => {
@@ -219,7 +265,8 @@ export default function StoriesPage() {
     const handleSendReply = async e => {
         e.preventDefault();
         const text = replyText.trim();
-        if (!text || replying || !activeStory) return;
+        if (!text || replying || replyingRef.current || !activeStory) return;
+        replyingRef.current = true;
         setReplying(true);
         setReplyError("");
         try {
@@ -237,6 +284,7 @@ export default function StoriesPage() {
                     : err?.message || "Could not send reply"
             );
         } finally {
+            replyingRef.current = false;
             setReplying(false);
         }
     };
@@ -302,7 +350,7 @@ export default function StoriesPage() {
                     <button
                         type="button"
                         className="sync-btn primary sm"
-                        onClick={() => setShowCreateModal(true)}
+                        onClick={openCreateModal}
                     >
                         <Plus size={16} />
                         <span>Add Story</span>
@@ -320,7 +368,7 @@ export default function StoriesPage() {
                                     storyIdx: 0
                                 });
                             } else {
-                                setShowCreateModal(true);
+                                openCreateModal();
                             }
                         }}
                     >
@@ -419,7 +467,7 @@ export default function StoriesPage() {
                         <button
                             type="button"
                             className="sync-btn primary"
-                            onClick={() => setShowCreateModal(true)}
+                            onClick={openCreateModal}
                         >
                             <Plus size={17} />
                             <span>Post a Story</span>
@@ -813,7 +861,7 @@ export default function StoriesPage() {
             {showCreateModal && (
                 <div
                     className="sync-modal-backdrop"
-                    onClick={() => setShowCreateModal(false)}
+                    onClick={closeCreateModal}
                 >
                     <div
                         className="sync-modal-card"
@@ -824,7 +872,7 @@ export default function StoriesPage() {
                             <button
                                 type="button"
                                 className="sync-icon-btn"
-                                onClick={() => setShowCreateModal(false)}
+                                onClick={closeCreateModal}
                             >
                                 <X size={19} />
                             </button>
@@ -840,6 +888,7 @@ export default function StoriesPage() {
                                     className={`sync-pill-btn ${
                                         storyType === "text" ? "active" : ""
                                     }`}
+                                    disabled={submitting}
                                     onClick={() => setStoryType("text")}
                                 >
                                     <Type size={15} /> Text Status
@@ -849,6 +898,7 @@ export default function StoriesPage() {
                                     className={`sync-pill-btn ${
                                         storyType === "media" ? "active" : ""
                                     }`}
+                                    disabled={submitting}
                                     onClick={() => setStoryType("media")}
                                 >
                                     <ImageIcon size={15} /> Photo / Video
@@ -865,6 +915,7 @@ export default function StoriesPage() {
                                             placeholder="Type a status..."
                                             maxLength={700}
                                             value={caption}
+                                            readOnly={submitting}
                                             onChange={e =>
                                                 setCaption(e.target.value)
                                             }
@@ -894,11 +945,14 @@ export default function StoriesPage() {
                                         <input
                                             type="file"
                                             accept="image/*,video/*"
-                                            onChange={e =>
+                                            disabled={submitting}
+                                            onChange={e => {
+                                                // ফাইল বদলালে নতুন story → নতুন আইডি
+                                                clientStoryIdRef.current = null;
                                                 setMediaFile(
                                                     e.target.files?.[0] || null
-                                                )
-                                            }
+                                                );
+                                            }}
                                             required
                                         />
                                     </div>
@@ -909,6 +963,7 @@ export default function StoriesPage() {
                                             placeholder="Add a caption..."
                                             maxLength={700}
                                             value={caption}
+                                            readOnly={submitting}
                                             onChange={e =>
                                                 setCaption(e.target.value)
                                             }
@@ -937,16 +992,22 @@ export default function StoriesPage() {
                                 <button
                                     type="button"
                                     className="sync-btn ghost"
-                                    onClick={() => setShowCreateModal(false)}
+                                    disabled={submitting}
+                                    onClick={closeCreateModal}
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
                                     className="sync-btn primary"
-                                    disabled={posting}
+                                    disabled={posting || submitting}
                                 >
-                                    {posting ? "Posting..." : "Share Story"}
+                                    {posting || submitting
+                                        ? uploadProgress > 0 &&
+                                          uploadProgress < 100
+                                            ? `Uploading ${Math.round(uploadProgress)}%`
+                                            : "Posting..."
+                                        : "Share Story"}
                                 </button>
                             </div>
                         </form>

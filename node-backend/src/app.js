@@ -89,7 +89,9 @@ app.use(
                     "'self'",
                     "data:",
                     "blob:",
-                    "https://res.cloudinary.com"
+                    "https://res.cloudinary.com",
+                    // link preview-এর thumbnail (og:image) যেকোনো https সাইট থেকে আসে
+                    "https:"
                 ],
                 "media-src": ["'self'", "blob:", "https://res.cloudinary.com"],
                 "connect-src": [

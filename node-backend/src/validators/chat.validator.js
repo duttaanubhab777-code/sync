@@ -45,7 +45,15 @@ export const createStorySchema = z.object({
         .regex(/^#[0-9a-fA-F]{6}$/, "backgroundColor must be like #0F4C3A")
         .optional()
         .default("#0F4C3A"),
-    media: mediaSchema.optional()
+    media: mediaSchema.optional(),
+    // ফ্রন্টএন্ডের দেওয়া ইউনিক আইডি: একই story একাধিকবার ট্যাপ/রিট্রাই হলেও একবারই সেভ হবে
+    clientStoryId: z
+        .string()
+        .trim()
+        .min(8)
+        .max(64)
+        .regex(/^[\w-]+$/, "Invalid clientStoryId")
+        .optional()
 });
 
 // story-তে react: emoji = null বা "" হলে নিজের react সরে যাবে

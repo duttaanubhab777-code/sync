@@ -43,3 +43,12 @@ export const otpVerifyLimiter = rateLimit({
     legacyHeaders: false,
     handler: tooMany("Too many attempts, try again after some time")
 });
+
+// link preview: অন্য সাইটে রিকোয়েস্ট যায়, তাই আলাদা সীমা — প্রতি IP-তে মিনিটে ১২০টা (cache থাকায় বেশিরভাগই সস্তা)
+export const linkPreviewLimiter = rateLimit({
+    windowMs: 60_000,
+    limit: 120,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    handler: tooMany("Too many link previews, please slow down")
+});

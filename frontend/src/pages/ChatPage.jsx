@@ -24,7 +24,6 @@ import {
     Lock,
     Loader2,
     MessageSquare,
-    ExternalLink,
     Volume2,
     VolumeX,
     Mail,
@@ -33,6 +32,7 @@ import {
 import Avatar from "../components/Avatar.jsx";
 import SyncBrandBar from "../components/SyncBrandBar.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
+import LinkPreviewCard from "../components/LinkPreviewCard.jsx";
 import useSignOut from "../hooks/useSignOut.js";
 import {
     NewDirectChatModal,
@@ -112,26 +112,11 @@ function MessageLinkContent({ text }) {
     if (cursor < text.length) parts.push(text.slice(cursor));
 
     const preview = links[0];
+    // WhatsApp-এর মত: কার্ড উপরে, তার নিচে মেসেজের লেখা
     return (
         <>
+            <LinkPreviewCard href={preview.href} host={preview.host} />
             {parts}
-            <a
-                className="sync-link-preview"
-                href={preview.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={event => event.stopPropagation()}
-            >
-                <span className="sync-link-preview-icon">
-                    <ExternalLink size={19} />
-                </span>
-                <span className="sync-link-preview-copy">
-                    <strong>{preview.host}</strong>
-                    <small>{preview.href}</small>
-                    <em>Open link</em>
-                </span>
-                <ExternalLink size={16} className="sync-link-preview-arrow" />
-            </a>
         </>
     );
 }

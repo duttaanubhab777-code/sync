@@ -54,10 +54,14 @@ const toPublicStory = (s, me) => ({
         (s.reactions || []).find(r => String(r.user) === me)?.emoji || null
 });
 
-// POST /api/stories   body: { type, caption?, backgroundColor?, media? }  (২৪ ঘণ্টা পরে নিজে মুছে যায়)
+// একই লেখকের একই story একসাথে একাধিক রিকোয়েস্টে এলে (ডাবল ট্যাপ/রিট্রাই) একবারই তৈরি হবে
+const creating = new Map();
+const DUPLICATE_WINDOW_MS = 30 * 1000;
+
+// POST /api/stories   body: { type, caption?, backgroundColor?, media?, clientStoryId? }  (২৪ ঘণ্টা পরে নিজে মুছে যায়)
 export const createStory = asyncHandler(async (req, res) => {
     const me = String(req.user._id);
-    const { type, caption, backgroundColor, media } = req.body;
+    const { type, caption, backgroundColor, media, clientStoryId } = req.body;
 
     let cleanMedia;
     if (type === "text") {
@@ -69,20 +73,77 @@ export const createStory = asyncHandler(async (req, res) => {
         }
     }
 
-    const story = await Story.create({
-        author: me,
-        type,
-        caption,
-        backgroundColor,
-        media: cleanMedia
-    });
+    const key = clientStoryId
+        ? `${me}|id|${clientStoryId}`
+        : `${me}|${type}|${backgroundColor}|${caption}|${cleanMedia?.url || ""}`;
 
-    const contacts = await visibleAuthorIds(me);
-    emitToUsers(req.app.get("io"), contacts, "story:new", {
-        storyId: story._id,
-        authorId: me
-    });
-    send(res, 201, toPublicStory(story.toObject(), me), "Story posted");
+    const build = async () => {
+        // ১) একই clientStoryId-তে আগেই তৈরি হয়ে থাকলে সেটাই ফেরত
+        if (clientStoryId) {
+            const existing = await Story.findOne({
+                author: me,
+                clientStoryId
+            }).lean();
+            if (existing) return { story: existing, created: false };
+        } else {
+            // ২) পুরনো frontend (clientStoryId পাঠায় না): ৩০ সেকেন্ডের মধ্যে হুবহু একই story হলে নতুন তৈরি নয়
+            const recent = await Story.findOne({
+                author: me,
+                type,
+                caption,
+                "media.url": cleanMedia?.url || "",
+                createdAt: { $gte: new Date(Date.now() - DUPLICATE_WINDOW_MS) }
+            })
+                .sort({ createdAt: -1 })
+                .lean();
+            if (recent) return { story: recent, created: false };
+        }
+
+        try {
+            const doc = await Story.create({
+                author: me,
+                type,
+                caption,
+                backgroundColor,
+                media: cleanMedia,
+                clientStoryId
+            });
+            return { story: doc.toObject(), created: true };
+        } catch (err) {
+            // দুই রিকোয়েস্ট একই মুহূর্তে এলে unique index একটাকে আটকায় → যেটা সেভ হয়েছে সেটাই ফেরত
+            if (err?.code === 11000 && clientStoryId) {
+                const existing = await Story.findOne({
+                    author: me,
+                    clientStoryId
+                }).lean();
+                if (existing) return { story: existing, created: false };
+            }
+            throw err;
+        }
+    };
+
+    let job = creating.get(key);
+    if (!job) {
+        job = build().finally(() => creating.delete(key));
+        creating.set(key, job);
+    }
+    const { story, created } = await job;
+
+    // নতুন তৈরি হলেই contact-দের জানানো; পুনরাবৃত্ত রিকোয়েস্টে নয়
+    if (created && !job.__notified) {
+        job.__notified = true;
+        const contacts = await visibleAuthorIds(me);
+        emitToUsers(req.app.get("io"), contacts, "story:new", {
+            storyId: story._id,
+            authorId: me
+        });
+    }
+    send(
+        res,
+        created ? 201 : 200,
+        toPublicStory(story, me),
+        created ? "Story posted" : "Story already posted"
+    );
 });
 
 // GET /api/stories   — আমার + contact-দের চলতি story, লেখক ধরে ভাগ করা
