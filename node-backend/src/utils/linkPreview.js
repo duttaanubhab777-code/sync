@@ -11,13 +11,17 @@ import net from "node:net";
 import zlib from "node:zlib";
 
 const MAX_REDIRECTS = 4;
-const MAX_BYTES = 512 * 1024;
+const MAX_BYTES = 768 * 1024;
 const TIMEOUT_MS = 5000;
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const NEGATIVE_TTL_MS = 10 * 60 * 1000;
 const CACHE_MAX = 500;
-const USER_AGENT =
-    "Mozilla/5.0 (compatible; SyncLinkPreview/1.0; +facebookexternalhit/1.1)";
+// Instagram/Facebook/অনেক সাইট শেয়ার-বটের জন্য Open Graph দেয়, সাধারণ ব্রাউজারকে লগইন/consent পেজ দেখায়।
+// তাই আগে বট UA, না পেলে ব্রাউজার UA দিয়ে আবার চেষ্টা।
+const USER_AGENTS = [
+    "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+];
 
 // ---------- IP যাচাই ----------
 const isPrivateV4 = ip => {
@@ -97,7 +101,7 @@ export const normalizeUrl = raw => {
 };
 
 // ---------- একটা hop ----------
-const requestOnce = url =>
+const requestOnce = (url, userAgent, accept) =>
     new Promise((resolve, reject) => {
         const lib = url.protocol === "https:" ? https : http;
         const req = lib.request(
@@ -106,8 +110,10 @@ const requestOnce = url =>
                 method: "GET",
                 lookup: safeLookup,
                 headers: {
-                    "User-Agent": USER_AGENT,
-                    Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
+                    "User-Agent": userAgent,
+                    Accept:
+                        accept ||
+                        "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
                     "Accept-Language": "en,bn;q=0.8",
                     "Accept-Encoding": "gzip, deflate, br"
                 },
@@ -222,8 +228,24 @@ export const parseHtmlPreview = (html, pageUrl) => {
         pageUrl
     );
     const siteName = clean(meta["og:site_name"], 60) || host;
+    const isVideo =
+        /^video/i.test(meta["og:type"] || "") ||
+        Boolean(
+            meta["og:video"] ||
+                meta["og:video:url"] ||
+                meta["og:video:secure_url"] ||
+                meta["twitter:player"]
+        );
 
-    return { url: pageUrl, host, siteName, title, description, image };
+    return {
+        url: pageUrl,
+        host,
+        siteName,
+        title,
+        description,
+        image,
+        isVideo
+    };
 };
 
 const decodeBody = (buf, contentType) => {
@@ -240,10 +262,10 @@ const decodeBody = (buf, contentType) => {
 };
 
 // ---------- মূল ফাংশন (redirect ফলো করে) ----------
-const fetchPreview = async startUrl => {
+const fetchPage = async (startUrl, userAgent) => {
     let url = startUrl;
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-        const res = await requestOnce(url);
+        const res = await requestOnce(url, userAgent);
         const status = res.statusCode || 0;
 
         if (status >= 300 && status < 400 && res.headers.location) {
@@ -265,16 +287,128 @@ const fetchPreview = async startUrl => {
             return null;
         }
         const buf = await readBody(res, MAX_BYTES);
-        const preview = parseHtmlPreview(
-            decodeBody(buf, type),
-            url.href
-        );
+        const preview = parseHtmlPreview(decodeBody(buf, type), url.href);
         if (!preview.title && !preview.description && !preview.image)
             return null;
         return preview;
     }
     return null;
 };
+
+// বট UA-তে না পেলে ব্রাউজার UA-তে আবার
+const fetchGeneric = async url => {
+    for (const ua of USER_AGENTS) {
+        try {
+            const preview = await fetchPage(url, ua);
+            if (preview) return preview;
+        } catch {
+            /* পরের UA */
+        }
+    }
+    return null;
+};
+
+// ---------- YouTube / Vimeo / TikTok / Spotify: oEmbed (বট-ব্লক এড়ায়, সবসময় thumbnail দেয়) ----------
+const youtubeId = u => {
+    const host = u.hostname.replace(/^(www|m|music)\./, "");
+    let id = null;
+    if (host === "youtu.be") id = u.pathname.slice(1).split("/")[0];
+    else if (host === "youtube.com" || host === "youtube-nocookie.com") {
+        if (u.pathname === "/watch") id = u.searchParams.get("v");
+        else id = u.pathname.match(/^\/(?:shorts|live|embed|v)\/([\w-]+)/)?.[1];
+    }
+    return id && /^[\w-]{6,15}$/.test(id) ? id : null;
+};
+
+const OEMBED = [
+    {
+        test: h => /(^|\.)vimeo\.com$/.test(h),
+        endpoint: "https://vimeo.com/api/oembed.json?url=",
+        site: "Vimeo",
+        video: true
+    },
+    {
+        test: h => /(^|\.)tiktok\.com$/.test(h),
+        endpoint: "https://www.tiktok.com/oembed?url=",
+        site: "TikTok",
+        video: true
+    },
+    {
+        test: h => h === "open.spotify.com",
+        endpoint: "https://open.spotify.com/oembed?url=",
+        site: "Spotify",
+        video: false
+    }
+];
+
+const fetchJson = async (endpoint, target) => {
+    const res = await requestOnce(
+        new URL(endpoint + encodeURIComponent(target)),
+        USER_AGENTS[1],
+        "application/json"
+    );
+    if ((res.statusCode || 0) !== 200) {
+        res.resume();
+        return null;
+    }
+    const buf = await readBody(res, 128 * 1024);
+    try {
+        return JSON.parse(buf.toString("utf8"));
+    } catch {
+        return null;
+    }
+};
+
+const fetchProvider = async url => {
+    const host = url.hostname.replace(/^www\./, "");
+
+    const yt = youtubeId(url);
+    if (yt) {
+        const canonical = `https://www.youtube.com/watch?v=${yt}`;
+        let data = null;
+        try {
+            data = await fetchJson("https://www.youtube.com/oembed?format=json&url=", canonical);
+        } catch {
+            data = null;
+        }
+        return {
+            url: url.href,
+            host: "youtube.com",
+            siteName: "YouTube",
+            title: clean(data?.title, 140) || "YouTube video",
+            description: clean(data?.author_name, 220),
+            // oEmbed ফেল করলেও thumbnail আইডি থেকেই পাওয়া যায়
+            image:
+                absolute(data?.thumbnail_url, canonical) ||
+                `https://i.ytimg.com/vi/${yt}/hqdefault.jpg`,
+            isVideo: true
+        };
+    }
+
+    const provider = OEMBED.find(p => p.test(host));
+    if (provider) {
+        try {
+            const data = await fetchJson(provider.endpoint, url.href);
+            if (data?.title || data?.thumbnail_url) {
+                return {
+                    url: url.href,
+                    host,
+                    siteName: provider.site,
+                    title: clean(data.title, 140),
+                    description: clean(data.author_name, 220),
+                    image: absolute(data.thumbnail_url, url.href),
+                    isVideo: provider.video
+                };
+            }
+        } catch {
+            /* সাধারণ পদ্ধতিতে চেষ্টা */
+        }
+    }
+    return null;
+};
+
+const fetchPreview = async url =>
+    (await fetchProvider(url)) || (await fetchGeneric(url));
 
 // ---------- cache + একই URL একসাথে এলে একবারই fetch ----------
 const cache = new Map(); // url -> { at, ttl, value }

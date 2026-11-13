@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Play } from "lucide-react";
 import {
     fetchLinkPreview,
     getCachedLinkPreview
@@ -64,15 +64,22 @@ export default function LinkPreviewCard({ href, host }) {
             onClick={event => event.stopPropagation()}
         >
             {showImage && (
-                <img
-                    className="sync-link-card-image"
-                    src={preview.image}
-                    alt=""
-                    loading="lazy"
-                    decoding="async"
-                    referrerPolicy="no-referrer"
-                    onError={() => setImgOk(false)}
-                />
+                <span className="sync-link-card-media">
+                    <img
+                        className="sync-link-card-image"
+                        src={preview.image}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        referrerPolicy="no-referrer"
+                        onError={() => setImgOk(false)}
+                    />
+                    {preview.isVideo && (
+                        <span className="sync-link-card-play">
+                            <Play size={22} fill="currentColor" />
+                        </span>
+                    )}
+                </span>
             )}
             <span className="sync-link-card-body">
                 {preview.title && (
