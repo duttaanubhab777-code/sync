@@ -9,10 +9,17 @@ RES="$APP/res"
 MANIFEST="$APP/AndroidManifest.xml"
 GRADLE=android/app/build.gradle
 ICON=../assets/icons/maskable-512.png
-LOGO=../assets/logo-mark.webp
+LOGO=assets/logo-mark.png
 ICON_BG="#E0F8EC"
 SPLASH_BG="#031512"
 VERSION_CODE="${VERSION_CODE:-1}"
+
+# ImageMagick: নতুন ভার্সনে `magick`, পুরনোতে `convert`
+IM="$(command -v magick || command -v convert || true)"
+if [ -z "$IM" ]; then
+    echo "ImageMagick পাওয়া যায়নি (apt install imagemagick)" >&2
+    exit 1
+fi
 
 # ---------- 1. Permissions (ভয়েস রেকর্ড, ভিডিও/ভয়েস কল, নোটিফিকেশন) ----------
 python3 - "$MANIFEST" <<'PY'
@@ -46,9 +53,9 @@ mkdir -p "$RES/mipmap-anydpi-v26" "$RES/values"
 for pair in mdpi:48:108 hdpi:72:162 xhdpi:96:216 xxhdpi:144:324 xxxhdpi:192:432; do
     IFS=: read -r density legacy adaptive <<<"$pair"
     mkdir -p "$RES/mipmap-$density"
-    convert "$ICON" -resize "${legacy}x${legacy}" "$RES/mipmap-$density/ic_launcher.png"
+    "$IM" "$ICON" -resize "${legacy}x${legacy}" "$RES/mipmap-$density/ic_launcher.png"
     cp "$RES/mipmap-$density/ic_launcher.png" "$RES/mipmap-$density/ic_launcher_round.png"
-    convert "$ICON" -resize "${adaptive}x${adaptive}" "$RES/mipmap-$density/sync_icon_fg.png"
+    "$IM" "$ICON" -resize "${adaptive}x${adaptive}" "$RES/mipmap-$density/sync_icon_fg.png"
 done
 
 cat > "$RES/values/sync_icon.xml" <<XML
@@ -70,8 +77,8 @@ done
 
 # ---------- 3. Splash screen (গাঢ় ব্যাকগ্রাউন্ডে Sync লোগো) ----------
 TMP="$(mktemp -d)"
-convert -size 1080x1920 "xc:$SPLASH_BG" -depth 8 \( "$LOGO" -resize 420x420 \) -gravity center -composite "$TMP/splash-port.png"
-convert -size 1920x1080 "xc:$SPLASH_BG" -depth 8 \( "$LOGO" -resize 420x420 \) -gravity center -composite "$TMP/splash-land.png"
+"$IM" -size 1080x1920 "xc:$SPLASH_BG" -depth 8 \( "$LOGO" -resize 420x420 \) -gravity center -composite "$TMP/splash-port.png"
+"$IM" -size 1920x1080 "xc:$SPLASH_BG" -depth 8 \( "$LOGO" -resize 420x420 \) -gravity center -composite "$TMP/splash-land.png"
 
 FOUND=0
 while IFS= read -r f; do
