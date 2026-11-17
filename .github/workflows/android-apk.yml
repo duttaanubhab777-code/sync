@@ -1,0 +1,84 @@
+name: Build Android APK
+
+# শুধু mobile/ ফোল্ডার বদলালে (বা হাতে চালালে) APK বানায়।
+# সাইটের UI/ব্যাকএন্ড আপডেটে নতুন APK লাগে না, কারণ অ্যাপ লাইভ সাইট থেকেই লোড হয়।
+on:
+    workflow_dispatch:
+    push:
+        branches: [main]
+        paths:
+            - "mobile/**"
+            - ".github/workflows/android-apk.yml"
+
+permissions:
+    contents: write
+
+concurrency:
+    group: android-apk
+    cancel-in-progress: true
+
+jobs:
+    apk:
+        runs-on: ubuntu-latest
+        timeout-minutes: 40
+        defaults:
+            run:
+                working-directory: mobile
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+
+            - name: Setup Java
+              uses: actions/setup-java@v4
+              with:
+                  distribution: temurin
+                  java-version: 21
+
+            - name: Install Capacitor
+              run: npm install --no-audit --no-fund
+
+            - name: Create Android project
+              run: npx cap add android
+
+            - name: Customise (permissions, icon, splash, version)
+              env:
+                  VERSION_CODE: ${{ github.run_number }}
+              run: bash scripts/customize-android.sh
+
+            # প্রতিবার একই signing key ব্যবহার হয়, তাই নতুন APK পুরনো অ্যাপের ওপর আপডেট হিসেবে বসে
+            - name: Use fixed signing key
+              run: |
+                  mkdir -p ~/.android
+                  cp debug.keystore ~/.android/debug.keystore
+
+            - name: Build APK
+              working-directory: mobile/android
+              run: |
+                  chmod +x gradlew
+                  ./gradlew assembleDebug --no-daemon --stacktrace
+
+            - name: Prepare file
+              run: cp android/app/build/outputs/apk/debug/app-debug.apk Sync.apk
+
+            - name: Upload artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: Sync-apk
+                  path: mobile/Sync.apk
+                  retention-days: 30
+
+            - name: Publish to Releases
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: android-latest
+                  name: Sync Android (latest)
+                  body: |
+                      Latest Sync Android build (#${{ github.run_number }}).
+                      Download **Sync.apk**, install it, and open the app.
+                  files: mobile/Sync.apk
+                  make_latest: true

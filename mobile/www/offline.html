@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#031512">
+<title>Sync</title>
+<style>
+:root{--bg:#031512;--bg2:#0b2b24;--text:#e8f7f0;--text2:#9bb8ad;--mongo:#00ed64;--grad:linear-gradient(135deg,#00ed64 0%,#4ee58a 48%,#2fd3a8 100%)}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{display:grid;place-items:center;padding:24px;background:radial-gradient(120% 80% at 50% 0%,#0b2b24 0%,var(--bg) 60%);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hind Siliguri",sans-serif;text-align:center}
+.card{width:min(380px,100%);animation:rise .5s cubic-bezier(.22,.9,.28,1) both}
+.ring{position:relative;width:92px;height:92px;margin:0 auto 26px;display:grid;place-items:center}
+.ring::before,.ring::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--mongo);animation:ping 2s ease-out infinite}
+.ring::after{animation-delay:1s}
+.ring span{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;background:var(--bg2);border:1px solid rgba(130,255,190,.2)}
+svg{width:30px;height:30px;stroke:var(--mongo);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+h1{font-size:1.35rem;font-weight:800;letter-spacing:-.02em;margin-bottom:8px}
+p{font-size:.95rem;line-height:1.5;color:var(--text2);margin-bottom:26px}
+button{width:100%;border:0;border-radius:16px;padding:14px 18px;font:inherit;font-weight:800;font-size:1rem;color:#022b17;background:var(--grad);cursor:pointer;box-shadow:0 14px 30px -12px rgba(0,237,100,.6);transition:transform .18s}
+button:active{transform:scale(.97)}
+button[disabled]{opacity:.7}
+small{display:block;margin-top:14px;font-size:.8rem;color:var(--text2);min-height:1.2em}
+@keyframes ping{0%{transform:scale(.7);opacity:.6}100%{transform:scale(1.5);opacity:0}}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.ring::before,.ring::after,.card{animation:none}}
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="ring"><span>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 8.8a15 15 0 0 1 20 0"/><path d="M5.5 12.4a10 10 0 0 1 13 0"/><path d="M9 16a5 5 0 0 1 6 0"/><path d="M12 19.5h.01"/><path d="M3 3l18 18"/></svg>
+  </span></div>
+  <h1>Can't reach Sync</h1>
+  <p>Check your internet connection. If you're online, the server may be waking up, which can take up to a minute.</p>
+  <button id="retry" type="button">Try again</button>
+  <small id="msg" role="status"></small>
+</main>
+<script>
+(function () {
+  var URL_ = "https://sync-5lfm.onrender.com";
+  var btn = document.getElementById("retry");
+  var msg = document.getElementById("msg");
+  var busy = false;
+
+  function attempt(auto) {
+    if (busy) return;
+    busy = true;
+    btn.disabled = true;
+    msg.textContent = auto ? "Reconnecting..." : "Connecting...";
+    var ctrl = typeof AbortController === "function" ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 12000);
+    fetch(URL_ + "/health", { mode: "no-cors", cache: "no-store", signal: ctrl ? ctrl.signal : undefined })
+      .then(function () { window.location.replace(URL_); })
+      .catch(function () { msg.textContent = "Still offline. We'll keep trying."; })
+      .then(function () { clearTimeout(timer); busy = false; btn.disabled = false; });
+  }
+
+  btn.addEventListener("click", function () { attempt(false); });
+  window.addEventListener("online", function () { attempt(true); });
+  setInterval(function () { attempt(true); }, 10000);
+})();
+</script>
+</body>
+</html>

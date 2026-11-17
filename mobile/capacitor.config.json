@@ -1,0 +1,31 @@
+{
+    "appId": "com.sync.chat",
+    "appName": "Sync",
+    "webDir": "www",
+    "backgroundColor": "#031512",
+    "server": {
+        "url": "https://sync-5lfm.onrender.com",
+        "cleartext": false,
+        "allowNavigation": ["sync-5lfm.onrender.com"],
+        "errorPath": "offline.html"
+    },
+    "android": {
+        "backgroundColor": "#031512",
+        "allowMixedContent": false,
+        "appendUserAgent": "SyncApp/1.0"
+    },
+    "plugins": {
+        "SplashScreen": {
+            "launchShowDuration": 2500,
+            "launchAutoHide": true,
+            "backgroundColor": "#031512",
+            "androidScaleType": "CENTER_CROP",
+            "showSpinner": false
+        },
+        "StatusBar": {
+            "style": "DARK",
+            "backgroundColor": "#031512",
+            "overlaysWebView": false
+        }
+    }
+}
