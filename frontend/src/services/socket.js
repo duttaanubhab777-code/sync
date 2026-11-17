@@ -160,10 +160,17 @@ export const connectSocket = () => {
     });
 
     socket.on("typing", payload => {
-        const { conversationId, userId, fullName, isTyping } = payload || {};
+        const { conversationId, userId, fullName, isTyping, activity } =
+            payload || {};
         if (!conversationId || !userId) return;
         store.dispatch(
-            setTypingStatus({ conversationId, userId, fullName, isTyping })
+            setTypingStatus({
+                conversationId,
+                userId,
+                fullName,
+                isTyping,
+                activity
+            })
         );
 
         const timerKey = `${conversationId}:${userId}`;
@@ -178,7 +185,8 @@ export const connectSocket = () => {
                         conversationId,
                         userId,
                         fullName,
-                        isTyping: false
+                        isTyping: false,
+                        activity
                     })
                 );
                 typingTimers.delete(timerKey);
@@ -370,9 +378,10 @@ export const emitMessageSeen = (conversationId, upToMessageId = null) => {
     }
 };
 
-export const emitTypingStart = conversationId => {
+// activity: "typing" (লেখা হচ্ছে) অথবা "recording" (ভয়েস রেকর্ড হচ্ছে)
+export const emitTypingStart = (conversationId, activity = "typing") => {
     if (socket && socket.connected && conversationId) {
-        socket.emit("typing:start", { conversationId });
+        socket.emit("typing:start", { conversationId, activity });
     }
 };
 

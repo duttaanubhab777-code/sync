@@ -514,7 +514,7 @@ const chatSlice = createSlice({
             }
         },
         setTypingStatus(state, action) {
-            const { conversationId, userId, fullName, isTyping } =
+            const { conversationId, userId, fullName, isTyping, activity } =
                 action.payload || {};
             if (!conversationId || !userId) return;
             const cKey = String(conversationId);
@@ -522,7 +522,10 @@ const chatSlice = createSlice({
                 state.typingByConv[cKey] = {};
             }
             if (isTyping) {
-                state.typingByConv[cKey][String(userId)] = fullName || "Someone";
+                state.typingByConv[cKey][String(userId)] = {
+                    name: fullName || "Someone",
+                    activity: activity === "recording" ? "recording" : "typing"
+                };
             } else {
                 delete state.typingByConv[cKey][String(userId)];
             }

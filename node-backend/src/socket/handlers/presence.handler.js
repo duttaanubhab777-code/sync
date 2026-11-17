@@ -37,7 +37,8 @@ export const registerPresenceHandlers = (io, socket) => {
 
     // ২. typing শুরু ও শেষ
     // socket.rooms.has(...) দিয়ে দেখা হয় ইউজার সত্যিই ওই চ্যাটের সদস্য কিনা (নইলে যে কেউ অন্যের চ্যাটে typing পাঠাতে পারত)
-    const emitTyping = (conversationId, isTyping) => {
+    // activity: "typing" | "recording" (ভয়েস রেকর্ড হচ্ছে) — অন্য কিছু এলে "typing" ধরা হয়
+    const emitTyping = (conversationId, isTyping, activity) => {
         if (!conversationId) return;
         const room = `conv:${conversationId}`;
         if (!socket.rooms.has(room)) return;
@@ -45,11 +46,12 @@ export const registerPresenceHandlers = (io, socket) => {
             conversationId,
             userId,
             fullName: socket.user.fullName,
-            isTyping
+            isTyping,
+            activity: activity === "recording" ? "recording" : "typing"
         });
     };
-    socket.on("typing:start", ({ conversationId } = {}) =>
-        emitTyping(conversationId, true)
+    socket.on("typing:start", ({ conversationId, activity } = {}) =>
+        emitTyping(conversationId, true, activity)
     );
     socket.on("typing:stop", ({ conversationId } = {}) =>
         emitTyping(conversationId, false)

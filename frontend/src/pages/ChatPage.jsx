@@ -33,6 +33,11 @@ import Avatar from "../components/Avatar.jsx";
 import SyncBrandBar from "../components/SyncBrandBar.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import LinkPreviewCard from "../components/LinkPreviewCard.jsx";
+import { VoicePlayer, VideoPlayer } from "../components/MediaPlayers.jsx";
+import {
+    ActivityBubble,
+    ActivityLabel
+} from "../components/ActivityIndicator.jsx";
 import useSignOut from "../hooks/useSignOut.js";
 import {
     NewDirectChatModal,
@@ -333,14 +338,22 @@ export default function ChatPage() {
         };
     };
 
-    const getTypingLabel = convId => {
+    // কে কী করছে: { activity: "typing" | "recording", names: [...] } অথবা null
+    // একই সময়ে কেউ ভয়েস রেকর্ড করলে সেটাই আগে দেখানো হয়
+    const getTypingInfo = convId => {
         const map = typingByConv[String(convId)] || {};
-        const names = Object.entries(map)
+        const entries = Object.entries(map)
             .filter(([uid]) => uid !== myId)
-            .map(([, name]) => name);
-        if (names.length === 0) return "";
-        if (names.length === 1) return `${names[0]} is typing...`;
-        return `${names.slice(0, 2).join(", ")} are typing...`;
+            .map(([, v]) =>
+                typeof v === "string" ? { name: v, activity: "typing" } : v
+            );
+        if (entries.length === 0) return null;
+        const recording = entries.filter(e => e.activity === "recording");
+        const picked = recording.length > 0 ? recording : entries;
+        return {
+            activity: recording.length > 0 ? "recording" : "typing",
+            names: picked.map(e => e.name)
+        };
     };
 
     const canSendInActive = useMemo(() => {
@@ -364,13 +377,55 @@ export default function ChatPage() {
         el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
     }, [draftText, isRecording, activeConversationId]);
 
+    // ভয়েস রেকর্ড চলার সময় অন্যপাশে "recording audio..." দেখাতে হার্টবিট পাঠানো হয়
+    // (receiver ৪.৫ সেকেন্ড পর নিজে থেকে মুছে ফেলে, তাই ২.৫ সেকেন্ড পরপর নতুন করে পাঠাই)
+    useEffect(() => {
+        if (recPhase !== "recording" || !activeConversationId) return undefined;
+        const convId = activeConversationId;
+        if (typingStopTimerRef.current) {
+            clearTimeout(typingStopTimerRef.current);
+            typingStopTimerRef.current = null;
+        }
+        isTypingSentRef.current = false;
+        emitTypingStart(convId, "recording");
+        const timer = setInterval(
+            () => emitTypingStart(convId, "recording"),
+            2500
+        );
+        return () => {
+            clearInterval(timer);
+            emitTypingStop(convId);
+        };
+    }, [recPhase, activeConversationId]);
+
+    const lastTypingEmitRef = useRef(0);
+
     const handleTypingChange = val => {
         setDraftText(val);
         if (!activeConversationId) return;
 
-        if (!isTypingSentRef.current && val.trim().length > 0) {
+        // সব লেখা মুছে ফেললে সাথে সাথে typing বন্ধ
+        if (val.trim().length === 0) {
+            if (typingStopTimerRef.current) {
+                clearTimeout(typingStopTimerRef.current);
+                typingStopTimerRef.current = null;
+            }
+            if (isTypingSentRef.current) {
+                isTypingSentRef.current = false;
+                emitTypingStop(activeConversationId);
+            }
+            return;
+        }
+
+        // লিখতে থাকলে ২.৫ সেকেন্ড পরপর আবার পাঠাই, নইলে অন্যপাশে ৪.৫ সেকেন্ড পর indicator হারিয়ে যেত
+        const now = Date.now();
+        if (
+            !isTypingSentRef.current ||
+            now - lastTypingEmitRef.current > 2500
+        ) {
             isTypingSentRef.current = true;
-            emitTypingStart(activeConversationId);
+            lastTypingEmitRef.current = now;
+            emitTypingStart(activeConversationId, "typing");
         }
 
         if (typingStopTimerRef.current) {
@@ -806,9 +861,23 @@ export default function ChatPage() {
     const activeDisplay = activeConversation
         ? getConvDisplay(activeConversation)
         : null;
-    const activeTypingText = activeConversationId
-        ? getTypingLabel(activeConversationId)
-        : "";
+    const activeTypingInfo = activeConversationId
+        ? getTypingInfo(activeConversationId)
+        : null;
+    const activeIsGroup = activeConversation?.type === "group";
+
+    // নিচের দিকে থাকলে typing বাবল আসার সময় স্ক্রল নামিয়ে আনি
+    const typingBubbleShown = Boolean(activeTypingInfo);
+    const typingBubbleKind = activeTypingInfo?.activity || "";
+    useEffect(() => {
+        if (!typingBubbleShown) return;
+        const end = messagesEndRef.current;
+        const viewport = end?.parentElement;
+        if (!viewport) return;
+        const gap =
+            viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+        if (gap < 240) end.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, [typingBubbleShown, typingBubbleKind]);
 
     return (
         <div
@@ -939,7 +1008,7 @@ export default function ChatPage() {
                         const info = getConvDisplay(conv);
                         const isSelected =
                             String(conv._id) === String(activeConversationId);
-                        const typingText = getTypingLabel(conv._id);
+                        const typingInfo = getTypingInfo(conv._id);
                         const unread = Number(conv.unread || 0);
 
                         return (
@@ -980,12 +1049,20 @@ export default function ChatPage() {
                                     <div className="sync-conv-bottom">
                                         <span
                                             className={`sync-conv-preview ${
-                                                typingText ? "typing" : ""
+                                                typingInfo ? "typing" : ""
                                             }`}
                                         >
-                                            {typingText ||
+                                            {typingInfo ? (
+                                                <ActivityLabel
+                                                    info={typingInfo}
+                                                    isGroup={
+                                                        conv.type === "group"
+                                                    }
+                                                />
+                                            ) : (
                                                 conv.lastMessage?.text ||
-                                                "No messages yet"}
+                                                "No messages yet"
+                                            )}
                                         </span>
                                         {unread > 0 && (
                                             <span className="sync-unread-badge">
@@ -1059,11 +1136,17 @@ export default function ChatPage() {
                                     </div>
                                     <div
                                         className={`sync-header-sub ${
-                                            activeTypingText ? "typing" : ""
+                                            activeTypingInfo ? "typing" : ""
                                         }`}
                                     >
-                                        {activeTypingText ||
-                                            activeDisplay.subtitle}
+                                        {activeTypingInfo ? (
+                                            <ActivityLabel
+                                                info={activeTypingInfo}
+                                                isGroup={activeIsGroup}
+                                            />
+                                        ) : (
+                                            activeDisplay.subtitle
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -1265,29 +1348,31 @@ export default function ChatPage() {
                                                 {!msg.deletedForEveryone &&
                                                     msg.type === "video" &&
                                                     msg.media?.url && (
-                                                        <div className="sync-msg-media-video">
-                                                            <video
-                                                                src={
-                                                                    msg.media
-                                                                        .url
-                                                                }
-                                                                controls
-                                                            />
-                                                        </div>
+                                                        <VideoPlayer
+                                                            src={msg.media.url}
+                                                            duration={
+                                                                msg.media
+                                                                    .duration
+                                                            }
+                                                            width={
+                                                                msg.media.width
+                                                            }
+                                                            height={
+                                                                msg.media.height
+                                                            }
+                                                        />
                                                     )}
 
                                                 {!msg.deletedForEveryone &&
                                                     msg.type === "audio" &&
                                                     msg.media?.url && (
-                                                        <div className="sync-msg-media-audio">
-                                                            <audio
-                                                                src={
-                                                                    msg.media
-                                                                        .url
-                                                                }
-                                                                controls
-                                                            />
-                                                        </div>
+                                                        <VoicePlayer
+                                                            src={msg.media.url}
+                                                            duration={
+                                                                msg.media
+                                                                    .duration
+                                                            }
+                                                        />
                                                     )}
 
                                                 {!msg.deletedForEveryone &&
@@ -1398,6 +1483,11 @@ export default function ChatPage() {
                                     </React.Fragment>
                                 );
                             })}
+
+                            <ActivityBubble
+                                info={activeTypingInfo}
+                                isGroup={activeIsGroup}
+                            />
 
                             <div ref={messagesEndRef} />
                         </div>
