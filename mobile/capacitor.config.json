@@ -6,7 +6,9 @@
     "server": {
         "url": "https://sync-5lfm.onrender.com",
         "cleartext": false,
-        "allowNavigation": ["sync-5lfm.onrender.com"],
+        "allowNavigation": [
+            "sync-5lfm.onrender.com"
+        ],
         "errorPath": "offline.html"
     },
     "android": {
@@ -16,8 +18,8 @@
     },
     "plugins": {
         "SplashScreen": {
-            "launchShowDuration": 700,
-            "launchFadeOutDuration": 250,
+            "launchShowDuration": 3000,
+            "launchFadeOutDuration": 300,
             "launchAutoHide": true,
             "backgroundColor": "#031512",
             "androidScaleType": "CENTER_CROP",

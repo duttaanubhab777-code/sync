@@ -13,7 +13,8 @@ import {
     AtSign,
     ShieldCheck,
     Crown,
-    Power
+    Power,
+    Download
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncLogo from "../components/SyncLogo.jsx";
@@ -26,11 +27,13 @@ import {
 } from "../store/authSlice.js";
 import { uploadMediaToCloudinary } from "../services/media.js";
 import { isPlatformAdmin } from "../App.jsx";
+import { useAppUpdates, isAndroidApp } from "../services/appUpdate.js";
 
 export default function ProfilePage() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
     const signOut = useSignOut();
+    const { hasUpdate } = useAppUpdates({ autoLoad: isAndroidApp });
     const { user, blockedUsers } = useSelector(state => state.auth);
 
     const [fullName, setFullName] = useState(user?.fullName || "");
@@ -164,6 +167,16 @@ export default function ProfilePage() {
                                         <span>Remove</span>
                                     </button>
                                 )}
+                                <button
+                                    type="button"
+                                    className="sync-btn secondary sm"
+                                    onClick={() => navigate("/updates")}
+                                >
+                                    <Download size={15} />
+                                    <span>
+                                        {hasUpdate ? "Update available" : "App updates"}
+                                    </span>
+                                </button>
                                 {isAdmin && (
                                     <button
                                         type="button"

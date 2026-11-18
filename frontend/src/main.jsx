@@ -50,3 +50,16 @@ if (splashSeen) {
     setTimeout(hideBootSplash, Math.max(0, SPLASH_MIN_MS - elapsed));
 }
 setTimeout(hideBootSplash, SPLASH_MAX_MS);
+
+// Android অ্যাপ: native splash (গাঢ় ব্যাকগ্রাউন্ডে গোল লোগো) ততক্ষণ থাকে যতক্ষণ না ওয়েব পেজ আঁকা হয়;
+// এখানে সেটা লুকানো হয়, যাতে সাদা স্ক্রিন না আসে। না হলে capacitor.config.json-এর launchShowDuration পর নিজেই যায়।
+const hideNativeSplash = () => {
+    try {
+        const cap = window.Capacitor;
+        const plugin = cap && cap.Plugins && cap.Plugins.SplashScreen;
+        if (plugin && typeof plugin.hide === "function") plugin.hide();
+    } catch {
+        // ওয়েব/PWA-তে এই প্লাগিন নেই, সমস্যা নেই
+    }
+};
+requestAnimationFrame(() => requestAnimationFrame(hideNativeSplash));

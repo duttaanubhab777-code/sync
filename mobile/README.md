@@ -25,6 +25,19 @@
 - `scripts/customize-android.sh` — permission, আইকন, splash, version সেট করে
 - `debug.keystore` — signing key (শুধু সরাসরি APK শেয়ারের জন্য)
 
+## অ্যাপ-ভেতরের আপডেট (Update popup ও Updates পেজ)
+
+- প্রতিটি APK নিজের build নম্বর জানে (User-Agent এ `SyncApp/1.0.<build>`, GitHub Actions বসায়)।
+- অ্যাপ খুললে backend (`GET /api/app/updates`) GitHub Releases থেকে সর্বশেষ ভার্সন ও "What's new" আনে। নতুন ভার্সন থাকলে ৫ সেকেন্ডের কাউন্টডাউন সহ **Update available** পপআপ আসে। বাটন চাপলে ব্রাউজার APK নামায়, নামা শেষে ফাইলে ট্যাপ করে Install করলেই পুরনোর ওপর আপডেট হয়।
+- পপআপ এড়িয়ে গেলে বা "Later" দিলে **Profile → App updates** বা উপরের Download আইকন (নতুন ভার্সন থাকলে সবুজ ডট) থেকে `/updates` পেজে যাওয়া যায়: সেখানে বর্তমান ভার্সন, কী কী বদলেছে ও আগের সব ভার্সনের ইতিহাস থাকে।
+- প্রতি build-এর আলাদা release হয় (`android-v1.0.<build>`), আর সবসময় সর্বশেষটার লিংক: `https://github.com/duttaanubhab777-code/sync/releases/latest/download/Sync.apk`
+- repo-র নাম আলাদা হলে Render এ `GITHUB_REPO=owner/repo` সেট করো (private repo হলে `GITHUB_TOKEN`ও)।
+- Android নিজেই শেষ "Install" ট্যাপটা চায়, চুপচাপ নিজে নিজে ইনস্টল হওয়া সম্ভব নয়।
+
+## অ্যাপ খোলার Splash
+
+Android 12+ এর সিস্টেম splash ও পুরনো ফোনের splash.png দুটোই PWA-র মতো: গাঢ় ব্যাকগ্রাউন্ডে গোল লোগো। ওয়েব পেজ আঁকা হলে (`main.jsx`) বা offline পেজ খুললে splash নিজে সরে যায়; কিছু না হলে `launchShowDuration` (৩ সেকেন্ড) পর যায়।
+
 ## Play Store-এ দিতে চাইলে
 
 `debug.keystore` Play Store-এর জন্য নয়। তখন আলাদা একটা release keystore বানিয়ে GitHub Secrets-এ রাখতে হবে এবং `assembleRelease` বিল্ডে যেতে হবে।

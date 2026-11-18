@@ -11,7 +11,8 @@ import {
     WifiOff,
     Loader2,
     Mail,
-    LogOut
+    LogOut,
+    Download
 } from "lucide-react";
 import Avatar from "./Avatar.jsx";
 import SyncLogo from "./SyncLogo.jsx";
@@ -24,12 +25,14 @@ import { fetchConversations, resetChatState } from "../store/chatSlice.js";
 import { fetchStories } from "../store/storySlice.js";
 import { connectSocket, disconnectSocket } from "../services/socket.js";
 import { isPlatformAdmin } from "../App.jsx";
+import { useAppUpdates, isAndroidApp } from "../services/appUpdate.js";
 
 export default function AppLayout() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
     const location = useLocation();
     const signOut = useSignOut();
+    const { hasUpdate } = useAppUpdates({ autoLoad: isAndroidApp });
 
     const { user, isAuthenticated, serverWaking } = useSelector(
         state => state.auth
@@ -107,6 +110,16 @@ export default function AppLayout() {
                 <header className="sync-global-topbar" aria-label="Quick actions">
                     <div className="sync-global-topbar-spacer" />
                     <div className="sync-global-topbar-actions">
+                        <button
+                            type="button"
+                            className="sync-global-topbar-action"
+                            onClick={() => navigate("/updates")}
+                            title={hasUpdate ? "Update available" : "App updates"}
+                            aria-label={hasUpdate ? "Update available" : "App updates"}
+                        >
+                            <Download size={17} />
+                            {hasUpdate && <span className="sync-update-dot" />}
+                        </button>
                         <button
                             type="button"
                             className="sync-global-topbar-action"

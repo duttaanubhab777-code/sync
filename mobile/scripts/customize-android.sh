@@ -75,10 +75,69 @@ for name in ic_launcher ic_launcher_round; do
 XML
 done
 
-# ---------- 3. Splash screen (গাঢ় ব্যাকগ্রাউন্ডে Sync লোগো) ----------
+# ---------- 3. Splash screen (PWA-র মতো: গাঢ় ব্যাকগ্রাউন্ডে গোল লোগো) ----------
+# শুধু windowBackground সাদা থাকায় অ্যাপ খুললে সাদা স্ক্রিন দেখাত। এখন Android 12+ এর সিস্টেম splash-এর
+# ব্যাকগ্রাউন্ড ও আইকন, আর পুরনো ফোনের splash.png সবই PWA splash-এর মতো (গোল লোগো, গাঢ় ব্যাকগ্রাউন্ড)।
 TMP="$(mktemp -d)"
-"$IM" -size 1080x1920 "xc:$SPLASH_BG" -depth 8 \( "$LOGO" -resize 420x420 \) -gravity center -composite "$TMP/splash-port.png"
-"$IM" -size 1920x1080 "xc:$SPLASH_BG" -depth 8 \( "$LOGO" -resize 420x420 \) -gravity center -composite "$TMP/splash-land.png"
+CIRCLE_PX=640
+
+# maskable আইকন গোল করে কাটা (PWA splash-এ Chrome ঠিক এটাই দেখায়)
+"$IM" "$ICON" -resize "${CIRCLE_PX}x${CIRCLE_PX}" -alpha set \
+    \( -size "${CIRCLE_PX}x${CIRCLE_PX}" xc:none -fill white -draw "circle 320,320 320,1.5" \) \
+    -compose DstIn -composite "$TMP/circle.png"
+
+# Android 12+ সিস্টেম splash আইকন: স্বচ্ছ 960px ক্যানভাসে গোল লোগো (সিস্টেম মাঝের 2/3 অংশ দেখায়)
+mkdir -p "$RES/drawable-nodpi"
+"$IM" -size 960x960 xc:none "$TMP/circle.png" -gravity center -composite "$RES/drawable-nodpi/sync_splash_icon.png"
+
+cat > "$RES/values/sync_splash.xml" <<XML
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="sync_splash_bg">$SPLASH_BG</color>
+</resources>
+XML
+
+# থিমে splash ব্যাকগ্রাউন্ড ও আইকন বসানো (Theme.SplashScreen না থাকলে কিছু বদলায় না, বিল্ড ভাঙে না)
+python3 - "$RES/values/styles.xml" <<'PY'
+import re, sys
+path = sys.argv[1]
+try:
+    s = open(path, encoding="utf-8").read()
+except FileNotFoundError:
+    print("styles.xml not found, skipping splash theme"); sys.exit(0)
+
+def patch(style_name, items):
+    global s
+    pat = re.compile(r'(<style\s+name="%s"[^>]*>)(.*?)(</style>)' % re.escape(style_name), re.S)
+    m = pat.search(s)
+    if not m:
+        print("style %s not found, skipped" % style_name); return
+    body = m.group(2)
+    add = ""
+    for name, value in items:
+        if 'name="%s"' % name not in body:
+            add += '\n        <item name="%s">%s</item>' % (name, value)
+    if add:
+        s = s[:m.start()] + m.group(1) + add + body + m.group(3) + s[m.end():]
+
+if "Theme.SplashScreen" in s:
+    patch("AppTheme.NoActionBarLaunch", [
+        ("windowSplashScreenBackground", "@color/sync_splash_bg"),
+        ("windowSplashScreenAnimatedIcon", "@drawable/sync_splash_icon"),
+        ("android:windowBackground", "@color/sync_splash_bg"),
+    ])
+else:
+    print("Theme.SplashScreen not found, splash theme unchanged")
+# splash-এর পরে WebView আঁকার আগের মুহূর্তেও সাদা ঝলক যেন না আসে
+patch("AppTheme.NoActionBar", [("android:windowBackground", "@color/sync_splash_bg")])
+open(path, "w", encoding="utf-8").write(s)
+print("splash theme patched")
+PY
+
+# পুরনো ফোন ও manual show() এর জন্য splash.png: গাঢ় ব্যাকগ্রাউন্ডে গোল লোগো
+"$IM" "$TMP/circle.png" -resize 500x500 "$TMP/circle-small.png"
+"$IM" -size 1080x1920 "xc:$SPLASH_BG" -depth 8 "$TMP/circle-small.png" -gravity center -composite "$TMP/splash-port.png"
+"$IM" -size 1920x1080 "xc:$SPLASH_BG" -depth 8 "$TMP/circle-small.png" -gravity center -composite "$TMP/splash-land.png"
 
 FOUND=0
 while IFS= read -r f; do

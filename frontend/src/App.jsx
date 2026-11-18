@@ -12,6 +12,8 @@ import StoriesPage from "./pages/StoriesPage.jsx";
 import ProfilePage from "./pages/ProfilePage.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
 import ContactPage from "./pages/ContactPage.jsx";
+import UpdatesPage from "./pages/UpdatesPage.jsx";
+import UpdatePopup from "./components/UpdatePopup.jsx";
 
 export const isPlatformAdmin = user =>
     Boolean(
@@ -73,6 +75,7 @@ export default function App() {
     }, [dispatch]);
 
     return (
+        <>
         <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
@@ -91,6 +94,7 @@ export default function App() {
                 <Route path="chats/:conversationId" element={<ChatPage />} />
                 <Route path="stories" element={<StoriesPage />} />
                 <Route path="profile" element={<ProfilePage />} />
+                <Route path="updates" element={<UpdatesPage />} />
                 <Route
                     path="admin"
                     element={
@@ -103,5 +107,8 @@ export default function App() {
 
             <Route path="*" element={<HomeRedirect />} />
         </Routes>
+        {/* Android অ্যাপে নতুন ভার্সন থাকলে ৫ সেকেন্ডের কাউন্টডাউন সহ আপডেট পপআপ */}
+        <UpdatePopup />
+        </>
     );
 }

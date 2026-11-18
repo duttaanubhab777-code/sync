@@ -47,6 +47,13 @@ jobs:
             - name: Install ImageMagick (icon & splash)
               run: sudo apt-get update -y && sudo apt-get install -y imagemagick
 
+            # অ্যাপ নিজের build নম্বর জানে User-Agent থেকে ("SyncApp/1.0.<build>"), তাই নতুন ভার্সন আছে কিনা মিলিয়ে দেখতে পারে
+            - name: Stamp build number into the app
+              env:
+                  VERSION_CODE: ${{ github.run_number }}
+              run: |
+                  node -e "const fs=require('fs');const f='capacitor.config.json';const c=JSON.parse(fs.readFileSync(f,'utf8'));c.android.appendUserAgent='SyncApp/1.0.'+process.env.VERSION_CODE;fs.writeFileSync(f,JSON.stringify(c,null,4)+'\n');console.log(c.android.appendUserAgent)"
+
             - name: Create Android project
               run: npx cap add android
 
@@ -83,7 +90,9 @@ jobs:
               env:
                   RUN_NUMBER: ${{ github.run_number }}
               run: |
-                  PREV="$(git rev-parse -q --verify 'refs/tags/android-latest^{commit}' || true)"
+                  PREV_TAG="$(git tag --list 'android-v*' --sort=-v:refname | head -n 1)"
+                  [ -n "$PREV_TAG" ] || PREV_TAG="android-latest"
+                  PREV="$(git rev-parse -q --verify "refs/tags/${PREV_TAG}^{commit}" || true)"
                   if [ -n "$PREV" ] && git merge-base --is-ancestor "$PREV" HEAD && [ "$PREV" != "$(git rev-parse HEAD)" ]; then
                       LOG="$(git log --no-merges --pretty='- %s (`%h`)' -n 15 "$PREV..HEAD")"
                   else
@@ -105,8 +114,9 @@ jobs:
                   } > RELEASE_NOTES.md
                   cat RELEASE_NOTES.md
 
-            # পুরনো release ও tag মুছে নতুন করে বানানো হয়, যাতে tag নতুন commit-এ সরে আসে এবং description নতুন করে বসে
-            - name: Remove previous release
+            # আগে একটাই "android-latest" release ছিল। এখন প্রতি build-এর নিজস্ব release থাকে (অ্যাপের Version history এর জন্য),
+            # তাই পুরনো android-latest একবার মুছে ফেলা হয়। না থাকলে কিছু হয় না।
+            - name: Retire the old android-latest release
               working-directory: ${{ github.workspace }}
               env:
                   GH_TOKEN: ${{ github.token }}
@@ -115,7 +125,7 @@ jobs:
             - name: Publish to Releases
               uses: softprops/action-gh-release@v2
               with:
-                  tag_name: android-latest
+                  tag_name: android-v1.0.${{ github.run_number }}
                   target_commitish: ${{ github.sha }}
                   name: Sync Android v1.0.${{ github.run_number }}
                   body_path: RELEASE_NOTES.md

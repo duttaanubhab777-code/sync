@@ -7,6 +7,7 @@ import notificationRoutes from "./notification.routes.js";
 import noticeRoutes from "./notice.routes.js";
 import adminRoutes from "./admin.routes.js";
 import linkPreviewRoutes from "./linkPreview.routes.js";
+import appUpdateRoutes from "./appUpdate.routes.js";
 import { syncMessages } from "../controllers/message.controller.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
@@ -20,6 +21,7 @@ router.use("/notifications", notificationRoutes);
 router.use("/notices", noticeRoutes);
 router.use("/admin", adminRoutes);
 router.use("/link-preview", linkPreviewRoutes);
+router.use("/app", appUpdateRoutes);
 router.get("/sync", verifyJWT, syncMessages);
 
 export default router;
