@@ -27,6 +27,8 @@ jobs:
         steps:
             - name: Checkout
               uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0 # আগের build থেকে কী বদলেছে (release description) বের করতে পুরো history লাগে
 
             - name: Setup Node
               uses: actions/setup-node@v4
@@ -75,13 +77,47 @@ jobs:
                   path: mobile/Sync.apk
                   retention-days: 30
 
+            # Release description: আগের build-এর পর থেকে যে commit গুলো এসেছে সেগুলো লিস্ট করে
+            - name: Build release notes
+              working-directory: ${{ github.workspace }}
+              env:
+                  RUN_NUMBER: ${{ github.run_number }}
+              run: |
+                  PREV="$(git rev-parse -q --verify 'refs/tags/android-latest^{commit}' || true)"
+                  if [ -n "$PREV" ] && git merge-base --is-ancestor "$PREV" HEAD && [ "$PREV" != "$(git rev-parse HEAD)" ]; then
+                      LOG="$(git log --no-merges --pretty='- %s (`%h`)' -n 15 "$PREV..HEAD")"
+                  else
+                      LOG="$(git log --no-merges --pretty='- %s (`%h`)' -n 10)"
+                  fi
+                  [ -n "$LOG" ] || LOG="- Rebuilt from the latest code"
+                  {
+                      echo "## Sync Android v1.0.${RUN_NUMBER}"
+                      echo
+                      echo "Build #${RUN_NUMBER} · $(date -u '+%d %b %Y, %H:%M') UTC · commit \`$(git rev-parse --short HEAD)\`"
+                      echo
+                      echo "### What's new"
+                      echo "$LOG"
+                      echo
+                      echo "### Install"
+                      echo "1. Download **Sync.apk** from the assets below."
+                      echo "2. Open it and allow installs from this source if Android asks."
+                      echo "3. It installs over the old version, so no uninstall is needed."
+                  } > RELEASE_NOTES.md
+                  cat RELEASE_NOTES.md
+
+            # পুরনো release ও tag মুছে নতুন করে বানানো হয়, যাতে tag নতুন commit-এ সরে আসে এবং description নতুন করে বসে
+            - name: Remove previous release
+              working-directory: ${{ github.workspace }}
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: gh release delete android-latest --cleanup-tag --yes || true
+
             - name: Publish to Releases
               uses: softprops/action-gh-release@v2
               with:
                   tag_name: android-latest
-                  name: Sync Android (latest)
-                  body: |
-                      Latest Sync Android build (#${{ github.run_number }}).
-                      Download **Sync.apk**, install it, and open the app.
+                  target_commitish: ${{ github.sha }}
+                  name: Sync Android v1.0.${{ github.run_number }}
+                  body_path: RELEASE_NOTES.md
                   files: mobile/Sync.apk
                   make_latest: true
