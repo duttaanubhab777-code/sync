@@ -10,7 +10,7 @@ export const installedBuild = (() => {
     return m ? Number(m[1]) : 0;
 })();
 
-const CACHE_MS = 5 * 60 * 1000;
+const CACHE_MS = 60 * 1000; // আগে ৫ মিনিট ছিল, তাই নতুন ভার্সন দেরিতে ধরা পড়ত
 
 let state = { status: "idle", data: null, error: "" };
 let lastAt = 0;
@@ -34,7 +34,13 @@ export function loadUpdates(force = false) {
     }
     if (!state.data) emit({ status: "loading", error: "" });
     inflight = api
-        .get("/api/app/updates")
+        .get("/api/app/updates", {
+            // force হলে সার্ভারের ক্যাশ ভেঙে সরাসরি GitHub থেকে সর্বশেষ release আনে;
+            // `_` প্রতিবার আলাদা, যাতে কোনো ক্যাশ (ব্রাউজার/প্রক্সি) পুরনো জবাব না দেয়
+            params: force
+                ? { fresh: 1, _: Date.now() }
+                : { _: Math.floor(Date.now() / 60000) }
+        })
         .then(res => {
             lastAt = Date.now();
             emit({ status: "ready", data: res.data?.data || null, error: "" });
@@ -58,6 +64,17 @@ export function useAppUpdates({ autoLoad = true } = {}) {
         if (autoLoad) loadUpdates();
     }, [autoLoad]);
 
+    // অ্যাপ ব্যাকগ্রাউন্ড থেকে ফিরলে আবার চেক (অ্যাপ অনেকক্ষণ খোলা থাকলে নতুন release ধরা পড়ে)
+    useEffect(() => {
+        if (!autoLoad) return;
+        const onVisible = () => {
+            if (document.visibilityState === "visible") loadUpdates();
+        };
+        document.addEventListener("visibilitychange", onVisible);
+        return () =>
+            document.removeEventListener("visibilitychange", onVisible);
+    }, [autoLoad]);
+
     const latest = s.data?.latest || null;
     return {
         status: s.status,
@@ -68,7 +85,9 @@ export function useAppUpdates({ autoLoad = true } = {}) {
         releasesUrl: s.data?.releasesUrl || "",
         isAndroidApp,
         installedBuild,
-        hasUpdate: Boolean(isAndroidApp && latest && latest.build > installedBuild),
+        hasUpdate: Boolean(
+            isAndroidApp && latest && latest.build > installedBuild
+        ),
         refresh: () => loadUpdates(true)
     };
 }
