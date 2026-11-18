@@ -21,7 +21,7 @@
 ## ফাইলগুলো
 
 - `capacitor.config.json` — অ্যাপের নাম, লাইভ URL, স্ট্যাটাস বার ও splash সেটিং
-- `www/offline.html` — ইন্টারনেট না থাকলে বা সার্ভার ঘুমিয়ে থাকলে যে পেজ দেখায় (নিজে থেকে আবার চেষ্টা করে)
+- `www/offline.html` — ইন্টারনেট না থাকলে "No internet" স্ক্রিন, আর Render সার্ভার ঘুমিয়ে থাকলে সার্ভার-বুট লগ (ধাপে ধাপে স্টার্টআপ, প্রগ্রেস বার, ping ms) দেখায়। `/health` সত্যিই 200 দিলে তবেই অ্যাপ খোলে। ইন্টারনেট ও সার্ভার আলাদা করে ping করে, তাই "offline" আর "সার্ভার জাগছে" গুলিয়ে যায় না
 - `scripts/customize-android.sh` — permission, আইকন, splash, version সেট করে
 - `debug.keystore` — signing key (শুধু সরাসরি APK শেয়ারের জন্য)
 
