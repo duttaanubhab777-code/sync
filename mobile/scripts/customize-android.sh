@@ -895,6 +895,25 @@ rm -rf "$TMP"
 sed -i -E "s/versionCode [0-9]+/versionCode ${VERSION_CODE}/" "$GRADLE"
 sed -i -E "s/versionName \"[^\"]*\"/versionName \"1.0.${VERSION_CODE}\"/" "$GRADLE"
 
+# ---------- 4b. Firebase Messaging dependency ----------
+# SyncMessagingService, Capacitor-এর MessagingService (FirebaseMessagingService) কে extend করে ও RemoteMessage ব্যবহার করে।
+# push-notifications plugin firebase-messaging কে `implementation` দিয়ে নেয়, তাই app module এ তা দেখা যায় না
+# (compileDebugJavaWithJavac: "cannot access FirebaseMessagingService"). তাই app এ সরাসরি যোগ করা হলো।
+python3 - "$GRADLE" <<'PY'
+import re, sys
+path = sys.argv[1]
+s = open(path, encoding="utf-8").read()
+if "firebase-messaging" in s:
+    print("firebase-messaging already present"); sys.exit(0)
+m = re.search(r"^dependencies\s*\{", s, re.M)
+if not m:
+    print("dependencies block not found", file=sys.stderr); sys.exit(1)
+dep = "\n    implementation 'com.google.firebase:firebase-messaging:24.1.0'\n    implementation 'androidx.core:core:1.15.0'"
+s = s[:m.end()] + dep + s[m.end():]
+open(path, "w", encoding="utf-8").write(s)
+print("firebase-messaging dependency added")
+PY
+
 # ---------- 5. Signing: repo-র debug.keystore স্পষ্টভাবে বসানো ----------
 python3 - "$GRADLE" "$(pwd)/debug.keystore" <<'PY'
 import re, sys
