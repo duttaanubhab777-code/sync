@@ -41,3 +41,6 @@ Android 12+ এর সিস্টেম splash ও পুরনো ফোনে
 ## Play Store-এ দিতে চাইলে
 
 `debug.keystore` Play Store-এর জন্য নয়। তখন আলাদা একটা release keystore বানিয়ে GitHub Secrets-এ রাখতে হবে এবং `assembleRelease` বিল্ডে যেতে হবে।
+
+## Test note
+Update popup test build.
