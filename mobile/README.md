@@ -44,3 +44,4 @@ Android 12+ এর সিস্টেম splash ও পুরনো ফোনে
 
 ## Test note
 Update popup test build.
+Update popup test build for v1.0.12.
