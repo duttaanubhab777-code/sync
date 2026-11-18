@@ -114,6 +114,13 @@ app.use(cookieParser());
 
 // Render কোল্ড স্টার্ট জাগানো ও UptimeRobot ping-এর জন্য + ফ্রন্টএন্ডের জন্য runtime public config
 app.get("/health", (_req, res) => {
+    // Android অ্যাপের offline পেজ (https://localhost origin) এখান থেকে আসল status পড়ে সার্ভার জেগেছে কিনা বুঝে।
+    // শুধু এই endpoint-এ খোলা CORS; কোনো cookie/credential যায় না, আর secret কিছু ফেরত আসে না।
+    res.set({
+        "Access-Control-Allow-Origin": "*",
+        "Cross-Origin-Resource-Policy": "cross-origin",
+        "Cache-Control": "no-store"
+    });
     res.status(200).json({
         ok: true,
         service: "sync-node-backend",
