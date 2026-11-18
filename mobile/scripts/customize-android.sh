@@ -158,4 +158,38 @@ rm -rf "$TMP"
 sed -i -E "s/versionCode [0-9]+/versionCode ${VERSION_CODE}/" "$GRADLE"
 sed -i -E "s/versionName \"[^\"]*\"/versionName \"1.0.${VERSION_CODE}\"/" "$GRADLE"
 
+# ---------- 5. Signing: repo-র debug.keystore স্পষ্টভাবে বসানো ----------
+# আগে শুধু ~/.android/debug.keystore-এ কপি করা হতো আর Gradle নিজে থেকে সেটা নেবে ধরে নেওয়া হতো।
+# সেটা না নিলে প্রতি build-এ runner-এর আলাদা random key দিয়ে sign হতো, ফলে ফোনে
+# "App not installed as package conflicts with an existing package" আসত। এখন build.gradle-এই key বলে দেওয়া হয়।
+python3 - "$GRADLE" "$(pwd)/debug.keystore" <<'PY'
+import re, sys
+path, keystore = sys.argv[1], sys.argv[2]
+s = open(path, encoding="utf-8").read()
+if "syncfixed" in s:
+    print("signing already configured"); sys.exit(0)
+
+signing = (
+    "    signingConfigs {\n"
+    "        syncfixed {\n"
+    "            storeFile file('%s')\n"
+    "            storePassword 'android'\n"
+    "            keyAlias 'androiddebugkey'\n"
+    "            keyPassword 'android'\n"
+    "        }\n"
+    "    }\n"
+) % keystore
+
+m = re.search(r"^(\s*)buildTypes\s*\{", s, re.M)
+if not m:
+    print("buildTypes block not found", file=sys.stderr); sys.exit(1)
+# signingConfigs buildTypes-এর আগে, আর buildTypes-এর ভেতরে debug ও release দুটোতেই এই key
+s = s[:m.start()] + signing + s[m.start():]
+m = re.search(r"buildTypes\s*\{", s)
+inject = "\n        debug {\n            signingConfig signingConfigs.syncfixed\n        }"
+s = s[:m.end()] + inject + s[m.end():]
+open(path, "w", encoding="utf-8").write(s)
+print("signing configured with fixed keystore")
+PY
+
 echo "Android project customised (versionCode ${VERSION_CODE})"

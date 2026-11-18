@@ -74,6 +74,21 @@ jobs:
                   chmod +x gradlew
                   ./gradlew assembleDebug --no-daemon --stacktrace
 
+            # APK সত্যিই fixed key দিয়ে sign হলো কিনা আর versionCode ঠিক বসল কিনা লগে দেখায়।
+            # প্রতি build-এ SHA-256 একই না থাকলে ফোনে আপডেট না বসে "package conflicts" আসবে।
+            # (এই লগের fingerprint = debug.keystore-এর fingerprint হওয়া উচিত)
+            - name: Verify APK signature and version
+              run: |
+                  BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)"
+                  APK=android/app/build/outputs/apk/debug/app-debug.apk
+                  "$BT/apksigner" verify --print-certs "$APK" | grep -E "SHA-256|SHA-1"
+                  "$BT/aapt" dump badging "$APK" | grep -E "^package:"
+                  EXPECT="$(keytool -list -v -keystore debug.keystore -storepass android 2>/dev/null | grep -m1 'SHA256:' | sed 's/.*SHA256: *//' | tr -d ':' | tr 'A-F' 'a-f')"
+                  GOT="$("$BT/apksigner" verify --print-certs "$APK" | grep -m1 'SHA-256 digest' | sed 's/.*: *//' | tr -d ' ' | tr 'A-F' 'a-f')"
+                  echo "expected=$EXPECT"
+                  echo "actual  =$GOT"
+                  [ "$EXPECT" = "$GOT" ] || { echo "APK is NOT signed with debug.keystore" >&2; exit 1; }
+
             - name: Prepare file
               run: cp android/app/build/outputs/apk/debug/app-debug.apk Sync.apk
 
