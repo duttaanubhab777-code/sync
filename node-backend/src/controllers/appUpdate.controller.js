@@ -84,8 +84,91 @@ const fetchFromGitHub = async () => {
     };
 };
 
-// GitHub API rate limit (60/ঘণ্টা, Render-এর shared IP-তে সহজেই শেষ) বা ব্যর্থ হলেও যেন নতুন build ধরা পড়ে:
-// github.com/<repo>/releases/latest একটা redirect দেয় যার Location-এ নতুন tag থাকে (API quota লাগে না)।
+// ---------- GitHub API ব্যর্থ হলে বিকল্প (rate limit / timeout) ----------
+// GitHub API-র quota (টোকেন ছাড়া ঘণ্টায় ৬০, Render-এর shared IP-তে সহজেই শেষ) ফুরোলে আগে শুধু build নম্বর
+// পাওয়া যেত, তাই v1.0.12-এর "What's new" ফাঁকা থেকে "Improvements and bug fixes" দেখাত।
+// এখন releases.atom feed পড়া হয়: এটা API quota খায় না, আর প্রতিটা release-এর "What's new" ও তারিখ দেয়।
+const API_BLOCK_MS = 5 * 60 * 1000;
+let apiBlockedUntil = 0;
+
+const decodeEntities = t =>
+    String(t || "")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#0*39;|&#x27;|&apos;/gi, "'")
+        .replace(/&amp;/g, "&");
+
+// atom entry-র (escape করা) HTML থেকে "What's new" এর <li> গুলো
+export const changesFromHtml = html => {
+    const h = decodeEntities(html);
+    const sec =
+        /<h[1-6][^>]*>\s*What(?:'|’|&#0*39;|&apos;)?s new\s*<\/h[1-6]>([\s\S]*?)(?=<h[1-6][\s>]|$)/i.exec(
+            h
+        );
+    if (!sec) return [];
+    const out = [];
+    const re = /<li[^>]*>([\s\S]*?)<\/li>/gi;
+    let m;
+    while ((m = re.exec(sec[1]))) {
+        const text = decodeEntities(m[1].replace(/<[^>]+>/g, ""))
+            .replace(/\s+/g, " ")
+            .replace(/\s*\(`?[0-9a-f]{6,40}`?\)\s*$/i, "")
+            .trim();
+        if (text) out.push(text.slice(0, 200));
+    }
+    return out.slice(0, 20);
+};
+
+export const parseReleasesAtom = xml => {
+    const entries = String(xml || "").match(/<entry>[\s\S]*?<\/entry>/g) || [];
+    const releases = [];
+    for (const e of entries) {
+        const href =
+            /<link[^>]*rel="alternate"[^>]*href="([^"]+)"/.exec(e)?.[1] || "";
+        const tag = decodeURIComponent(href.split("/releases/tag/")[1] || "");
+        if (!/^android-/i.test(tag)) continue;
+        const title = decodeEntities(/<title>([\s\S]*?)<\/title>/.exec(e)?.[1]);
+        const build = buildOf({ name: title, tag_name: tag });
+        if (!build) continue;
+        const content =
+            /<content[^>]*>([\s\S]*?)<\/content>/.exec(e)?.[1] || "";
+        releases.push({
+            build,
+            version: `1.0.${build}`,
+            publishedAt: /<updated>([^<]+)<\/updated>/.exec(e)?.[1] || null,
+            changes: changesFromHtml(content),
+            // asset-এর নাম workflow-তে সবসময় Sync.apk
+            downloadUrl: `https://github.com/${REPO}/releases/download/${tag}/Sync.apk`,
+            sizeBytes: 0
+        });
+    }
+    return releases
+        .filter((r, i, arr) => arr.findIndex(x => x.build === r.build) === i)
+        .sort((a, b) => b.build - a.build);
+};
+
+const fetchFromAtom = async () => {
+    const res = await fetch(`https://github.com/${REPO}/releases.atom`, {
+        headers: {
+            "User-Agent": "sync-app-updates",
+            Accept: "application/atom+xml"
+        },
+        signal: AbortSignal.timeout(8000)
+    });
+    if (!res.ok) throw new Error(`releases.atom responded ${res.status}`);
+    const releases = parseReleasesAtom(await res.text());
+    if (!releases.length)
+        throw new Error("releases.atom had no android releases");
+    return {
+        latest: releases[0],
+        history: releases.slice(0, HISTORY_LIMIT),
+        latestDownloadUrl: `https://github.com/${REPO}/releases/latest/download/Sync.apk`,
+        releasesUrl: `https://github.com/${REPO}/releases`
+    };
+};
+
+// শেষ ভরসা: github.com/<repo>/releases/latest-এর redirect থেকে শুধু build নম্বর
 const latestBuildFromRedirect = async () => {
     const res = await fetch(`https://github.com/${REPO}/releases/latest`, {
         redirect: "manual",
@@ -101,10 +184,30 @@ const refreshCache = async () => {
     if (inflightFetch) return inflightFetch;
     inflightFetch = (async () => {
         try {
-            cache = { at: Date.now(), data: await fetchFromGitHub() };
-        } catch (err) {
-            console.warn("[app-updates] GitHub API failed:", err.message);
-            // API ব্যর্থ: অন্তত নতুন build নম্বরটা redirect থেকে জেনে ক্যাশে বসানো
+            // 1) GitHub API (সবচেয়ে পূর্ণ তথ্য: APK সাইজসহ)। সম্প্রতি ব্যর্থ হলে সরাসরি atom-এ
+            if (Date.now() >= apiBlockedUntil) {
+                try {
+                    cache = { at: Date.now(), data: await fetchFromGitHub() };
+                    return;
+                } catch (err) {
+                    apiBlockedUntil = Date.now() + API_BLOCK_MS;
+                    console.warn(
+                        "[app-updates] GitHub API failed:",
+                        err.message
+                    );
+                }
+            }
+            // 2) releases.atom
+            try {
+                cache = { at: Date.now(), data: await fetchFromAtom() };
+                return;
+            } catch (err) {
+                console.warn(
+                    "[app-updates] atom fallback failed:",
+                    err.message
+                );
+            }
+            // 3) শুধু build নম্বর
             try {
                 const build = await latestBuildFromRedirect();
                 const known = cache.data?.latest?.build || 0;
@@ -123,7 +226,7 @@ const refreshCache = async () => {
                         sizeBytes: 0
                     };
                     cache = {
-                        at: Date.now() - CACHE_MS + 30 * 1000, // ৩০ সেকেন্ড পর আবার API চেষ্টা
+                        at: Date.now() - CACHE_MS + 30 * 1000,
                         data: {
                             ...base,
                             latest,
@@ -132,19 +235,18 @@ const refreshCache = async () => {
                     };
                     return;
                 }
-            } catch (e2) {
+            } catch (err) {
                 console.warn(
                     "[app-updates] redirect fallback failed:",
-                    e2.message
+                    err.message
                 );
             }
-            if (!cache.data) {
+            if (!cache.data)
                 throw new ApiError(
                     502,
                     "Could not check for updates right now"
                 );
-            }
-            // পুরনো ক্যাশ দিয়েই চলবে, তবে ১ মিনিট পর আবার চেষ্টা করবে
+            // পুরনো ক্যাশ দিয়েই চলবে, ১ মিনিট পর আবার চেষ্টা
             cache = { ...cache, at: Date.now() - CACHE_MS + 60 * 1000 };
         } finally {
             inflightFetch = null;
