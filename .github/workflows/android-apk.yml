@@ -68,11 +68,36 @@ jobs:
                   mkdir -p ~/.android
                   cp debug.keystore ~/.android/debug.keystore
 
+            # Maven Central / Google repo থেকে কিছু POM "Could not find" (404) আসছিল, ফলে build ১২ সেকেন্ডেই ফেল করত।
+            # তাই Google-এর Maven Central mirror fallback হিসেবে যোগ করা হলো, আর ব্যর্থ হলে ৩ বার পর্যন্ত আবার চেষ্টা হয়।
+            - name: Add Maven mirror fallback for Gradle
+              run: |
+                  mkdir -p ~/.gradle/init.d
+                  cat > ~/.gradle/init.d/mirror.gradle <<'EOF_GRADLE'
+                  def mirror = 'https://maven-central.storage-download.googleapis.com/maven2/'
+                  beforeSettings { settings ->
+                      settings.pluginManagement.repositories.maven { url mirror }
+                  }
+                  allprojects {
+                      buildscript.repositories.maven { url mirror }
+                      repositories.maven { url mirror }
+                  }
+                  EOF_GRADLE
+
             - name: Build APK
               working-directory: mobile/android
               run: |
                   chmod +x gradlew
-                  ./gradlew assembleDebug --no-daemon --stacktrace
+                  for attempt in 1 2 3; do
+                      echo "::group::Gradle attempt $attempt"
+                      if ./gradlew assembleDebug --no-daemon --stacktrace --refresh-dependencies; then
+                          echo "::endgroup::"; exit 0
+                      fi
+                      echo "::endgroup::"
+                      echo "Attempt $attempt failed" >&2
+                      sleep 20
+                  done
+                  exit 1
 
             # APK সত্যিই fixed key দিয়ে sign হলো কিনা আর versionCode ঠিক বসল কিনা লগে দেখায়।
             # প্রতি build-এ SHA-256 একই না থাকলে ফোনে আপডেট না বসে "package conflicts" আসবে।
