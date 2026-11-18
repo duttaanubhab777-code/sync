@@ -33,6 +33,13 @@ const optimizePushImage = url => {
     return `${head}/image/upload/w_720,c_limit,q_auto/${tail}`;
 };
 
+const optimizePushAvatar = url => {
+    if (!url || !url.includes("/image/upload/")) return "";
+    const [head, tail] = url.split("/image/upload/");
+    if (/^[a-z]{1,3}_[^/]+(,[^/]+)*\//i.test(tail)) return url;
+    return `${head}/image/upload/w_192,h_192,c_fill,g_face,q_auto,f_png/${tail}`;
+};
+
 async function notifyRecipients({
     conv,
     msg,
@@ -54,9 +61,8 @@ async function notifyRecipients({
               ? `${MEDIA_PREVIEW[type] || "Attachment"}: ${cleanText.slice(0, 120)}`
               : MEDIA_PREVIEW[type] || `Sent a ${type}`;
 
-    const title = isGroup
-        ? conv.groupName || "Group chat"
-        : senderName || "New message";
+    const cleanSenderName = senderName || "New message";
+    const title = isGroup ? conv.groupName || "Group chat" : cleanSenderName;
     const body = isGroup
         ? `${senderName || "Someone"}: ${basePreview}`
         : basePreview;
@@ -66,11 +72,17 @@ async function notifyRecipients({
         messageId: String(msg._id),
         url: targetUrl
     };
+    const senderAvatar = optimizePushAvatar(msg.sender?.avatar);
+    const groupIcon = isGroup ? optimizePushAvatar(conv.groupIcon) : "";
     const pushPayload = {
         type: isGroup ? "group_message" : "message",
         title,
         body,
-        icon: msg.sender?.avatar || "/icons/icon-192.png",
+        messageText: basePreview,
+        senderName: cleanSenderName,
+        senderAvatar,
+        groupIcon,
+        icon: senderAvatar || groupIcon || "/icons/icon-192.png",
         image: type === "image" ? optimizePushImage(msg.media?.url) : "",
         tag: `conversation-${conv._id}`,
         data

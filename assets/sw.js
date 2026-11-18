@@ -1,5 +1,7 @@
-/* Sync Web Push service worker (v2)
+/* Sync Web Push service worker (v3 — WhatsApp-style conversation stacking)
  *  - চ্যাট মেসেজ ও Admin notice দুটোই দেখায়
+ *  - একই চ্যাটে একাধিক মেসেজ এলে WhatsApp-এর মতো একসাথে পরপর লাইনে সাজিয়ে দেখায়
+ *  - প্রেরকের প্রোফাইল ছবি (senderAvatar) বা গ্রুপ আইকন দেখায়
  *  - notice-এ বড় ছবি (image) + "Ends tomorrow at 11:58 pm" লাইন ও কাউন্টডাউন (ডিভাইসের নিজের timezone-এ)
  *  - ইউজার অ্যাপ খুলে ওই চ্যাটেই থাকলে আলাদা notification দেখায় না
  *  - notification-এ চাপলে সরাসরি ওই চ্যাটে বা নোটিসে যায়
@@ -70,8 +72,32 @@ self.addEventListener("push", event => {
                 if (viewingSameChat) return;
             }
 
-            const title = payload.title || "Sync";
+            const tag =
+                payload.tag ||
+                (type === "notice" ? "sync-notice" : "sync-notification");
+
+            let title = payload.title || "Sync";
             let body = payload.body || "You have a new notification";
+            let lines = [body];
+
+            // একই চ্যাটের আগের না-দেখা মেসেজ থাকলে WhatsApp-এর মতো একসাথে জড়ো করে দেখানো
+            if (type !== "notice" && convId && self.registration.getNotifications) {
+                try {
+                    const existing = await self.registration.getNotifications({
+                        tag
+                    });
+                    if (existing.length > 0) {
+                        const prevLines = existing[0].data?.lines;
+                        if (Array.isArray(prevLines) && prevLines.length > 0) {
+                            lines = [...prevLines, body].slice(-5);
+                            body = lines.join("\n");
+                            title = `${payload.title || "Sync"} (${lines.length} new messages)`;
+                        }
+                    }
+                } catch {
+                    // ignore
+                }
+            }
 
             if (type === "notice" && payload.endsAt) {
                 const line = endsLine(payload.endsAt);
@@ -80,17 +106,25 @@ self.addEventListener("push", event => {
 
             const options = {
                 body,
-                icon: payload.icon || ICON,
+                icon:
+                    payload.senderAvatar ||
+                    payload.groupIcon ||
+                    payload.icon ||
+                    ICON,
                 badge: BADGE,
-                tag: payload.tag || (type === "notice" ? "sync-notice" : "sync-notification"),
+                tag,
                 renotify: true,
                 requireInteraction: Boolean(
                     payload.requireInteraction || type === "notice"
                 ),
-                vibrate: type === "notice" ? [220, 100, 220, 100, 280] : [180, 80, 180],
+                vibrate:
+                    type === "notice"
+                        ? [220, 100, 220, 100, 280]
+                        : [180, 80, 180],
                 data: {
                     ...data,
                     type,
+                    lines,
                     url: data.url || (convId ? `/chats/${convId}` : "/")
                 },
                 timestamp: Date.now()

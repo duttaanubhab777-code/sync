@@ -17,6 +17,13 @@
         "appendUserAgent": "SyncApp/1.0"
     },
     "plugins": {
+        "PushNotifications": {
+            "presentationOptions": [
+                "badge",
+                "sound",
+                "alert"
+            ]
+        },
         "SplashScreen": {
             "launchShowDuration": 3000,
             "launchFadeOutDuration": 300,

@@ -15,6 +15,13 @@ import { emitToUsers, getContactIds } from "../services/conversation.service.js"
 const send = (res, status, data, message) =>
     res.status(status).json(new ApiResponse(status, data, message));
 
+const optimizeAvatarForPush = url => {
+    if (!url || !url.includes("/image/upload/")) return "";
+    const [head, tail] = url.split("/image/upload/");
+    if (/^[a-z]{1,3}_[^/]+(,[^/]+)*\//i.test(tail)) return url;
+    return `${head}/image/upload/w_192,h_192,c_fill,g_face,q_auto,f_png/${tail}`;
+};
+
 // যাদের story আমি দেখতে পারি = আমার contact (direct চ্যাটের অপর পক্ষ), block সম্পর্ক বাদে
 const visibleAuthorIds = async me => {
     const contacts = await getContactIds(me);
@@ -268,7 +275,6 @@ export const deleteStory = asyncHandler(async (req, res) => {
     send(res, 200, null, "Story deleted");
 });
 
-
 // ---------- react / reply ----------
 
 // story দেখার অনুমতি আছে কিনা যাচাই করে story ফেরত দেয় (নিজের story-তে react/reply চলবে না)
@@ -387,6 +393,7 @@ export const reactToStory = asyncHandler(async (req, res) => {
         if (emoji) {
             const title = req.user.fullName || "Someone";
             const body = `Reacted ${emoji} to your story`;
+            const senderAvatar = optimizeAvatarForPush(req.user.avatar);
             Promise.allSettled([
                 Notification.create({
                     recipient: authorId,
@@ -400,7 +407,10 @@ export const reactToStory = asyncHandler(async (req, res) => {
                     type: "message",
                     title,
                     body,
-                    icon: req.user.avatar || "/icons/icon-192.png",
+                    messageText: body,
+                    senderName: title,
+                    senderAvatar,
+                    icon: senderAvatar || "/icons/icon-192.png",
                     tag: `story-react-${id}`,
                     data: { storyId: id, url: "/stories" }
                 })
@@ -470,6 +480,7 @@ export const replyToStory = asyncHandler(async (req, res) => {
 
     const title = req.user.fullName || "New message";
     const body = `Replied to your story: ${text.slice(0, 120)}`;
+    const senderAvatar = optimizeAvatarForPush(req.user.avatar);
     const data = {
         conversationId: String(conv._id),
         messageId: String(msg._id),
@@ -488,7 +499,10 @@ export const replyToStory = asyncHandler(async (req, res) => {
             type: "message",
             title,
             body,
-            icon: req.user.avatar || "/icons/icon-192.png",
+            messageText: body,
+            senderName: title,
+            senderAvatar,
+            icon: senderAvatar || "/icons/icon-192.png",
             tag: `conversation-${conv._id}`,
             data
         })

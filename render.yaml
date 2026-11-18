@@ -60,3 +60,14 @@ services:
         sync: false
       - key: VAPID_SUBJECT
         value: mailto:sync93346@gmail.com
+      # Android App Push Notifications (Firebase Service Account)
+      # ডাউনলোড করা Firebase private key JSON ফাইলটা পুরোটা FIREBASE_SERVICE_ACCOUNT_JSON-এ পেস্ট করো
+      # অথবা নিচের FIREBASE_CLIENT_EMAIL ও FIREBASE_PRIVATE_KEY আলাদাভাবে দাও
+      - key: FIREBASE_PROJECT_ID
+        value: "sync-34886"
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false

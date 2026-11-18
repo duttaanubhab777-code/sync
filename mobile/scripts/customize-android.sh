@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # `npx cap add android` এর পর চালানো হয় (GitHub Actions থেকে)।
-# অ্যাপের permission, আইকন, splash ও version এখানে সেট হয়, তাই android/ ফোল্ডার repo তে রাখতে হয় না।
+# অ্যাপের permission, আইকন, splash, Firebase (google-services.json), WhatsApp-style push notification
+# ও version এখানে সেট হয়, তাই android/ ফোল্ডার repo তে রাখতে হয় না।
 set -euo pipefail
 cd "$(dirname "$0")/.."   # mobile/
 
@@ -9,9 +10,11 @@ RES="$APP/res"
 MANIFEST="$APP/AndroidManifest.xml"
 GRADLE=android/app/build.gradle
 ICON=../assets/icons/maskable-512.png
+BADGE_ICON=../assets/icons/notification-badge.png
 LOGO=assets/logo-mark.png
 ICON_BG="#E0F8EC"
 SPLASH_BG="#031512"
+NOTIF_COLOR="#00ED64"
 VERSION_CODE="${VERSION_CODE:-1}"
 
 # ImageMagick: নতুন ভার্সনে `magick`, পুরনোতে `convert`
@@ -21,11 +24,27 @@ if [ -z "$IM" ]; then
     exit 1
 fi
 
-# ---------- 1. Permissions (ভয়েস রেকর্ড, ভিডিও/ভয়েস কল, নোটিফিকেশন) ----------
+# ---------- 0. Firebase google-services.json বসানো ----------
+if [ -f "google-services.json" ]; then
+    cp -f "google-services.json" "android/app/google-services.json"
+    echo "google-services.json copied to android/app/google-services.json"
+else
+    echo "WARNING: mobile/google-services.json পাওয়া যায়নি!" >&2
+fi
+
+# ---------- 1. Permissions ও Firebase Messaging Service (AndroidManifest.xml) ----------
 python3 - "$MANIFEST" <<'PY'
 import sys
 path = sys.argv[1]
 s = open(path, encoding="utf-8").read()
+
+if 'xmlns:tools=' not in s:
+    s = s.replace(
+        '<manifest xmlns:android="http://schemas.android.com/apk/res/android"',
+        '<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools"',
+        1
+    )
+
 perms = [
     "android.permission.INTERNET",
     "android.permission.ACCESS_NETWORK_STATE",
@@ -34,6 +53,8 @@ perms = [
     "android.permission.MODIFY_AUDIO_SETTINGS",
     "android.permission.POST_NOTIFICATIONS",
     "android.permission.VIBRATE",
+    "android.permission.WAKE_LOCK",
+    "android.permission.RECEIVE_BOOT_COMPLETED",
 ]
 feats = ["android.hardware.camera", "android.hardware.microphone"]
 add = ""
@@ -44,24 +65,63 @@ for f in feats:
     if f'android:name="{f}"' not in s:
         add += f'    <uses-feature android:name="{f}" android:required="false" />\n'
 s = s.replace("</manifest>", add + "</manifest>", 1)
+
+app_extras = """
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_sync" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/sync_notif_color" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="sync_messages_v2" />
+
+        <service
+            android:name="com.capacitorjs.plugins.pushnotifications.MessagingService"
+            tools:node="remove" />
+
+        <service
+            android:name=".SyncMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+"""
+if "SyncMessagingService" not in s:
+    s = s.replace("</application>", app_extras + "    </application>", 1)
+
 open(path, "w", encoding="utf-8").write(s)
 PY
 
-# ---------- 2. App icon (adaptive + পুরনো ফোনের জন্য legacy) ----------
-mkdir -p "$RES/mipmap-anydpi-v26" "$RES/values"
+# ---------- 2. App icon (adaptive + legacy) এবং Notification status bar icon ----------
+mkdir -p "$RES/mipmap-anydpi-v26" "$RES/values" "$RES/drawable"
 
-for pair in mdpi:48:108 hdpi:72:162 xhdpi:96:216 xxhdpi:144:324 xxxhdpi:192:432; do
-    IFS=: read -r density legacy adaptive <<<"$pair"
-    mkdir -p "$RES/mipmap-$density"
+for pair in mdpi:48:108:24 hdpi:72:162:36 xhdpi:96:216:48 xxhdpi:144:324:72 xxxhdpi:192:432:96; do
+    IFS=: read -r density legacy adaptive notif_px <<<"$pair"
+    mkdir -p "$RES/mipmap-$density" "$RES/drawable-$density"
     "$IM" "$ICON" -resize "${legacy}x${legacy}" "$RES/mipmap-$density/ic_launcher.png"
     cp "$RES/mipmap-$density/ic_launcher.png" "$RES/mipmap-$density/ic_launcher_round.png"
     "$IM" "$ICON" -resize "${adaptive}x${adaptive}" "$RES/mipmap-$density/sync_icon_fg.png"
+    if [ -f "$BADGE_ICON" ]; then
+        "$IM" "$BADGE_ICON" -resize "${notif_px}x${notif_px}" "$RES/drawable-$density/ic_stat_sync.png"
+    else
+        "$IM" "$ICON" -resize "${notif_px}x${notif_px}" "$RES/drawable-$density/ic_stat_sync.png"
+    fi
 done
+
+if [ -f "$BADGE_ICON" ]; then
+    cp "$BADGE_ICON" "$RES/drawable/ic_stat_sync.png"
+else
+    "$IM" "$ICON" -resize 96x96 "$RES/drawable/ic_stat_sync.png"
+fi
 
 cat > "$RES/values/sync_icon.xml" <<XML
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="sync_icon_bg">$ICON_BG</color>
+    <color name="sync_notif_color">$NOTIF_COLOR</color>
 </resources>
 XML
 
@@ -75,18 +135,698 @@ for name in ic_launcher ic_launcher_round; do
 XML
 done
 
+# ---------- 2b. Native Java Classes: MainActivity.java ও SyncMessagingService.java ----------
+JAVA_DIR="$APP/java/com/sync/chat"
+mkdir -p "$JAVA_DIR"
+
+cat > "$JAVA_DIR/MainActivity.java" <<'JAVA'
+package com.sync.chat;
+
+import android.content.Intent;
+import android.os.Bundle;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebView;
+import com.getcapacitor.BridgeActivity;
+
+public class MainActivity extends BridgeActivity {
+    public static volatile boolean isAppInForeground = false;
+    public static volatile String activeConversationId = "";
+    private static volatile String pendingTargetUrl = "";
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        SyncMessagingService.ensureChannels(this);
+        captureNotificationIntent(getIntent());
+        super.onCreate(savedInstanceState);
+
+        try {
+            if (this.bridge != null && this.bridge.getWebView() != null) {
+                WebView webView = this.bridge.getWebView();
+                webView.addJavascriptInterface(new SyncNativeNotifBridge(), "SyncNativeNotif");
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        captureNotificationIntent(intent);
+        dispatchPendingUrlToWebView();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        isAppInForeground = true;
+        if (activeConversationId != null && !activeConversationId.isEmpty()) {
+            SyncMessagingService.clearConversationNotifications(this, activeConversationId);
+        }
+        dispatchPendingUrlToWebView();
+    }
+
+    @Override
+    public void onPause() {
+        isAppInForeground = false;
+        super.onPause();
+    }
+
+    private void captureNotificationIntent(Intent intent) {
+        if (intent == null) return;
+        String convId = intent.getStringExtra("sync_conv_id");
+        if (convId == null || convId.isEmpty()) {
+            convId = intent.getStringExtra("conversationId");
+        }
+        if (convId != null && !convId.isEmpty()) {
+            SyncMessagingService.clearConversationNotifications(this, convId);
+        }
+
+        String targetUrl = intent.getStringExtra("sync_target_url");
+        if (targetUrl == null || targetUrl.isEmpty()) {
+            targetUrl = intent.getStringExtra("url");
+        }
+        if ((targetUrl == null || targetUrl.isEmpty()) && convId != null && !convId.isEmpty()) {
+            targetUrl = "/chats/" + convId;
+        }
+        if (targetUrl != null && !targetUrl.isEmpty() && targetUrl.startsWith("/")) {
+            pendingTargetUrl = targetUrl;
+        }
+    }
+
+    private void dispatchPendingUrlToWebView() {
+        final String url = pendingTargetUrl;
+        if (url == null || url.isEmpty()) return;
+        try {
+            if (this.bridge != null && this.bridge.getWebView() != null) {
+                final WebView webView = this.bridge.getWebView();
+                final String escaped = url.replace("\\", "\\\\").replace("'", "\\'");
+                webView.post(() -> {
+                    String js = "window.__SYNC_INITIAL_NAV__='" + escaped + "';"
+                        + "window.dispatchEvent(new CustomEvent('sync:native-navigate',{detail:{url:'" + escaped + "'}}));";
+                    webView.evaluateJavascript(js, null);
+                });
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    public class SyncNativeNotifBridge {
+        @JavascriptInterface
+        public String consumeInitialUrl() {
+            String url = pendingTargetUrl;
+            pendingTargetUrl = "";
+            return url != null ? url : "";
+        }
+
+        @JavascriptInterface
+        public void setActiveChat(String conversationId) {
+            String clean = conversationId != null ? conversationId.trim() : "";
+            activeConversationId = clean;
+            if (!clean.isEmpty()) {
+                SyncMessagingService.clearConversationNotifications(MainActivity.this, clean);
+            }
+        }
+    }
+}
+JAVA
+
+cat > "$JAVA_DIR/SyncMessagingService.java" <<'JAVA'
+package com.sync.chat;
+
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffXfermode;
+import android.graphics.Rect;
+import android.graphics.RectF;
+import android.graphics.Typeface;
+import android.media.AudioAttributes;
+import android.media.RingtoneManager;
+import android.net.Uri;
+import android.os.Build;
+import android.service.notification.StatusBarNotification;
+import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
+import androidx.core.app.Person;
+import androidx.core.graphics.drawable.IconCompat;
+import com.capacitorjs.plugins.pushnotifications.MessagingService;
+import com.google.firebase.messaging.RemoteMessage;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.Map;
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+public class SyncMessagingService extends MessagingService {
+    public static final String CHANNEL_MESSAGES = "sync_messages_v2";
+    public static final String CHANNEL_NOTICES = "sync_notices_v2";
+    private static final String PREFS_NAME = "sync_whatsapp_notif_stack";
+    private static final String GROUP_KEY_CHATS = "com.sync.chat.CHATS_GROUP";
+    private static final int SUMMARY_NOTIFICATION_ID = 777000;
+    private static final int MAX_STACKED_MESSAGES = 6;
+    private static final int SYNC_GREEN = 0xFF00ED64;
+    private static final int SYNC_DARK_BG = 0xFF0B2B24;
+
+    public static void ensureChannels(Context context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+        NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm == null) return;
+
+        Uri soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+        AudioAttributes audioAttr = new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build();
+
+        NotificationChannel msgChannel = new NotificationChannel(
+            CHANNEL_MESSAGES,
+            "Chats & Messages",
+            NotificationManager.IMPORTANCE_HIGH
+        );
+        msgChannel.setDescription("WhatsApp-style instant notifications for direct and group messages");
+        msgChannel.enableLights(true);
+        msgChannel.setLightColor(SYNC_GREEN);
+        msgChannel.enableVibration(true);
+        msgChannel.setVibrationPattern(new long[]{0, 200, 90, 200});
+        msgChannel.setShowBadge(true);
+        msgChannel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+        msgChannel.setSound(soundUri, audioAttr);
+        nm.createNotificationChannel(msgChannel);
+
+        NotificationChannel noticeChannel = new NotificationChannel(
+            CHANNEL_NOTICES,
+            "Admin Notices & Announcements",
+            NotificationManager.IMPORTANCE_HIGH
+        );
+        noticeChannel.setDescription("Important platform announcements and notices from Sync");
+        noticeChannel.enableLights(true);
+        noticeChannel.setLightColor(SYNC_GREEN);
+        noticeChannel.enableVibration(true);
+        noticeChannel.setVibrationPattern(new long[]{0, 240, 100, 240, 100, 300});
+        noticeChannel.setShowBadge(true);
+        noticeChannel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+        noticeChannel.setSound(soundUri, audioAttr);
+        nm.createNotificationChannel(noticeChannel);
+    }
+
+    public static void clearConversationNotifications(Context context, String conversationId) {
+        if (context == null || conversationId == null || conversationId.isEmpty()) return;
+        try {
+            SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            prefs.edit().remove("conv_" + conversationId).apply();
+
+            String tag = "conversation-" + conversationId;
+            NotificationManagerCompat nm = NotificationManagerCompat.from(context);
+            nm.cancel(tag, tag.hashCode());
+        } catch (Exception ignored) {
+        }
+    }
+
+    @Override
+    public void onNewToken(@NonNull String token) {
+        super.onNewToken(token);
+    }
+
+    @Override
+    public void onMessageReceived(@NonNull RemoteMessage remoteMessage) {
+        super.onMessageReceived(remoteMessage);
+        ensureChannels(this);
+
+        Map<String, String> data = remoteMessage.getData();
+        String type = valueOr(data, "type", "message");
+        String conversationId = valueOr(data, "conversationId", "");
+        String messageId = valueOr(data, "messageId", "");
+        String noticeId = valueOr(data, "noticeId", "");
+        String storyId = valueOr(data, "storyId", "");
+
+        String title = valueOr(data, "title", "");
+        String body = valueOr(data, "body", "");
+        if (remoteMessage.getNotification() != null) {
+            if (title.isEmpty() && remoteMessage.getNotification().getTitle() != null) {
+                title = remoteMessage.getNotification().getTitle();
+            }
+            if (body.isEmpty() && remoteMessage.getNotification().getBody() != null) {
+                body = remoteMessage.getNotification().getBody();
+            }
+        }
+        if (title.isEmpty()) title = "Sync";
+        if (body.isEmpty()) body = "You have a new message";
+
+        // ইউজার যদি অ্যাপ খুলে ঠিক ওই চ্যাটেই থাকে, তবে চ্যাটের উপরে বাড়তি পপআপ দেখানো হবে না
+        if (
+            !"notice".equals(type) &&
+            MainActivity.isAppInForeground &&
+            !conversationId.isEmpty() &&
+            conversationId.equals(MainActivity.activeConversationId)
+        ) {
+            clearConversationNotifications(this, conversationId);
+            return;
+        }
+
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ActivityCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+        ) {
+            return;
+        }
+
+        String senderName = valueOr(data, "senderName", title);
+        String messageText = valueOr(data, "messageText", body);
+        String senderAvatarUrl = valueOr(data, "senderAvatar", "");
+        String groupIconUrl = valueOr(data, "groupIcon", "");
+        String imageUrl = valueOr(data, "image", "");
+        String tag = valueOr(
+            data,
+            "tag",
+            !conversationId.isEmpty()
+                ? "conversation-" + conversationId
+                : !noticeId.isEmpty()
+                  ? "notice-" + noticeId
+                  : "sync-msg-" + System.currentTimeMillis()
+        );
+        String targetUrl = valueOr(
+            data,
+            "url",
+            !conversationId.isEmpty()
+                ? "/chats/" + conversationId
+                : !storyId.isEmpty()
+                  ? "/stories"
+                  : "/"
+        );
+
+        PendingIntent contentIntent = buildLaunchPendingIntent(
+            data,
+            tag,
+            targetUrl,
+            conversationId,
+            noticeId,
+            messageId
+        );
+
+        if ("notice".equals(type)) {
+            showNoticeNotification(title, body, imageUrl, tag, contentIntent);
+        } else {
+            boolean isGroup = "group_message".equals(type);
+            showWhatsAppChatNotification(
+                title,
+                body,
+                messageText,
+                senderName,
+                senderAvatarUrl,
+                groupIconUrl,
+                imageUrl,
+                conversationId,
+                messageId,
+                tag,
+                isGroup,
+                contentIntent
+            );
+        }
+    }
+
+    private void showWhatsAppChatNotification(
+        String title,
+        String fallbackBody,
+        String messageText,
+        String senderName,
+        String senderAvatarUrl,
+        String groupIconUrl,
+        String imageUrl,
+        String conversationId,
+        String messageId,
+        String tag,
+        boolean isGroup,
+        PendingIntent contentIntent
+    ) {
+        Bitmap senderCircle = loadAvatarOrInitials(senderAvatarUrl, senderName);
+        Bitmap largeIcon = isGroup && !groupIconUrl.isEmpty()
+            ? loadAvatarOrInitials(groupIconUrl, title)
+            : senderCircle;
+        Bitmap photoBitmap = loadRemoteBitmap(imageUrl, 1024);
+
+        JSONArray history = appendAndLoadStack(conversationId, messageId, senderName, messageText);
+        int msgCount = history.length();
+
+        Person mePerson = new Person.Builder()
+            .setName("You")
+            .build();
+
+        NotificationCompat.MessagingStyle messagingStyle =
+            new NotificationCompat.MessagingStyle(mePerson)
+                .setGroupConversation(isGroup);
+        if (isGroup) {
+            messagingStyle.setConversationTitle(title);
+        }
+
+        for (int i = 0; i < msgCount; i++) {
+            JSONObject item = history.optJSONObject(i);
+            if (item == null) continue;
+            String mSender = item.optString("sender", senderName);
+            String mText = item.optString("text", messageText);
+            long mTime = item.optLong("time", System.currentTimeMillis());
+
+            Bitmap personBmp = mSender.equals(senderName)
+                ? senderCircle
+                : createInitialsCircleBitmap(mSender);
+            Person senderPerson = new Person.Builder()
+                .setName(mSender)
+                .setIcon(IconCompat.createWithBitmap(personBmp))
+                .build();
+
+            messagingStyle.addMessage(new NotificationCompat.MessagingStyle.Message(mText, mTime, senderPerson));
+        }
+
+        String summaryLine = msgCount > 1 ? (msgCount + " new messages") : fallbackBody;
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_MESSAGES)
+            .setSmallIcon(R.drawable.ic_stat_sync)
+            .setColor(SYNC_GREEN)
+            .setContentTitle(title)
+            .setContentText(fallbackBody)
+            .setSubText(msgCount > 1 ? summaryLine : null)
+            .setLargeIcon(largeIcon)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(false)
+            .setWhen(System.currentTimeMillis())
+            .setShowWhen(true)
+            .setGroup(GROUP_KEY_CHATS)
+            .setContentIntent(contentIntent);
+
+        if (photoBitmap != null && msgCount <= 1) {
+            NotificationCompat.BigPictureStyle picStyle = new NotificationCompat.BigPictureStyle()
+                .bigPicture(photoBitmap)
+                .bigLargeIcon((Bitmap) null)
+                .setBigContentTitle(title)
+                .setSummaryText(fallbackBody);
+            builder.setStyle(picStyle);
+        } else {
+            builder.setStyle(messagingStyle);
+        }
+
+        int notifId = tag.hashCode();
+        NotificationManagerCompat nm = NotificationManagerCompat.from(this);
+        try {
+            nm.notify(tag, notifId, builder.build());
+            updateChatSummaryNotification(nm, contentIntent);
+        } catch (SecurityException ignored) {
+        }
+    }
+
+    private void showNoticeNotification(
+        String title,
+        String body,
+        String imageUrl,
+        String tag,
+        PendingIntent contentIntent
+    ) {
+        Bitmap banner = loadRemoteBitmap(imageUrl, 1280);
+        Bitmap largeLogo = createInitialsCircleBitmap("Sync");
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_NOTICES)
+            .setSmallIcon(R.drawable.ic_stat_sync)
+            .setColor(SYNC_GREEN)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setLargeIcon(largeLogo)
+            .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setAutoCancel(true)
+            .setWhen(System.currentTimeMillis())
+            .setShowWhen(true)
+            .setContentIntent(contentIntent);
+
+        if (banner != null) {
+            builder.setStyle(
+                new NotificationCompat.BigPictureStyle()
+                    .bigPicture(banner)
+                    .bigLargeIcon((Bitmap) null)
+                    .setBigContentTitle(title)
+                    .setSummaryText(body)
+            );
+        } else {
+            builder.setStyle(
+                new NotificationCompat.BigTextStyle()
+                    .bigText(body)
+                    .setBigContentTitle(title)
+            );
+        }
+
+        NotificationManagerCompat nm = NotificationManagerCompat.from(this);
+        try {
+            nm.notify(tag, tag.hashCode(), builder.build());
+        } catch (SecurityException ignored) {
+        }
+    }
+
+    private void updateChatSummaryNotification(
+        NotificationManagerCompat nm,
+        PendingIntent contentIntent
+    ) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
+        try {
+            NotificationManager sysNm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (sysNm == null) return;
+            StatusBarNotification[] active = sysNm.getActiveNotifications();
+            int chatNotifCount = 0;
+            for (StatusBarNotification sbn : active) {
+                if (sbn.getId() != SUMMARY_NOTIFICATION_ID && GROUP_KEY_CHATS.equals(sbn.getNotification().getGroup())) {
+                    chatNotifCount++;
+                }
+            }
+            if (chatNotifCount < 2) return;
+
+            Notification summary = new NotificationCompat.Builder(this, CHANNEL_MESSAGES)
+                .setSmallIcon(R.drawable.ic_stat_sync)
+                .setColor(SYNC_GREEN)
+                .setContentTitle("Sync")
+                .setContentText(chatNotifCount + " active chats")
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setGroup(GROUP_KEY_CHATS)
+                .setGroupSummary(true)
+                .setAutoCancel(true)
+                .setOnlyAlertOnce(true)
+                .setContentIntent(contentIntent)
+                .build();
+            nm.notify(SUMMARY_NOTIFICATION_ID, summary);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private PendingIntent buildLaunchPendingIntent(
+        Map<String, String> data,
+        String tag,
+        String targetUrl,
+        String conversationId,
+        String noticeId,
+        String messageId
+    ) {
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.setAction(Intent.ACTION_MAIN);
+        intent.addCategory(Intent.CATEGORY_LAUNCHER);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+
+        if (data != null) {
+            for (Map.Entry<String, String> entry : data.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null) {
+                    intent.putExtra(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+        intent.putExtra("sync_target_url", targetUrl);
+        intent.putExtra("sync_conv_id", conversationId);
+        intent.putExtra("sync_notice_id", noticeId);
+        intent.putExtra("google.message_id", !messageId.isEmpty() ? messageId : tag);
+
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            flags |= PendingIntent.FLAG_IMMUTABLE;
+        }
+        return PendingIntent.getActivity(this, tag.hashCode(), intent, flags);
+    }
+
+    private JSONArray appendAndLoadStack(
+        String conversationId,
+        String messageId,
+        String senderName,
+        String messageText
+    ) {
+        JSONArray result = new JSONArray();
+        try {
+            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            String key = "conv_" + (conversationId.isEmpty() ? "default" : conversationId);
+            String raw = prefs.getString(key, "[]");
+            JSONArray existing = new JSONArray(raw);
+
+            JSONArray filtered = new JSONArray();
+            for (int i = 0; i < existing.length(); i++) {
+                JSONObject obj = existing.optJSONObject(i);
+                if (obj == null) continue;
+                if (!messageId.isEmpty() && messageId.equals(obj.optString("id", ""))) {
+                    continue;
+                }
+                filtered.put(obj);
+            }
+
+            JSONObject current = new JSONObject();
+            current.put("id", messageId);
+            current.put("sender", senderName);
+            current.put("text", messageText);
+            current.put("time", System.currentTimeMillis());
+            filtered.put(current);
+
+            int start = Math.max(0, filtered.length() - MAX_STACKED_MESSAGES);
+            for (int i = start; i < filtered.length(); i++) {
+                result.put(filtered.getJSONObject(i));
+            }
+
+            prefs.edit().putString(key, result.toString()).apply();
+        } catch (Exception e) {
+            try {
+                JSONObject fallback = new JSONObject();
+                fallback.put("sender", senderName);
+                fallback.put("text", messageText);
+                fallback.put("time", System.currentTimeMillis());
+                result.put(fallback);
+            } catch (Exception ignored) {
+            }
+        }
+        return result;
+    }
+
+    private Bitmap loadAvatarOrInitials(String url, String name) {
+        Bitmap remote = loadRemoteBitmap(url, 256);
+        if (remote != null) {
+            return cropCircleBitmap(remote, 192);
+        }
+        return createInitialsCircleBitmap(name);
+    }
+
+    private Bitmap loadRemoteBitmap(String urlStr, int maxDim) {
+        if (urlStr == null || !urlStr.startsWith("https://")) return null;
+        HttpURLConnection conn = null;
+        try {
+            URL url = new URL(urlStr);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(4500);
+            conn.setReadTimeout(4500);
+            conn.setInstanceFollowRedirects(true);
+            conn.setDoInput(true);
+            conn.connect();
+            if (conn.getResponseCode() != HttpURLConnection.HTTP_OK) return null;
+            try (InputStream is = conn.getInputStream()) {
+                Bitmap bmp = BitmapFactory.decodeStream(is);
+                if (bmp == null) return null;
+                if (bmp.getWidth() > maxDim || bmp.getHeight() > maxDim) {
+                    float ratio = Math.min(
+                        (float) maxDim / bmp.getWidth(),
+                        (float) maxDim / bmp.getHeight()
+                    );
+                    int w = Math.max(1, Math.round(bmp.getWidth() * ratio));
+                    int h = Math.max(1, Math.round(bmp.getHeight() * ratio));
+                    return Bitmap.createScaledBitmap(bmp, w, h, true);
+                }
+                return bmp;
+            }
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    private Bitmap cropCircleBitmap(Bitmap src, int size) {
+        Bitmap scaled = Bitmap.createScaledBitmap(src, size, size, true);
+        Bitmap output = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(output);
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        Rect rect = new Rect(0, 0, size, size);
+        RectF rectF = new RectF(rect);
+
+        canvas.drawARGB(0, 0, 0, 0);
+        canvas.drawOval(rectF, paint);
+        paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
+        canvas.drawBitmap(scaled, rect, rect, paint);
+        return output;
+    }
+
+    private Bitmap createInitialsCircleBitmap(String name) {
+        int size = 192;
+        Bitmap output = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(output);
+
+        Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        bgPaint.setColor(SYNC_DARK_BG);
+        canvas.drawCircle(size / 2f, size / 2f, size / 2f, bgPaint);
+
+        Paint ringPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        ringPaint.setStyle(Paint.Style.STROKE);
+        ringPaint.setStrokeWidth(6f);
+        ringPaint.setColor(0x5500ED64);
+        canvas.drawCircle(size / 2f, size / 2f, (size / 2f) - 4f, ringPaint);
+
+        String initials = extractInitials(name);
+        Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        textPaint.setColor(SYNC_GREEN);
+        textPaint.setTextSize(72f);
+        textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        textPaint.setTextAlign(Paint.Align.CENTER);
+
+        Paint.FontMetrics fm = textPaint.getFontMetrics();
+        float y = (size / 2f) - ((fm.ascent + fm.descent) / 2f);
+        canvas.drawText(initials, size / 2f, y, textPaint);
+        return output;
+    }
+
+    private String extractInitials(String name) {
+        if (name == null || name.trim().isEmpty()) return "S";
+        String[] parts = name.trim().split("\\s+");
+        StringBuilder sb = new StringBuilder();
+        for (String p : parts) {
+            if (!p.isEmpty()) {
+                sb.append(Character.toUpperCase(p.charAt(0)));
+                if (sb.length() >= 2) break;
+            }
+        }
+        return sb.length() > 0 ? sb.toString() : "S";
+    }
+
+    private static String valueOr(Map<String, String> map, String key, String fallback) {
+        if (map == null) return fallback;
+        String val = map.get(key);
+        return (val != null && !val.isEmpty()) ? val : fallback;
+    }
+}
+JAVA
+
 # ---------- 3. Splash screen (PWA-র মতো: গাঢ় ব্যাকগ্রাউন্ডে গোল লোগো) ----------
-# শুধু windowBackground সাদা থাকায় অ্যাপ খুললে সাদা স্ক্রিন দেখাত। এখন Android 12+ এর সিস্টেম splash-এর
-# ব্যাকগ্রাউন্ড ও আইকন, আর পুরনো ফোনের splash.png সবই PWA splash-এর মতো (গোল লোগো, গাঢ় ব্যাকগ্রাউন্ড)।
 TMP="$(mktemp -d)"
 CIRCLE_PX=640
 
-# maskable আইকন গোল করে কাটা (PWA splash-এ Chrome ঠিক এটাই দেখায়)
 "$IM" "$ICON" -resize "${CIRCLE_PX}x${CIRCLE_PX}" -alpha set \
     \( -size "${CIRCLE_PX}x${CIRCLE_PX}" xc:none -fill white -draw "circle 320,320 320,1.5" \) \
     -compose DstIn -composite "$TMP/circle.png"
 
-# Android 12+ সিস্টেম splash আইকন: স্বচ্ছ 960px ক্যানভাসে গোল লোগো (সিস্টেম মাঝের 2/3 অংশ দেখায়)
 mkdir -p "$RES/drawable-nodpi"
 "$IM" -size 960x960 xc:none "$TMP/circle.png" -gravity center -composite "$RES/drawable-nodpi/sync_splash_icon.png"
 
@@ -97,7 +837,6 @@ cat > "$RES/values/sync_splash.xml" <<XML
 </resources>
 XML
 
-# থিমে splash ব্যাকগ্রাউন্ড ও আইকন বসানো (Theme.SplashScreen না থাকলে কিছু বদলায় না, বিল্ড ভাঙে না)
 python3 - "$RES/values/styles.xml" <<'PY'
 import re, sys
 path = sys.argv[1]
@@ -128,13 +867,11 @@ if "Theme.SplashScreen" in s:
     ])
 else:
     print("Theme.SplashScreen not found, splash theme unchanged")
-# splash-এর পরে WebView আঁকার আগের মুহূর্তেও সাদা ঝলক যেন না আসে
 patch("AppTheme.NoActionBar", [("android:windowBackground", "@color/sync_splash_bg")])
 open(path, "w", encoding="utf-8").write(s)
 print("splash theme patched")
 PY
 
-# পুরনো ফোন ও manual show() এর জন্য splash.png: গাঢ় ব্যাকগ্রাউন্ডে গোল লোগো
 "$IM" "$TMP/circle.png" -resize 500x500 "$TMP/circle-small.png"
 "$IM" -size 1080x1920 "xc:$SPLASH_BG" -depth 8 "$TMP/circle-small.png" -gravity center -composite "$TMP/splash-port.png"
 "$IM" -size 1920x1080 "xc:$SPLASH_BG" -depth 8 "$TMP/circle-small.png" -gravity center -composite "$TMP/splash-land.png"
@@ -159,9 +896,6 @@ sed -i -E "s/versionCode [0-9]+/versionCode ${VERSION_CODE}/" "$GRADLE"
 sed -i -E "s/versionName \"[^\"]*\"/versionName \"1.0.${VERSION_CODE}\"/" "$GRADLE"
 
 # ---------- 5. Signing: repo-র debug.keystore স্পষ্টভাবে বসানো ----------
-# আগে শুধু ~/.android/debug.keystore-এ কপি করা হতো আর Gradle নিজে থেকে সেটা নেবে ধরে নেওয়া হতো।
-# সেটা না নিলে প্রতি build-এ runner-এর আলাদা random key দিয়ে sign হতো, ফলে ফোনে
-# "App not installed as package conflicts with an existing package" আসত। এখন build.gradle-এই key বলে দেওয়া হয়।
 python3 - "$GRADLE" "$(pwd)/debug.keystore" <<'PY'
 import re, sys
 path, keystore = sys.argv[1], sys.argv[2]
@@ -183,7 +917,6 @@ signing = (
 m = re.search(r"^(\s*)buildTypes\s*\{", s, re.M)
 if not m:
     print("buildTypes block not found", file=sys.stderr); sys.exit(1)
-# signingConfigs buildTypes-এর আগে, আর buildTypes-এর ভেতরে debug ও release দুটোতেই এই key
 s = s[:m.start()] + signing + s[m.start():]
 m = re.search(r"buildTypes\s*\{", s)
 inject = "\n        debug {\n            signingConfig signingConfigs.syncfixed\n        }"
@@ -192,4 +925,4 @@ open(path, "w", encoding="utf-8").write(s)
 print("signing configured with fixed keystore")
 PY
 
-echo "Android project customised (versionCode ${VERSION_CODE})"
+echo "Android project customised with WhatsApp-style FCM notifications (versionCode ${VERSION_CODE})"

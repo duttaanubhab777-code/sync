@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { logoutUser } from "../store/authSlice.js";
 import { resetChatState } from "../store/chatSlice.js";
 import { disconnectSocket } from "../services/socket.js";
+import { unsubscribeDevicePush } from "../components/notifications/EnableNotifications.jsx";
 
 // AppLayout (ডেস্কটপ রেইল) ও ProfilePage (মোবাইল) দুই জায়গা থেকেই একই লগআউট
 export default function useSignOut() {
@@ -11,6 +12,7 @@ export default function useSignOut() {
     const navigate = useNavigate();
 
     return useCallback(async () => {
+        await unsubscribeDevicePush();
         disconnectSocket();
         dispatch(resetChatState());
         await dispatch(logoutUser());
