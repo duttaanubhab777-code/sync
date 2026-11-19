@@ -75,7 +75,7 @@ app_extras = """
             android:resource="@color/sync_notif_color" />
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="sync_messages_v2" />
+            android:value="sync_messages_v3" />
 
         <service
             android:name="com.capacitorjs.plugins.pushnotifications.MessagingService"
@@ -137,6 +137,19 @@ done
 
 # ---------- 2b. Native Java Classes: MainActivity.java ও SyncMessagingService.java ----------
 JAVA_DIR="$APP/java/com/sync/chat"
+# ---------- নোটিফিকেশন সাউন্ড (res/raw) ----------
+# নাম শুধু lowercase [a-z0-9_]; sounds.js এর notify/done চাইম থেকে রেন্ডার করা
+mkdir -p "$RES/raw"
+for f in sync_notify sync_notice; do
+    if [ -f "assets/sounds/$f.ogg" ]; then
+        cp -f "assets/sounds/$f.ogg" "$RES/raw/$f.ogg"
+    else
+        echo "ERROR: mobile/assets/sounds/$f.ogg পাওয়া যায়নি" >&2
+        exit 1
+    fi
+done
+echo "Notification sounds copied to $RES/raw"
+
 mkdir -p "$JAVA_DIR"
 
 cat > "$JAVA_DIR/MainActivity.java" <<'JAVA'
@@ -292,8 +305,8 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class SyncMessagingService extends MessagingService {
-    public static final String CHANNEL_MESSAGES = "sync_messages_v2";
-    public static final String CHANNEL_NOTICES = "sync_notices_v2";
+    public static final String CHANNEL_MESSAGES = "sync_messages_v3";
+    public static final String CHANNEL_NOTICES = "sync_notices_v3";
     private static final String PREFS_NAME = "sync_whatsapp_notif_stack";
     private static final String GROUP_KEY_CHATS = "com.sync.chat.CHATS_GROUP";
     private static final int SUMMARY_NOTIFICATION_ID = 777000;
@@ -301,12 +314,23 @@ public class SyncMessagingService extends MessagingService {
     private static final int SYNC_GREEN = 0xFF00ED64;
     private static final int SYNC_DARK_BG = 0xFF0B2B24;
 
+    public static Uri soundUri(Context context, String rawName) {
+        return Uri.parse("android.resource://" + context.getPackageName() + "/raw/" + rawName);
+    }
+
     public static void ensureChannels(Context context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
 
-        Uri soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+        // Sync-এর নিজস্ব চাইম (res/raw/sync_notify.ogg ও sync_notice.ogg)
+        Uri messageSoundUri = soundUri(context, "sync_notify");
+        Uri noticeSoundUri = soundUri(context, "sync_notice");
+
+        // পুরনো চ্যানেলের সাউন্ড লক হয়ে থাকে, তাই v2 চ্যানেল মুছে v3 বানানো হয়
+        nm.deleteNotificationChannel("sync_messages_v2");
+        nm.deleteNotificationChannel("sync_notices_v2");
+
         AudioAttributes audioAttr = new AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
@@ -324,7 +348,7 @@ public class SyncMessagingService extends MessagingService {
         msgChannel.setVibrationPattern(new long[]{0, 200, 90, 200});
         msgChannel.setShowBadge(true);
         msgChannel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
-        msgChannel.setSound(soundUri, audioAttr);
+        msgChannel.setSound(messageSoundUri, audioAttr);
         nm.createNotificationChannel(msgChannel);
 
         NotificationChannel noticeChannel = new NotificationChannel(
@@ -339,7 +363,7 @@ public class SyncMessagingService extends MessagingService {
         noticeChannel.setVibrationPattern(new long[]{0, 240, 100, 240, 100, 300});
         noticeChannel.setShowBadge(true);
         noticeChannel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
-        noticeChannel.setSound(soundUri, audioAttr);
+        noticeChannel.setSound(noticeSoundUri, audioAttr);
         nm.createNotificationChannel(noticeChannel);
     }
 
@@ -523,7 +547,8 @@ public class SyncMessagingService extends MessagingService {
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setDefaults(NotificationCompat.DEFAULT_VIBRATE | NotificationCompat.DEFAULT_LIGHTS)
+            .setSound(soundUri(this, "sync_notify"))
             .setAutoCancel(true)
             .setOnlyAlertOnce(false)
             .setWhen(System.currentTimeMillis())
@@ -570,7 +595,8 @@ public class SyncMessagingService extends MessagingService {
             .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setDefaults(NotificationCompat.DEFAULT_VIBRATE | NotificationCompat.DEFAULT_LIGHTS)
+            .setSound(soundUri(this, "sync_notice"))
             .setAutoCancel(true)
             .setWhen(System.currentTimeMillis())
             .setShowWhen(true)
