@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
     register,
+    checkUsername,
     resendOtp,
     verifyOtp,
     login,
@@ -13,7 +14,8 @@ import { validate } from "../middlewares/validator.middleware.js";
 import {
     authLimiter,
     otpSendLimiter,
-    otpVerifyLimiter
+    otpVerifyLimiter,
+    usernameCheckLimiter
 } from "../middlewares/rateLimit.middleware.js";
 import {
     registerSchema,
@@ -43,6 +45,8 @@ router.post(
     validate(verifyOtpSchema),
     verifyOtp
 );
+// register ফর্মে username ফাঁকা আছে কিনা (লগইন লাগে না)
+router.get("/username-available", usernameCheckLimiter, checkUsername);
 // পুরনো ফ্রন্টএন্ডের জন্য alias: এটাও এখন শুধু OTP পাঠায়, সরাসরি account বানায় না
 router.post("/register", otpSendLimiter, validate(registerSchema), register);
 router.post("/login", authLimiter, validate(loginSchema), login);

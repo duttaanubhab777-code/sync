@@ -208,6 +208,83 @@ export const register = asyncHandler(async (req, res) => {
     otpSentResponse(res, pending);
 });
 
+// ---------- username যাচাই ----------
+// GET /api/auth/username-available?username=jarvis_01
+// -> { available, username, suggestion }  (নেওয়া থাকলে suggestion হিসেবে ফাঁকা একটা username দেওয়া হয়)
+const USERNAME_RE = /^[a-z][a-z0-9_]{2,19}$/;
+
+const buildUsernameCandidates = base => {
+    const out = [];
+    const root = base.slice(0, 16);
+    for (let i = 0; i < 8; i++) {
+        const n = String(Math.floor(Math.random() * 9000) + 100); // ৩-৪ অঙ্ক
+        out.push(`${root}${n}`.slice(0, 20));
+    }
+    return out;
+};
+
+export const checkUsername = asyncHandler(async (req, res) => {
+    const username = String(req.query.username || "")
+        .trim()
+        .toLowerCase();
+    const email = String(req.query.email || "")
+        .trim()
+        .toLowerCase();
+
+    if (!USERNAME_RE.test(username)) {
+        throw new ApiError(
+            400,
+            "Username must be 3–20 characters, start with a letter, and use only letters, numbers or _"
+        );
+    }
+
+    // নিজের pending signup (একই email) বাদ দিয়ে, অন্য কেউ আগে নিয়ে রাখলে সেটাও "নেওয়া" ধরা হয়
+    const isTaken = async names => {
+        const [users, pendings] = await Promise.all([
+            User.find({ username: { $in: names } })
+                .select("username")
+                .lean(),
+            PendingSignup.find({
+                username: { $in: names },
+                ...(email ? { email: { $ne: email } } : {})
+            })
+                .select("username")
+                .lean()
+        ]);
+        return new Set([
+            ...users.map(u => u.username),
+            ...pendings.map(p => p.username)
+        ]);
+    };
+
+    const taken = await isTaken([username]);
+    if (!taken.has(username)) {
+        return res
+            .status(200)
+            .json(
+                new ApiResponse(
+                    200,
+                    { available: true, username, suggestion: null },
+                    "Username is available"
+                )
+            );
+    }
+
+    const candidates = buildUsernameCandidates(username);
+    const takenCandidates = await isTaken(candidates);
+    const suggestion =
+        candidates.find(c => !takenCandidates.has(c) && USERNAME_RE.test(c)) ||
+        null;
+
+    res.status(200).json(
+        new ApiResponse(
+            200,
+            { available: false, username, suggestion },
+            "Username is already taken"
+        )
+    );
+});
+
 // POST /api/auth/register/resend-otp   body: { email }
 export const resendOtp = asyncHandler(async (req, res) => {
     const { email } = req.body;

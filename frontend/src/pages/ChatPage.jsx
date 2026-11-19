@@ -24,9 +24,6 @@ import {
     Lock,
     Loader2,
     MessageSquare,
-    Volume2,
-    VolumeX,
-    Mail,
     LogOut
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
@@ -60,11 +57,10 @@ import {
     detectMessageTypeFromFile,
     uploadMediaToCloudinary
 } from "../services/media.js";
-import {
-    isSoundEnabled,
-    playSound,
-    setSoundEnabled
-} from "../services/sounds.js";
+import { playSound } from "../services/sounds.js";
+import MoreMenu from "../components/MoreMenu.jsx";
+import ChatFab from "../components/ChatFab.jsx";
+import { useAppUpdates, isAndroidApp } from "../services/appUpdate.js";
 import {
     formatBytes,
     formatChatListTime,
@@ -223,7 +219,8 @@ export default function ChatPage() {
     const [uploadingMedia, setUploadingMedia] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploadInfo, setUploadInfo] = useState(null);
-    const [soundOn, setSoundOn] = useState(isSoundEnabled());
+    const convListRef = useRef(null);
+    const { hasUpdate } = useAppUpdates({ autoLoad: isAndroidApp });
     const composerInputRef = useRef(null);
     const [composerError, setComposerError] = useState("");
     const [showMicrophoneHelp, setShowMicrophoneHelp] = useState(false);
@@ -890,57 +887,29 @@ export default function ChatPage() {
                     <SyncBrandBar className="sync-pane-brand" />
                     <h2>Chats</h2>
                     <div className="sync-header-actions">
+                        {/* ডেস্কটপে জায়গা আছে বলে সরাসরি বাটন; মোবাইলে এগুলো floating বাটনে */}
                         <button
                             type="button"
-                            className="sync-icon-btn"
-                            title={soundOn ? "Mute sounds" : "Turn sounds on"}
-                            onClick={() => {
-                                const next = !soundOn;
-                                setSoundEnabled(next);
-                                setSoundOn(next);
-                            }}
-                        >
-                            {soundOn ? (
-                                <Volume2 size={19} />
-                            ) : (
-                                <VolumeX size={19} />
-                            )}
-                        </button>
-                        <button
-                            type="button"
-                            className="sync-icon-btn"
-                            title="Contact Sync"
-                            aria-label="Contact Sync"
-                            onClick={() => navigate("/contact")}
-                        >
-                            <Mail size={19} />
-                        </button>
-                        <button
-                            type="button"
-                            className="sync-icon-btn"
+                            className="sync-icon-btn sync-desk-only"
                             title="New Direct Chat"
+                            aria-label="New Direct Chat"
                             onClick={() => setShowNewDirect(true)}
                         >
                             <UserPlus size={19} />
                         </button>
                         <button
                             type="button"
-                            className="sync-icon-btn"
+                            className="sync-icon-btn sync-desk-only"
                             title="Create Group"
+                            aria-label="Create Group"
                             onClick={() => setShowNewGroup(true)}
                         >
                             <Users size={19} />
                         </button>
-
-                        <button
-                            type="button"
-                            className="sync-icon-btn sync-chat-signout-btn"
-                            title="Sign out"
-                            aria-label="Sign out"
-                            onClick={() => setConfirmLogout(true)}
-                        >
-                            <LogOut size={19} />
-                        </button>
+                        <MoreMenu
+                            hasUpdate={hasUpdate}
+                            onSignOut={() => setConfirmLogout(true)}
+                        />
                     </div>
                 </div>
 
@@ -975,7 +944,7 @@ export default function ChatPage() {
                     </div>
                 </div>
 
-                <div className="sync-conv-list">
+                <div className="sync-conv-list" ref={convListRef}>
                     {conversationsLoading && conversations.length === 0 && (
                         <div aria-busy="true" aria-label="Loading conversations">
                             {[0, 1, 2, 3, 4, 5].map(n => (
@@ -1075,6 +1044,12 @@ export default function ChatPage() {
                         );
                     })}
                 </div>
+
+                <ChatFab
+                    scrollRef={convListRef}
+                    onNewChat={() => setShowNewDirect(true)}
+                    onNewGroup={() => setShowNewGroup(true)}
+                />
             </section>
 
             <section className="sync-chat-stage">

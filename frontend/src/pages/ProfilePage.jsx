@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
     Camera,
     Trash2,
@@ -32,6 +32,7 @@ import { useAppUpdates, isAndroidApp } from "../services/appUpdate.js";
 export default function ProfilePage() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
+    const location = useLocation();
     const signOut = useSignOut();
     const { hasUpdate } = useAppUpdates({ autoLoad: isAndroidApp });
     const { user, blockedUsers } = useSelector(state => state.auth);
@@ -43,7 +44,12 @@ export default function ProfilePage() {
     const [saving, setSaving] = useState(false);
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const [message, setMessage] = useState("");
-    const [error, setError] = useState("");
+    // register-এর সময় ছবি আপলোড না হলে এখানে এসে আবার দিতে বলা হয়
+    const [error, setError] = useState(
+        location.state?.avatarUploadFailed
+            ? "Your account is ready, but the profile photo could not be uploaded. Please choose it again."
+            : ""
+    );
 
     const isAdmin = isPlatformAdmin(user);
     const isSuperAdmin = Boolean(

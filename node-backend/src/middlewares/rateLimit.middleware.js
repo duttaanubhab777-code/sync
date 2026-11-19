@@ -52,3 +52,12 @@ export const linkPreviewLimiter = rateLimit({
     legacyHeaders: false,
     handler: tooMany("Too many link previews, please slow down")
 });
+
+// register ফর্মে username আছে কিনা দেখা: টাইপ করার সময় বারবার ডাকা হয়, তাই প্রতি IP-তে মিনিটে ৬০টা
+export const usernameCheckLimiter = rateLimit({
+    windowMs: 60_000,
+    limit: 60,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    handler: tooMany("Too many checks, please slow down")
+});

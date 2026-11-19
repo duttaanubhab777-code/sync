@@ -14,19 +14,28 @@ import {
     ShieldCheck,
     ArrowLeft,
     RefreshCw,
-    CheckCircle2
+    CheckCircle2,
+    XCircle,
+    Sparkles
 } from "lucide-react";
 import AuthShell from "../components/AuthShell.jsx";
+import AvatarPicker from "../components/AvatarPicker.jsx";
+import Avatar from "../components/Avatar.jsx";
 import {
     clearAuthError,
     clearPendingSignup,
     sendSignupOtp,
     resendSignupOtp,
-    verifySignupOtp
+    verifySignupOtp,
+    updateMyProfile
 } from "../store/authSlice.js";
+import { api } from "../services/api.js";
+import { uploadMediaToCloudinary } from "../services/media.js";
+import { USERNAME_RE, usernameFromEmail } from "../utils/username.js";
 import { isPlatformAdmin } from "../App.jsx";
 
 const OTP_LENGTH = 6;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 const normalizeIndianPhone = value => {
     let v = String(value || "").replace(/[\s\-()]/g, "");
@@ -64,6 +73,18 @@ export default function RegisterPage() {
     });
     const [showPass, setShowPass] = useState(false);
     const [localError, setLocalError] = useState("");
+
+    // প্রোফাইল ছবি (অ্যাকাউন্ট তৈরি হওয়ার পরপরই আপলোড হয়)
+    const [avatarFile, setAvatarFile] = useState(null);
+    const [avatarPreview, setAvatarPreview] = useState("");
+    const [finishing, setFinishing] = useState(false);
+    const finishingRef = useRef(false);
+
+    // username: ইমেইল থেকে নিজে নিজে তৈরি হয়; ইউজার হাত দিলে (touched) আর বদলায় না
+    const [usernameTouched, setUsernameTouched] = useState(false);
+    const [usernameStatus, setUsernameStatus] = useState("idle"); // idle | checking | available | taken | invalid
+    const [usernameSuggestion, setUsernameSuggestion] = useState("");
+    const usernameCache = useRef(new Map());
     const [infoMessage, setInfoMessage] = useState("");
 
     // "form" -> ধাপ ১ (অ্যাকাউন্টের তথ্য), "otp" -> ধাপ ২ (ইমেইল ওটিপি যাচাই)
@@ -85,12 +106,86 @@ export default function RegisterPage() {
     }, [dispatch]);
 
     useEffect(() => {
-        if (isAuthenticated && user) {
+        if (isAuthenticated && user && !finishingRef.current) {
             navigate(isPlatformAdmin(user) ? "/admin" : "/chats", {
                 replace: true
             });
         }
     }, [isAuthenticated, user, navigate]);
+
+    // ছবি বাছা হলে OTP ধাপে ছোট প্রিভিউ দেখানোর জন্য
+    useEffect(() => {
+        if (!avatarFile) {
+            setAvatarPreview("");
+            return undefined;
+        }
+        const url = URL.createObjectURL(avatarFile);
+        setAvatarPreview(url);
+        return () => URL.revokeObjectURL(url);
+    }, [avatarFile]);
+
+    // ইমেইল ঠিকঠাক হলে username নিজে নিজে বানানো (ইউজার নিজে বদলালে আর না)
+    useEffect(() => {
+        if (usernameTouched) return;
+        const email = form.email.trim().toLowerCase();
+        if (!EMAIL_RE.test(email)) return;
+        const auto = usernameFromEmail(email);
+        if (auto) setForm(prev => (prev.username === auto ? prev : { ...prev, username: auto }));
+    }, [form.email, usernameTouched]);
+
+    // username ফাঁকা আছে কিনা (টাইপ থামার ৪৫০ms পরে সার্ভারকে জিজ্ঞেস)
+    useEffect(() => {
+        const name = form.username.trim().toLowerCase();
+        setUsernameSuggestion("");
+        if (!name) {
+            setUsernameStatus("idle");
+            return undefined;
+        }
+        if (!USERNAME_RE.test(name)) {
+            setUsernameStatus("invalid");
+            return undefined;
+        }
+        const cached = usernameCache.current.get(name);
+        if (cached) {
+            setUsernameStatus(cached.available ? "available" : "taken");
+            setUsernameSuggestion(cached.suggestion || "");
+            return undefined;
+        }
+
+        setUsernameStatus("checking");
+        const controller = new AbortController();
+        const timer = setTimeout(async () => {
+            try {
+                const res = await api.get("/api/auth/username-available", {
+                    params: { username: name, email: form.email.trim().toLowerCase() },
+                    signal: controller.signal
+                });
+                const data = res.data?.data || {};
+                usernameCache.current.set(name, data);
+                if (!data.available && !usernameTouched && data.suggestion) {
+                    // নিজে নিজে বানানো নামটা নেওয়া থাকলে ফাঁকা একটা নাম বসিয়ে দেওয়া
+                    usernameCache.current.set(data.suggestion, {
+                        available: true,
+                        suggestion: null
+                    });
+                    setForm(prev => ({ ...prev, username: data.suggestion }));
+                    return;
+                }
+                setUsernameStatus(data.available ? "available" : "taken");
+                setUsernameSuggestion(data.suggestion || "");
+            } catch (err) {
+                if (err?.code === "ERR_CANCELED" || err?.name === "CanceledError") return;
+                // নেট/সার্ভার সমস্যা হলে আটকাই না; submit-এ সার্ভার আবার যাচাই করে
+                setUsernameStatus("idle");
+            }
+        }, 450);
+
+        return () => {
+            clearTimeout(timer);
+            controller.abort();
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [form.username]);
 
     // প্রতি সেকেন্ডে রিসেন্ড কুলডাউন ও কোডের মেয়াদের টাইমার কমানো
     useEffect(() => {
@@ -107,6 +202,41 @@ export default function RegisterPage() {
         setForm(prev => ({ ...prev, [name]: value }));
         setLocalError("");
         if (error) dispatch(clearAuthError());
+    };
+
+    const handleUsernameChange = e => {
+        const value = e.target.value
+            .toLowerCase()
+            .replace(/[^a-z0-9_]/g, "")
+            .slice(0, 20);
+        setLocalError("");
+        if (error) dispatch(clearAuthError());
+        if (!value) {
+            // পুরোটা মুছে দিলে আবার অটো মোডে ফেরা
+            setUsernameTouched(false);
+            setForm(prev => ({
+                ...prev,
+                username: EMAIL_RE.test(prev.email.trim()) ? usernameFromEmail(prev.email) : ""
+            }));
+            return;
+        }
+        setUsernameTouched(true);
+        setForm(prev => ({ ...prev, username: value }));
+    };
+
+    const resetUsernameToAuto = () => {
+        setUsernameTouched(false);
+        setForm(prev => ({
+            ...prev,
+            username: EMAIL_RE.test(prev.email.trim()) ? usernameFromEmail(prev.email) : ""
+        }));
+    };
+
+    const applySuggestion = () => {
+        if (!usernameSuggestion) return;
+        setUsernameTouched(true);
+        usernameCache.current.set(usernameSuggestion, { available: true, suggestion: null });
+        setForm(prev => ({ ...prev, username: usernameSuggestion }));
     };
 
     const focusDigit = index => {
@@ -128,6 +258,10 @@ export default function RegisterPage() {
             setLocalError(
                 "Username must be 3–20 characters, start with a letter, and contain only lowercase letters, numbers, or _"
             );
+            return;
+        }
+        if (usernameStatus === "taken") {
+            setLocalError("This username is already taken. Please choose another one.");
             return;
         }
         if (form.fullName.trim().length < 3) {
@@ -281,6 +415,9 @@ export default function RegisterPage() {
             return;
         }
 
+        // ছবি থাকলে অ্যাকাউন্ট তৈরির পর আপলোড শেষ না হওয়া পর্যন্ত auto-redirect আটকে রাখা
+        finishingRef.current = Boolean(avatarFile);
+
         const res = await dispatch(
             verifySignupOtp({
                 email: otpEmail || form.email.trim().toLowerCase(),
@@ -288,12 +425,34 @@ export default function RegisterPage() {
             })
         );
 
-        if (verifySignupOtp.fulfilled.match(res)) {
-            const createdUser = res.payload?.user;
-            navigate(isPlatformAdmin(createdUser) ? "/admin" : "/chats", {
-                replace: true
-            });
+        if (!verifySignupOtp.fulfilled.match(res)) {
+            finishingRef.current = false;
+            return;
         }
+
+        const createdUser = res.payload?.user;
+        let avatarFailed = false;
+        if (avatarFile) {
+            setFinishing(true);
+            try {
+                const media = await uploadMediaToCloudinary(avatarFile, undefined, {
+                    purpose: "avatar"
+                });
+                await dispatch(updateMyProfile({ avatar: media.url })).unwrap();
+            } catch {
+                avatarFailed = true;
+            }
+        }
+
+        finishingRef.current = false;
+        if (avatarFailed) {
+            // অ্যাকাউন্ট তৈরি হয়ে গেছে; শুধু ছবিটা যায়নি, তাই প্রোফাইলে নিয়ে গিয়ে আবার দিতে বলা
+            navigate("/profile", { replace: true, state: { avatarUploadFailed: true } });
+            return;
+        }
+        navigate(isPlatformAdmin(createdUser) ? "/admin" : "/chats", {
+            replace: true
+        });
     };
 
     const handleResendOtp = async () => {
@@ -349,41 +508,28 @@ export default function RegisterPage() {
                     )}
 
                     <form className="sync-auth-form" onSubmit={handleSendOtp}>
-                        <div className="sync-grid-2">
-                            <div className="sync-field">
-                                <label htmlFor="reg-username">Username</label>
-                                <div className="sync-input-icon">
-                                    <AtSign size={18} />
-                                    <input
-                                        id="reg-username"
-                                        type="text"
-                                        name="username"
-                                        placeholder="jarvis_01"
-                                        value={form.username}
-                                        onChange={handleChange}
-                                        maxLength={20}
-                                        autoComplete="username"
-                                        required
-                                    />
-                                </div>
-                            </div>
+                        <AvatarPicker
+                            file={avatarFile}
+                            onChange={setAvatarFile}
+                            onError={setLocalError}
+                            disabled={loading}
+                        />
 
-                            <div className="sync-field">
-                                <label htmlFor="reg-name">Full name</label>
-                                <div className="sync-input-icon">
-                                    <UserRound size={18} />
-                                    <input
-                                        id="reg-name"
-                                        type="text"
-                                        name="fullName"
-                                        placeholder="Anubhab Dutta"
-                                        value={form.fullName}
-                                        onChange={handleChange}
-                                        maxLength={50}
-                                        autoComplete="name"
-                                        required
-                                    />
-                                </div>
+                        <div className="sync-field">
+                            <label htmlFor="reg-name">Full name</label>
+                            <div className="sync-input-icon">
+                                <UserRound size={18} />
+                                <input
+                                    id="reg-name"
+                                    type="text"
+                                    name="fullName"
+                                    placeholder="Anubhab Dutta"
+                                    value={form.fullName}
+                                    onChange={handleChange}
+                                    maxLength={50}
+                                    autoComplete="name"
+                                    required
+                                />
                             </div>
                         </div>
 
@@ -402,6 +548,88 @@ export default function RegisterPage() {
                                     required
                                 />
                             </div>
+                        </div>
+
+                        <div className="sync-field sync-username-field">
+                            <div className="sync-username-label">
+                                <label htmlFor="reg-username">Username</label>
+                                {usernameTouched ? (
+                                    <button
+                                        type="button"
+                                        className="sync-username-chip is-action"
+                                        onClick={resetUsernameToAuto}
+                                    >
+                                        <Sparkles size={12} />
+                                        <span>Auto</span>
+                                    </button>
+                                ) : (
+                                    form.username && (
+                                        <span className="sync-username-chip">
+                                            <Sparkles size={12} />
+                                            <span>From your email</span>
+                                        </span>
+                                    )
+                                )}
+                            </div>
+                            <div
+                                className={`sync-input-icon sync-username-input is-${usernameStatus}`}
+                            >
+                                <AtSign size={18} />
+                                <input
+                                    id="reg-username"
+                                    type="text"
+                                    name="username"
+                                    placeholder="jarvis_01"
+                                    value={form.username}
+                                    onChange={handleUsernameChange}
+                                    maxLength={20}
+                                    autoComplete="username"
+                                    autoCapitalize="none"
+                                    autoCorrect="off"
+                                    spellCheck={false}
+                                    required
+                                />
+                                <span className="sync-username-state" aria-hidden="true">
+                                    {usernameStatus === "checking" && (
+                                        <Loader2 size={17} className="spin" />
+                                    )}
+                                    {usernameStatus === "available" && (
+                                        <CheckCircle2 size={17} />
+                                    )}
+                                    {(usernameStatus === "taken" ||
+                                        usernameStatus === "invalid") && (
+                                        <XCircle size={17} />
+                                    )}
+                                </span>
+                            </div>
+                            <p
+                                className={`sync-username-hint is-${usernameStatus}`}
+                                aria-live="polite"
+                            >
+                                {usernameStatus === "available" &&
+                                    `@${form.username} is available`}
+                                {usernameStatus === "checking" && "Checking availability…"}
+                                {usernameStatus === "invalid" &&
+                                    "3–20 characters, start with a letter, only a–z, 0–9 and _"}
+                                {usernameStatus === "taken" && (
+                                    <>
+                                        <span>@{form.username} is already taken.</span>
+                                        {usernameSuggestion && (
+                                            <button
+                                                type="button"
+                                                className="sync-username-suggest"
+                                                onClick={applySuggestion}
+                                            >
+                                                Use @{usernameSuggestion}
+                                            </button>
+                                        )}
+                                    </>
+                                )}
+                                {usernameStatus === "idle" &&
+                                    (usernameTouched
+                                        ? "You can change it anytime before you sign up."
+                                        : "Created automatically from your email — tap to change it.")}
+                            </p>
                         </div>
 
                         <div className="sync-field">
@@ -487,6 +715,17 @@ export default function RegisterPage() {
                             Enter the 6-digit verification code we sent to your
                             email address.
                         </p>
+                        <div className="sync-otp-summary">
+                            <Avatar
+                                src={avatarPreview}
+                                name={form.fullName || form.username}
+                                size={44}
+                            />
+                            <div>
+                                <strong>{form.fullName.trim() || form.username}</strong>
+                                <span>@{form.username}</span>
+                            </div>
+                        </div>
                         <div className="sync-otp-email-bar">
                             <span className="sync-otp-email-badge">
                                 <Mail size={15} />
@@ -554,7 +793,7 @@ export default function RegisterPage() {
                                             handleDigitKeyDown(idx, e)
                                         }
                                         aria-label={`Digit ${idx + 1}`}
-                                        disabled={loading}
+                                        disabled={loading || finishing}
                                     />
                                 ))}
                             </div>
@@ -594,9 +833,14 @@ export default function RegisterPage() {
                         <button
                             type="submit"
                             className="sync-btn primary full lg"
-                            disabled={loading || !isOtpComplete}
+                            disabled={loading || finishing || !isOtpComplete}
                         >
-                            {loading ? (
+                            {finishing ? (
+                                <>
+                                    <Loader2 size={18} className="spin" />
+                                    <span>Setting up your profile photo...</span>
+                                </>
+                            ) : loading ? (
                                 <>
                                     <Loader2 size={18} className="spin" />
                                     <span>Verifying & creating account...</span>

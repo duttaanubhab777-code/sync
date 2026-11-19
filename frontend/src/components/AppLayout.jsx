@@ -9,15 +9,13 @@ import {
     Crown,
     Power,
     WifiOff,
-    Loader2,
-    Mail,
-    LogOut,
-    Download
+    Loader2
 } from "lucide-react";
 import Avatar from "./Avatar.jsx";
 import SyncLogo from "./SyncLogo.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
 import NoticePopup from "./NoticePopup.jsx";
+import MoreMenu from "./MoreMenu.jsx";
 import EnableNotifications from "./notifications/EnableNotifications.jsx";
 import useSignOut from "../hooks/useSignOut.js";
 import { forceLogout } from "../store/authSlice.js";
@@ -110,34 +108,10 @@ export default function AppLayout() {
                 <header className="sync-global-topbar" aria-label="Quick actions">
                     <div className="sync-global-topbar-spacer" />
                     <div className="sync-global-topbar-actions">
-                        <button
-                            type="button"
-                            className="sync-global-topbar-action"
-                            onClick={() => navigate("/updates")}
-                            title={hasUpdate ? "Update available" : "App updates"}
-                            aria-label={hasUpdate ? "Update available" : "App updates"}
-                        >
-                            <Download size={17} />
-                            {hasUpdate && <span className="sync-update-dot" />}
-                        </button>
-                        <button
-                            type="button"
-                            className="sync-global-topbar-action"
-                            onClick={() => navigate("/contact")}
-                            title="Contact Sync"
-                            aria-label="Contact Sync"
-                        >
-                            <Mail size={17} />
-                        </button>
-                        <button
-                            type="button"
-                            className="sync-global-topbar-action"
-                            onClick={() => setConfirmLogout(true)}
-                            title="Sign out"
-                            aria-label="Sign out"
-                        >
-                            <LogOut size={17} />
-                        </button>
+                        <MoreMenu
+                            hasUpdate={hasUpdate}
+                            onSignOut={() => setConfirmLogout(true)}
+                        />
                     </div>
                 </header>
             )}
