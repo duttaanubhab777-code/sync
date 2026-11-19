@@ -34,7 +34,46 @@ const mediaSchema = z.object({
     url: z.string().trim().min(1),
     publicId: z.string().optional(),
     mime: z.string().optional(),
+    fileName: z.string().trim().max(180).optional(),
+    bytes: z.number().nonnegative().optional(),
+    width: z.number().nonnegative().optional(),
+    height: z.number().nonnegative().optional(),
     duration: z.number().nonnegative().optional()
+});
+
+export const locationSchema = z.object({
+    lat: z.number().min(-90).max(90),
+    lng: z.number().min(-180).max(180),
+    accuracy: z.number().nonnegative().max(1_000_000).optional(),
+    address: z.string().trim().max(240).optional()
+});
+
+export const contactSchema = z.object({
+    name: z.string().trim().min(1, "Contact name is required").max(100),
+    phones: z
+        .array(
+            z
+                .string()
+                .trim()
+                .min(3)
+                .max(32)
+                .regex(/^[+\d][\d\s().\-]{2,31}$/, "Invalid phone number")
+        )
+        .min(1, "At least one phone number is required")
+        .max(10, "Too many phone numbers")
+});
+
+export const sendMessageSchema = z.object({
+    conversationId: objectId,
+    clientMsgId: z.string().trim().min(1).max(100),
+    type: z
+        .enum(["text", "image", "video", "audio", "file", "location", "contact"])
+        .default("text"),
+    text: z.string().max(4000).optional().default(""),
+    media: mediaSchema.nullable().optional(),
+    location: locationSchema.nullable().optional(),
+    contact: contactSchema.nullable().optional(),
+    replyTo: objectId.nullable().optional()
 });
 
 export const createStorySchema = z.object({

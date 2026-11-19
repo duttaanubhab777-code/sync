@@ -112,7 +112,7 @@ export const syncMessages = asyncHandler(async (req, res) => {
         updated = await Message.find(filter)
             .sort({ updatedAt: 1 })
             .limit(300)
-            .select("conversationId status deletedForEveryone text type media updatedAt")
+            .select("conversationId status deletedForEveryone text type media location contact updatedAt")
             .lean();
     }
 

@@ -2,11 +2,24 @@ import { Conversation } from "../../models/conversation.model.js";
 import { Message } from "../../models/message.model.js";
 import { User } from "../../models/user.model.js";
 import { isValidCloudinaryUrl, pickMedia } from "../../utils/cloudinary.js";
+import {
+    buildLastMessagePreview,
+    pickContact,
+    pickLocation
+} from "../../utils/attachments.js";
 import { isObjectId } from "../../utils/helpers.js";
 import { Notification } from "../../models/notification.model.js";
 import { sendPushToUser } from "../../services/push.service.js";
 
-const ALLOWED_TYPES = ["text", "image", "video", "audio", "file"];
+const ALLOWED_TYPES = [
+    "text",
+    "image",
+    "video",
+    "audio",
+    "file",
+    "location",
+    "contact"
+];
 const MAX_TEXT = 4000;
 
 // একটা socket থেকে ১০ সেকেন্ডে সর্বোচ্চ ২০টা মেসেজ (spam/flood ঠেকাতে)
@@ -16,14 +29,16 @@ const RATE_MAX = 20;
 const POPULATE_SENDER = { path: "sender", select: "username fullName avatar" };
 const POPULATE_REPLY = {
     path: "replyTo",
-    select: "text type sender media.url deletedForEveryone"
+    select: "text type sender media.url media.fileName location contact deletedForEveryone"
 };
 
 const MEDIA_PREVIEW = {
     image: "📷 Photo",
     video: "🎥 Video",
     audio: "🎤 Voice message",
-    file: "📎 Attachment"
+    file: "📎 Attachment",
+    location: "📍 Location",
+    contact: "👤 Contact"
 };
 
 const optimizePushImage = url => {
@@ -40,6 +55,37 @@ const optimizePushAvatar = url => {
     return `${head}/image/upload/w_192,h_192,c_fill,g_face,q_auto,f_png/${tail}`;
 };
 
+const buildPushPreview = ({ type, cleanText, msg }) => {
+    if (type === "text") return cleanText.slice(0, 160);
+    if (type === "contact") {
+        const label = msg.contact?.name
+            ? `👤 Contact: ${msg.contact.name}`
+            : MEDIA_PREVIEW.contact;
+        return cleanText
+            ? `${label} — ${cleanText.slice(0, 100)}`
+            : label.slice(0, 160);
+    }
+    if (type === "location") {
+        const label = msg.location?.address
+            ? `📍 Location: ${msg.location.address}`
+            : MEDIA_PREVIEW.location;
+        return cleanText
+            ? `${label} — ${cleanText.slice(0, 100)}`
+            : label.slice(0, 160);
+    }
+    if (type === "file") {
+        const label = msg.media?.fileName
+            ? `📎 ${msg.media.fileName}`
+            : MEDIA_PREVIEW.file;
+        return cleanText
+            ? `${label}: ${cleanText.slice(0, 110)}`
+            : label.slice(0, 160);
+    }
+    return cleanText
+        ? `${MEDIA_PREVIEW[type] || "Attachment"}: ${cleanText.slice(0, 120)}`
+        : MEDIA_PREVIEW[type] || `Sent a ${type}`;
+};
+
 async function notifyRecipients({
     conv,
     msg,
@@ -54,12 +100,7 @@ async function notifyRecipients({
     if (recipients.length === 0) return;
 
     const isGroup = conv.type === "group";
-    const basePreview =
-        type === "text"
-            ? cleanText.slice(0, 160)
-            : cleanText
-              ? `${MEDIA_PREVIEW[type] || "Attachment"}: ${cleanText.slice(0, 120)}`
-              : MEDIA_PREVIEW[type] || `Sent a ${type}`;
+    const basePreview = buildPushPreview({ type, cleanText, msg });
 
     const cleanSenderName = senderName || "New message";
     const title = isGroup ? conv.groupName || "Group chat" : cleanSenderName;
@@ -124,6 +165,8 @@ export const registerMessageHandlers = (io, socket) => {
                 type = "text",
                 text = "",
                 media = null,
+                location = null,
+                contact = null,
                 replyTo = null
             } = payload || {};
 
@@ -174,8 +217,21 @@ export const registerMessageHandlers = (io, socket) => {
 
             const cleanText = text.trim();
             let cleanMedia;
+            let cleanLocation;
+            let cleanContact;
+
             if (type === "text") {
                 if (!cleanText) return ack?.({ ok: false, error: "EMPTY_MESSAGE" });
+            } else if (type === "location") {
+                cleanLocation = pickLocation(location);
+                if (!cleanLocation) {
+                    return ack?.({ ok: false, error: "INVALID_LOCATION" });
+                }
+            } else if (type === "contact") {
+                cleanContact = pickContact(contact);
+                if (!cleanContact) {
+                    return ack?.({ ok: false, error: "INVALID_CONTACT" });
+                }
             } else {
                 cleanMedia = pickMedia(media);
                 if (!cleanMedia?.url || !isValidCloudinaryUrl(cleanMedia.url)) {
@@ -208,6 +264,8 @@ export const registerMessageHandlers = (io, socket) => {
                     type,
                     text: cleanText,
                     media: cleanMedia,
+                    location: cleanLocation,
+                    contact: cleanContact,
                     replyTo: replyId,
                     status: "sent"
                 });
@@ -233,16 +291,20 @@ export const registerMessageHandlers = (io, socket) => {
                 const id = m.toString();
                 if (id !== userId) inc[`unread.${id}`] = 1;
             }
+            const lastMessageText = buildLastMessagePreview({
+                type,
+                text: cleanText,
+                media: cleanMedia,
+                location: cleanLocation,
+                contact: cleanContact
+            });
             await Conversation.updateOne(
                 { _id: conv._id },
                 {
                     $set: {
                         lastMessage: {
                             messageId: msg._id,
-                            text:
-                                type === "text"
-                                    ? cleanText.slice(0, 100)
-                                    : `[${type.toUpperCase()}]`,
+                            text: lastMessageText,
                             type,
                             sender: userId,
                             createdAt: msg.createdAt
@@ -294,6 +356,8 @@ export const registerMessageHandlers = (io, socket) => {
             msg.deletedForEveryone = true;
             msg.text = "This message was deleted";
             msg.media = undefined;
+            msg.location = undefined;
+            msg.contact = undefined;
             await msg.save();
 
             // এটা যদি চ্যাটের শেষ মেসেজ হয়, চ্যাট লিস্টের প্রিভিউও বদলে দেওয়া

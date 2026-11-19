@@ -192,10 +192,14 @@ export const uploadMediaToCloudinary = async (file, onProgress, options = {}) =>
     }
     formData.append("signature", signature);
 
+    // ডকুমেন্টের জন্য /raw/upload ব্যবহার করলে PDF/ZIP/DOCX আসল ফাইল হিসেবে নিরাপদে ডেলিভার হয়
+    const detectedType = detectMessageTypeFromFile(file);
+    const resourceEndpoint = detectedType === "file" ? "raw" : "auto";
+
     let data;
     try {
         data = await uploadWithProgress(
-            `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
+            `https://api.cloudinary.com/v1_1/${cloudName}/${resourceEndpoint}/upload`,
             formData,
             file.size,
             onProgress
@@ -209,6 +213,7 @@ export const uploadMediaToCloudinary = async (file, onProgress, options = {}) =>
         url: data.secure_url,
         publicId: data.public_id,
         mime: file.type || `${data.resource_type}/${data.format || "bin"}`,
+        fileName: file.name || "",
         bytes: data.bytes,
         width: data.width,
         height: data.height,
@@ -217,9 +222,15 @@ export const uploadMediaToCloudinary = async (file, onProgress, options = {}) =>
 };
 
 export const detectMessageTypeFromFile = file => {
-    const mime = file?.type || "";
+    const mime = (file?.type || "").toLowerCase();
     if (mime.startsWith("image/")) return "image";
     if (mime.startsWith("video/")) return "video";
     if (mime.startsWith("audio/")) return "audio";
+
+    // কিছু Android WebView ফাইল পিকারে MIME খালি থাকে, তাই এক্সটেনশন fallback
+    const name = (file?.name || "").toLowerCase();
+    if (/\.(jpe?g|png|webp|gif|heic|heif|avif)$/.test(name)) return "image";
+    if (/\.(mp4|mov|webm|m4v|3gp|ogv|mkv)$/.test(name)) return "video";
+    if (/\.(mp3|m4a|aac|wav|ogg|oga|opus|flac|weba)$/.test(name)) return "audio";
     return "file";
 };

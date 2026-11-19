@@ -5,6 +5,7 @@
 @import "./styles/base.css";
 @import "./styles/auth-shell.css";
 @import "./styles/chat.css";
+@import "./styles/attachment.css";
 @import "./styles/media-player.css";
 @import "./styles/overlays-pages.css";
 @import "./styles/notifications.css";

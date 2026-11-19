@@ -1,4 +1,5 @@
 import mongoose, { Schema } from "mongoose";
+import { pickContact, pickLocation } from "../utils/attachments.js";
 
 const messageSchema = new Schema(
     {
@@ -19,7 +20,7 @@ const messageSchema = new Schema(
         },
         type: {
             type: String,
-            enum: ["text", "image", "video", "audio", "file"],
+            enum: ["text", "image", "video", "audio", "file", "location", "contact"],
             default: "text"
         },
         text: {
@@ -32,10 +33,23 @@ const messageSchema = new Schema(
             url: { type: String },
             publicId: { type: String },
             mime: { type: String },
+            fileName: { type: String, trim: true, maxlength: 180 },
             bytes: { type: Number },
             width: { type: Number },
             height: { type: Number },
             duration: { type: Number }
+        },
+        // লোকেশন মেসেজের স্থানাঙ্ক ও ঠিকানা
+        location: {
+            lat: { type: Number, min: -90, max: 90 },
+            lng: { type: Number, min: -180, max: 180 },
+            accuracy: { type: Number, min: 0 },
+            address: { type: String, trim: true, maxlength: 240 }
+        },
+        // কনট্যাক্ট কার্ডের নাম ও ফোন নম্বর
+        contact: {
+            name: { type: String, trim: true, maxlength: 100 },
+            phones: [{ type: String, trim: true, maxlength: 32 }]
         },
 
         //whatsapp style swipe reply to feature
@@ -85,12 +99,32 @@ const messageSchema = new Schema(
     { timestamps: true }
 );
 
-// text মেসেজে লেখা, আর বাকি সব ধরনে media.url থাকতেই হবে
+// text মেসেজে লেখা, location/contact-এ নিজস্ব ডেটা, আর মিডিয়া ধরনে media.url থাকতেই হবে
 messageSchema.pre("validate", function () {
     if (this.deletedForEveryone) return;
     if (this.type === "text") {
         if (!this.text?.trim()) {
             this.invalidate("text", "Text message cannot be empty");
+        }
+    } else if (this.type === "location") {
+        const clean = pickLocation(this.location);
+        if (!clean) {
+            this.invalidate(
+                "location",
+                "Location message requires valid latitude (-90..90) and longitude (-180..180)"
+            );
+        } else {
+            this.location = clean;
+        }
+    } else if (this.type === "contact") {
+        const clean = pickContact(this.contact);
+        if (!clean) {
+            this.invalidate(
+                "contact",
+                "Contact message requires a valid name and at least one valid phone number"
+            );
+        } else {
+            this.contact = clean;
         }
     } else if (!this.media?.url) {
         this.invalidate("media.url", `${this.type} message requires media.url`);

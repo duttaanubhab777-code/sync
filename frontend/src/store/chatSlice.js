@@ -222,6 +222,27 @@ const ensureConvBucket = (state, convId) => {
     return state.messagesByConv[key];
 };
 
+const formatPreviewText = msg => {
+    if (!msg) return "";
+    if (msg.type === "text") return String(msg.text || "").slice(0, 100);
+    if (msg.type === "location") {
+        return msg.location?.address
+            ? `📍 ${msg.location.address}`.slice(0, 100)
+            : "📍 Location";
+    }
+    if (msg.type === "contact") {
+        return msg.contact?.name
+            ? `👤 Contact: ${msg.contact.name}`.slice(0, 100)
+            : "👤 Contact";
+    }
+    if (msg.type === "file") {
+        return msg.media?.fileName
+            ? `📎 ${msg.media.fileName}`.slice(0, 100)
+            : "📎 Attachment";
+    }
+    return `[${String(msg.type || "media").toUpperCase()}]`;
+};
+
 const sortConversations = convs => {
     convs.sort((a, b) => {
         const tA = new Date(
@@ -269,10 +290,7 @@ const chatSlice = createSlice({
             if (conv) {
                 conv.lastMessage = {
                     messageId: msg._id,
-                    text:
-                        msg.type === "text"
-                            ? msg.text.slice(0, 100)
-                            : `[${String(msg.type).toUpperCase()}]`,
+                    text: formatPreviewText(msg),
                     type: msg.type,
                     sender: msg.sender?._id || msg.sender,
                     createdAt: msg.createdAt
@@ -318,10 +336,7 @@ const chatSlice = createSlice({
             if (conv) {
                 conv.lastMessage = {
                     messageId: message._id,
-                    text:
-                        message.type === "text"
-                            ? message.text.slice(0, 100)
-                            : `[${String(message.type).toUpperCase()}]`,
+                    text: formatPreviewText(message),
                     type: message.type,
                     sender: message.sender?._id || message.sender,
                     createdAt: message.createdAt
@@ -366,10 +381,7 @@ const chatSlice = createSlice({
             if (conv) {
                 conv.lastMessage = {
                     messageId: message._id,
-                    text:
-                        message.type === "text"
-                            ? message.text.slice(0, 100)
-                            : `[${String(message.type).toUpperCase()}]`,
+                    text: formatPreviewText(message),
                     type: message.type,
                     sender: senderId,
                     createdAt: message.createdAt
@@ -393,6 +405,8 @@ const chatSlice = createSlice({
                     msg.deletedForEveryone = true;
                     msg.text = "This message was deleted";
                     msg.media = null;
+                    msg.location = null;
+                    msg.contact = null;
                 }
             }
             const conv = state.conversations.find(
@@ -689,6 +703,8 @@ const chatSlice = createSlice({
                             if (u.deletedForEveryone) {
                                 msg.text = "This message was deleted";
                                 msg.media = null;
+                                msg.location = null;
+                                msg.contact = null;
                             }
                         }
                     }

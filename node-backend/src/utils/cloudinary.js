@@ -32,12 +32,35 @@ export const isValidCloudinaryUrl = url => {
         : false;
 };
 
+// ফাইলের নাম থেকে path traversal, control char ও HTML ইনজেকশন সরানো
+export const sanitizeFileName = name => {
+    if (typeof name !== "string") return "";
+    // আগে HTML ট্যাগ সরানো, তারপর পাথ থাকলে শুধু শেষের ফাইলনেম অংশ নেওয়া
+    const withoutTags = name.replace(/<[^>]*>/g, "");
+    const base = withoutTags.split(/[\\/]/).pop() || "";
+    const cleaned = base
+        // eslint-disable-next-line no-control-regex
+        .replace(/[\x00-\x1f\x7f]/g, "")
+        .replace(/[<>:"'`|?*]/g, "")
+        .replace(/\.\.+/g, ".")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/^\.+/, "")
+        .slice(0, 180)
+        .trim();
+    return cleaned;
+};
+
 // client থেকে আসা media object থেকে শুধু দরকারি ফিল্ডগুলো রাখা
 export const pickMedia = media => {
     if (!media || typeof media !== "object") return undefined;
     const out = {};
     for (const k of ["url", "publicId", "mime"]) {
         if (typeof media[k] === "string") out[k] = media[k];
+    }
+    if (typeof media.fileName === "string") {
+        const cleanName = sanitizeFileName(media.fileName);
+        if (cleanName) out.fileName = cleanName;
     }
     for (const k of ["bytes", "width", "height", "duration"]) {
         const n = Number(media[k]);

@@ -18,8 +18,6 @@ import {
     CheckCheck,
     Clock,
     AlertCircle,
-    FileText,
-    Download,
     X,
     Lock,
     Loader2,
@@ -30,6 +28,10 @@ import Avatar from "../components/Avatar.jsx";
 import SyncBrandBar from "../components/SyncBrandBar.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import LinkPreviewCard from "../components/LinkPreviewCard.jsx";
+import AttachmentSheet from "../components/chat/AttachmentSheet.jsx";
+import LocationCard from "../components/chat/LocationCard.jsx";
+import ContactCard from "../components/chat/ContactCard.jsx";
+import DocumentCard from "../components/chat/DocumentCard.jsx";
 import { VoicePlayer, VideoPlayer } from "../components/MediaPlayers.jsx";
 import {
     ActivityBubble,
@@ -172,6 +174,28 @@ const formatEta = seconds => {
     return `${Math.floor(seconds / 60)}m ${seconds % 60}s left`;
 };
 
+const formatReplySnippet = target => {
+    if (!target) return "";
+    if (target.deletedForEveryone) return "This message was deleted";
+    if (target.text) return target.text;
+    if (target.type === "location") {
+        return target.location?.address
+            ? `📍 ${target.location.address}`
+            : "📍 Location";
+    }
+    if (target.type === "contact") {
+        return target.contact?.name
+            ? `👤 Contact: ${target.contact.name}`
+            : "👤 Contact";
+    }
+    if (target.type === "file") {
+        return target.media?.fileName
+            ? `📎 ${target.media.fileName}`
+            : "📎 Attachment";
+    }
+    return `[${String(target.type || "media").toUpperCase()}]`;
+};
+
 
 const VOICE_BAR_COUNT = 40;
 const MIN_VOICE_MS = 800;
@@ -224,6 +248,7 @@ export default function ChatPage() {
     const composerInputRef = useRef(null);
     const [composerError, setComposerError] = useState("");
     const [showMicrophoneHelp, setShowMicrophoneHelp] = useState(false);
+    const [showAttachSheet, setShowAttachSheet] = useState(false);
     const [lightboxUrl, setLightboxUrl] = useState(null);
 
     // recPhase: "idle" | "recording" | "paused" | "discarding"
@@ -250,6 +275,7 @@ export default function ChatPage() {
     const isTypingSentRef = useRef(false);
 
     useEffect(() => {
+        setShowAttachSheet(false);
         if (conversationId) {
             dispatch(setActiveConversation(conversationId));
         } else {
@@ -471,57 +497,144 @@ export default function ChatPage() {
         }
     };
 
-    const handleFileAttachment = async e => {
-        const file = e.target.files?.[0];
-        e.target.value = "";
-        if (!file || !activeConversationId) return;
+    // এক বা একাধিক ফাইল একটা একটা করে আপলোড ও পাঠানো; কোনোটা ব্যর্থ হলে বাকিগুলো চলবে
+    const handleFilesSelected = async selectedFiles => {
+        const files = Array.from(selectedFiles || []).filter(Boolean);
+        if (files.length === 0 || !activeConversationId || !canSendInActive) return;
+
+        const targetConvId = activeConversationId;
+        let pendingCaption = draftText.trim();
+        let pendingReply = replyingTo;
+        const failures = [];
 
         setUploadingMedia(true);
         setUploadProgress(0);
         setComposerError("");
 
         try {
-            setUploadInfo({ name: file.name, size: file.size });
-            const media = await uploadMediaToCloudinary(
-                file,
-                (pct, info) => {
-                    setUploadProgress(pct);
-                    setUploadInfo({
-                        name: file.name,
-                        size: file.size,
-                        ...info
+            for (let i = 0; i < files.length; i += 1) {
+                const file = files[i];
+                const displayName =
+                    files.length > 1
+                        ? `(${i + 1}/${files.length}) ${file.name}`
+                        : file.name;
+
+                setUploadProgress(0);
+                setUploadInfo({ name: displayName, size: file.size });
+
+                try {
+                    const media = await uploadMediaToCloudinary(
+                        file,
+                        (pct, info) => {
+                            setUploadProgress(pct);
+                            setUploadInfo({
+                                name: displayName,
+                                size: file.size,
+                                ...info
+                            });
+                        }
+                    );
+                    const msgType = detectMessageTypeFromFile(file);
+
+                    const replyForThis = pendingReply;
+                    if (replyForThis) {
+                        pendingReply = null;
+                        dispatch(
+                            setReplyTo({
+                                conversationId: targetConvId,
+                                message: null
+                            })
+                        );
+                    }
+                    const captionForThis = pendingCaption;
+                    if (captionForThis) {
+                        pendingCaption = "";
+                        setDraftText("");
+                    }
+
+                    const ack = await sendSocketMessage({
+                        conversationId: targetConvId,
+                        clientMsgId: generateClientMsgId(),
+                        type: msgType,
+                        text: captionForThis,
+                        media,
+                        replyToMessage: replyForThis
                     });
+                    if (ack && !ack.ok && !ack.queued) {
+                        failures.push(`${file.name}: ${ack.error || "Send failed"}`);
+                    }
+                } catch (err) {
+                    failures.push(
+                        `${file.name}: ${err?.message || "Upload failed"}`
+                    );
                 }
-            );
-            const msgType = detectMessageTypeFromFile(file);
-            const replyTarget = replyingTo;
-            if (replyTarget) {
-                dispatch(
-                    setReplyTo({
-                        conversationId: activeConversationId,
-                        message: null
-                    })
-                );
             }
 
-            const ack = await sendSocketMessage({
-                conversationId: activeConversationId,
-                clientMsgId: generateClientMsgId(),
-                type: msgType,
-                text: draftText.trim(),
-                media,
-                replyToMessage: replyTarget
-            });
-            setDraftText("");
-            if (ack && !ack.ok && !ack.queued) {
-                setComposerError(`Media message error: ${ack.error}`);
+            if (failures.length > 0) {
+                setComposerError(
+                    failures.length === 1
+                        ? failures[0]
+                        : `${failures.length} files failed (${failures[0]})`
+                );
             }
-        } catch (err) {
-            setComposerError(err.message || "Media upload failed");
         } finally {
             setUploadingMedia(false);
             setUploadProgress(0);
             setUploadInfo(null);
+        }
+    };
+
+    const handleSendLocation = async locationData => {
+        if (!locationData || !activeConversationId || !canSendInActive) return;
+        setComposerError("");
+        const replyTarget = replyingTo;
+        if (replyTarget) {
+            dispatch(
+                setReplyTo({
+                    conversationId: activeConversationId,
+                    message: null
+                })
+            );
+        }
+        const caption = draftText.trim();
+        if (caption) setDraftText("");
+
+        const ack = await sendSocketMessage({
+            conversationId: activeConversationId,
+            clientMsgId: generateClientMsgId(),
+            type: "location",
+            text: caption,
+            location: locationData,
+            replyToMessage: replyTarget
+        });
+        if (ack && !ack.ok && !ack.queued) {
+            setComposerError(`Location error: ${ack.error || "Failed to send"}`);
+        }
+    };
+
+    const handleSendContact = async contactData => {
+        if (!contactData || !activeConversationId || !canSendInActive) return;
+        setComposerError("");
+        const replyTarget = replyingTo;
+        if (replyTarget) {
+            dispatch(
+                setReplyTo({
+                    conversationId: activeConversationId,
+                    message: null
+                })
+            );
+        }
+
+        const ack = await sendSocketMessage({
+            conversationId: activeConversationId,
+            clientMsgId: generateClientMsgId(),
+            type: "contact",
+            text: "",
+            contact: contactData,
+            replyToMessage: replyTarget
+        });
+        if (ack && !ack.ok && !ack.queued) {
+            setComposerError(`Contact error: ${ack.error || "Failed to send"}`);
         }
     };
 
@@ -1281,18 +1394,9 @@ export default function ChatPage() {
                                                             <span className="reply-bar" />
                                                             <div className="reply-content">
                                                                 <p>
-                                                                    {msg.replyTo
-                                                                        .deletedForEveryone
-                                                                        ? "This message was deleted"
-                                                                        : msg
-                                                                              .replyTo
-                                                                              .text ||
-                                                                          `[${String(
-                                                                              msg
-                                                                                  .replyTo
-                                                                                  .type ||
-                                                                                  "media"
-                                                                          ).toUpperCase()}]`}
+                                                                    {formatReplySnippet(
+                                                                        msg.replyTo
+                                                                    )}
                                                                 </p>
                                                             </div>
                                                         </div>
@@ -1353,31 +1457,29 @@ export default function ChatPage() {
                                                 {!msg.deletedForEveryone &&
                                                     msg.type === "file" &&
                                                     msg.media?.url && (
-                                                        <a
-                                                            href={msg.media.url}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            className="sync-msg-file-card"
-                                                        >
-                                                            <FileText
-                                                                size={22}
-                                                            />
-                                                            <div className="file-meta">
-                                                                <span>
-                                                                    Attachment
-                                                                </span>
-                                                                <small>
-                                                                    {formatBytes(
-                                                                        msg
-                                                                            .media
-                                                                            .bytes
-                                                                    )}
-                                                                </small>
-                                                            </div>
-                                                            <Download
-                                                                size={16}
-                                                            />
-                                                        </a>
+                                                        <DocumentCard
+                                                            media={msg.media}
+                                                        />
+                                                    )}
+
+                                                {!msg.deletedForEveryone &&
+                                                    msg.type === "location" &&
+                                                    msg.location && (
+                                                        <LocationCard
+                                                            location={
+                                                                msg.location
+                                                            }
+                                                        />
+                                                    )}
+
+                                                {!msg.deletedForEveryone &&
+                                                    msg.type === "contact" &&
+                                                    msg.contact && (
+                                                        <ContactCard
+                                                            contact={
+                                                                msg.contact
+                                                            }
+                                                        />
                                                     )}
 
                                                 {(msg.text ||
@@ -1581,10 +1683,7 @@ export default function ChatPage() {
                                                 "message"}
                                         </strong>
                                         <p>
-                                            {replyingTo.text ||
-                                                `[${String(
-                                                    replyingTo.type
-                                                ).toUpperCase()}]`}
+                                            {formatReplySnippet(replyingTo)}
                                         </p>
                                     </div>
                                     <button
@@ -1619,18 +1718,21 @@ export default function ChatPage() {
                                     onSubmit={handleSendText}
                                 >
                                     {recPhase === "idle" && (
-                                        <label
-                                            className="sync-icon-btn"
-                                            title="Attach Image, Video, Audio or File"
+                                        <button
+                                            type="button"
+                                            className={`sync-icon-btn ${
+                                                showAttachSheet ? "active" : ""
+                                            }`}
+                                            title="Attach"
+                                            aria-label="Attach"
+                                            aria-expanded={showAttachSheet}
+                                            onClick={() =>
+                                                setShowAttachSheet(v => !v)
+                                            }
+                                            disabled={uploadingMedia}
                                         >
                                             <Paperclip size={20} />
-                                            <input
-                                                type="file"
-                                                hidden
-                                                onChange={handleFileAttachment}
-                                                disabled={uploadingMedia}
-                                            />
-                                        </label>
+                                        </button>
                                     )}
 
                                     {isRecording ? (
@@ -1762,6 +1864,15 @@ export default function ChatPage() {
                                         ))}
                                 </form>
                             )}
+
+                            <AttachmentSheet
+                                open={showAttachSheet && canSendInActive && !isRecording}
+                                disabled={uploadingMedia || !canSendInActive}
+                                onClose={() => setShowAttachSheet(false)}
+                                onFilesSelected={handleFilesSelected}
+                                onSendLocation={handleSendLocation}
+                                onSendContact={handleSendContact}
+                            />
                         </footer>
                     </div>
                 )}

@@ -8,7 +8,7 @@ export const POPULATE_SENDER = {
 };
 export const POPULATE_REPLY = {
     path: "replyTo",
-    select: "text type sender media.url deletedForEveryone"
+    select: "text type sender media.url media.fileName location contact deletedForEveryone"
 };
 
 const RANK = { sent: 0, delivered: 1, seen: 2 };

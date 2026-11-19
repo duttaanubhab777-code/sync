@@ -49,6 +49,8 @@ perms = [
     "android.permission.INTERNET",
     "android.permission.ACCESS_NETWORK_STATE",
     "android.permission.CAMERA",
+    "android.permission.ACCESS_FINE_LOCATION",
+    "android.permission.ACCESS_COARSE_LOCATION",
     "android.permission.RECORD_AUDIO",
     "android.permission.MODIFY_AUDIO_SETTINGS",
     "android.permission.POST_NOTIFICATIONS",
@@ -56,7 +58,7 @@ perms = [
     "android.permission.WAKE_LOCK",
     "android.permission.RECEIVE_BOOT_COMPLETED",
 ]
-feats = ["android.hardware.camera", "android.hardware.microphone"]
+feats = ["android.hardware.camera", "android.hardware.microphone", "android.hardware.location.gps"]
 add = ""
 for p in perms:
     if f'android:name="{p}"' not in s:

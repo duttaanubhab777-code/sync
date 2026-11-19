@@ -1,0 +1,532 @@
+/* ==========================================================================
+   WhatsApp-style Attachment Sheet + Location, Contact & Document Cards
+   Sync palette (#031512, #07201b, #00ED64) + transform/opacity animations
+   ========================================================================== */
+
+.sync-composer-wrap {
+    position: relative;
+}
+
+/* ---------- Backdrop & Bottom Sheet (Mobile) / Popover (Desktop) ---------- */
+.sync-attach-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    background: rgba(2, 12, 10, 0.56);
+    animation: sync-fade 0.18s ease both;
+}
+
+.sync-attach-sheet {
+    width: 100%;
+    max-width: 520px;
+    background: var(--bg-1);
+    border: 1px solid var(--line-strong);
+    border-bottom: 0;
+    border-radius: 26px 26px 0 0;
+    padding: 10px 18px calc(18px + var(--safe-bottom));
+    box-shadow: 0 -18px 48px -12px rgba(0, 0, 0, 0.72);
+    animation: sync-attach-slide-up 0.24s var(--ease) both;
+}
+
+.sync-attach-handle {
+    width: 40px;
+    height: 4px;
+    margin: 0 auto 16px;
+    border-radius: 999px;
+    background: rgba(155, 184, 173, 0.35);
+}
+
+.sync-attach-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px 10px;
+    padding: 4px 2px 6px;
+}
+
+.sync-attach-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 4px;
+    border: 0;
+    border-radius: 16px;
+    background: transparent;
+    color: var(--text);
+    transition: transform 0.16s var(--ease), background-color 0.16s;
+}
+
+.sync-attach-item:hover:not(:disabled) {
+    background: rgba(130, 255, 190, 0.07);
+}
+
+.sync-attach-item:active:not(:disabled) {
+    transform: scale(0.93);
+}
+
+.sync-attach-item:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.sync-attach-circle {
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 8px 18px -8px rgba(0, 0, 0, 0.6);
+}
+
+.sync-attach-circle.gallery {
+    background: linear-gradient(135deg, #2b8cff, #1a62d8);
+}
+
+.sync-attach-circle.camera {
+    background: linear-gradient(135deg, #f43f5e, #d81b60);
+}
+
+.sync-attach-circle.video {
+    background: linear-gradient(135deg, #fb7185, #ea580c);
+}
+
+.sync-attach-circle.document {
+    background: linear-gradient(135deg, #7c3aed, #4f46e5);
+}
+
+.sync-attach-circle.audio {
+    background: linear-gradient(135deg, #f59e0b, #ea580c);
+}
+
+.sync-attach-circle.location {
+    background: linear-gradient(135deg, #00ed64, #0ea65a);
+    color: #022b17;
+}
+
+.sync-attach-circle.contact {
+    background: linear-gradient(135deg, #06b6d4, #0284c7);
+}
+
+.sync-attach-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-2);
+    text-align: center;
+    line-height: 1.2;
+}
+
+/* ---------- Subviews (Location Preview & Manual Contact Form) ---------- */
+.sync-attach-subview {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.sync-attach-subhead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.sync-attach-subhead h4 {
+    flex: 1;
+    font-size: 0.98rem;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    color: var(--text);
+}
+
+.sync-attach-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 28px 12px;
+    color: var(--text-2);
+    font-size: 0.9rem;
+}
+
+.sync-attach-error-box {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px;
+    border-radius: 16px;
+    background: rgba(255, 93, 108, 0.1);
+    border: 1px solid rgba(255, 93, 108, 0.25);
+    color: #ff9aa4;
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
+.sync-attach-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.sync-attach-form .sync-field input {
+    min-height: 44px;
+    padding: 10px 13px;
+    font-size: 0.9rem;
+}
+
+.sync-attach-subactions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 2px;
+}
+
+/* ---------- Desktop Popover Layout ---------- */
+@media (min-width: 821px) {
+    .sync-attach-backdrop {
+        background: transparent;
+        pointer-events: auto;
+    }
+
+    .sync-attach-sheet {
+        position: fixed;
+        left: max(420px, calc(390px + 96px));
+        bottom: 92px;
+        width: 360px;
+        max-width: calc(100vw - 32px);
+        border: 1px solid var(--line-strong);
+        border-radius: 22px;
+        padding: 14px 16px 16px;
+        box-shadow: 0 24px 56px -16px rgba(0, 0, 0, 0.78);
+        animation: sync-pop 0.18s var(--ease) both;
+        transform-origin: bottom left;
+    }
+
+    .sync-attach-handle {
+        display: none;
+    }
+}
+
+/* ---------- Location Message Card ---------- */
+.sync-location-card {
+    width: min(280px, 72vw);
+    border-radius: 14px;
+    overflow: hidden;
+    background: rgba(2, 21, 18, 0.36);
+    border: 1px solid rgba(130, 255, 190, 0.14);
+    margin-bottom: 5px;
+}
+
+.sync-location-card.compact {
+    width: 100%;
+    margin-bottom: 0;
+}
+
+.sync-location-map-link {
+    display: block;
+    color: inherit;
+}
+
+.sync-location-map {
+    position: relative;
+    width: 100%;
+    height: 144px;
+    overflow: hidden;
+    background:
+        linear-gradient(rgba(0, 237, 100, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 237, 100, 0.08) 1px, transparent 1px),
+        linear-gradient(135deg, #062820, #0c3d32);
+    background-size: 24px 24px, 24px 24px, 100% 100%;
+}
+
+.sync-location-map img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    filter: saturate(0.92) contrast(1.02);
+}
+
+.sync-location-pin {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -88%);
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--mongo);
+    color: var(--on-brand);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.55);
+}
+
+.sync-location-badge {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(3, 21, 18, 0.84);
+    color: var(--mongo);
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.sync-location-body {
+    padding: 9px 11px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.sync-location-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.sync-location-title {
+    font-size: 0.86rem;
+    font-weight: 700;
+    line-height: 1.3;
+    word-break: break-word;
+}
+
+.sync-location-coords {
+    font-size: 0.72rem;
+    color: rgba(232, 247, 240, 0.68);
+    font-variant-numeric: tabular-nums;
+}
+
+.sync-location-links {
+    display: flex;
+    gap: 10px;
+    padding-top: 4px;
+    border-top: 1px solid rgba(130, 255, 190, 0.12);
+}
+
+.sync-location-links a {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: #9effc5;
+}
+
+.sync-location-links a:hover {
+    text-decoration: underline;
+}
+
+/* ---------- Contact Message Card ---------- */
+.sync-contact-card {
+    width: min(270px, 72vw);
+    padding: 10px 12px;
+    margin-bottom: 5px;
+    border-radius: 14px;
+    background: rgba(2, 21, 18, 0.36);
+    border: 1px solid rgba(130, 255, 190, 0.14);
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+.sync-contact-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.sync-contact-avatar {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.88rem;
+    font-weight: 800;
+    color: #022b17;
+    background: var(--grad-btn);
+}
+
+.sync-contact-avatar.tone-1 { background: linear-gradient(135deg, #38bdf8, #0284c7); color: #fff; }
+.sync-contact-avatar.tone-2 { background: linear-gradient(135deg, #a78bfa, #6366f1); color: #fff; }
+.sync-contact-avatar.tone-3 { background: linear-gradient(135deg, #fbbf24, #ea580c); color: #1c1002; }
+.sync-contact-avatar.tone-4 { background: linear-gradient(135deg, #fb7185, #e11d48); color: #fff; }
+.sync-contact-avatar.tone-5 { background: linear-gradient(135deg, #2dd4bf, #0d9488); color: #022b17; }
+
+.sync-contact-meta {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.sync-contact-name {
+    font-size: 0.92rem;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sync-contact-sub {
+    font-size: 0.72rem;
+    color: rgba(232, 247, 240, 0.65);
+}
+
+.sync-contact-phones {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 7px;
+    border-top: 1px solid rgba(130, 255, 190, 0.12);
+}
+
+.sync-contact-phone-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.sync-contact-number {
+    font-size: 0.82rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sync-contact-actions {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+}
+
+.sync-contact-act {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 9px;
+    border: 1px solid rgba(130, 255, 190, 0.18);
+    background: rgba(2, 21, 18, 0.45);
+    color: #e8f7f0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    transition: background-color 0.16s, border-color 0.16s;
+}
+
+.sync-contact-act:hover {
+    background: rgba(0, 237, 100, 0.18);
+    border-color: rgba(0, 237, 100, 0.4);
+}
+
+.sync-contact-act.copied,
+.sync-contact-act.call {
+    color: var(--mongo);
+}
+
+/* ---------- Upgraded Document Card ---------- */
+.sync-doc-card {
+    max-width: min(300px, 74vw);
+    border: 1px solid rgba(130, 255, 190, 0.12);
+    transition: background-color 0.16s, border-color 0.16s;
+}
+
+.sync-doc-card:hover {
+    background: rgba(2, 21, 18, 0.5);
+    border-color: rgba(0, 237, 100, 0.3);
+}
+
+.sync-doc-badge {
+    position: relative;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    border-radius: 11px;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(99, 102, 241, 0.24);
+    color: #c7d2fe;
+}
+
+.sync-doc-badge em {
+    font-style: normal;
+    font-size: 0.55rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    line-height: 1;
+    margin-top: 1px;
+}
+
+.sync-doc-badge.pdf { background: rgba(244, 63, 94, 0.24); color: #fda4af; }
+.sync-doc-badge.doc { background: rgba(59, 130, 246, 0.24); color: #93c5fd; }
+.sync-doc-badge.sheet { background: rgba(0, 237, 100, 0.2); color: #86efac; }
+.sync-doc-badge.slide { background: rgba(249, 115, 22, 0.24); color: #fdba74; }
+.sync-doc-badge.archive { background: rgba(245, 158, 11, 0.24); color: #fcd34d; }
+.sync-doc-badge.code { background: rgba(6, 182, 212, 0.24); color: #67e8f9; }
+
+.sync-doc-name {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+    line-height: 1.3;
+}
+
+.sync-doc-dl {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+/* ---------- Light theme compatibility ---------- */
+[data-theme="light"] .sync-attach-sheet {
+    background: #ffffff;
+    border-color: rgba(3, 21, 18, 0.12);
+    color: #031512;
+}
+
+[data-theme="light"] .sync-attach-label,
+[data-theme="light"] .sync-attach-status {
+    color: #355248;
+}
+
+[data-theme="light"] .sync-attach-subhead h4 {
+    color: #031512;
+}
+
+@keyframes sync-attach-slide-up {
+    from {
+        opacity: 0;
+        transform: translateY(36px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}

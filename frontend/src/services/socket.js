@@ -264,6 +264,8 @@ export const sendSocketMessage = payload => {
         type = "text",
         text = "",
         media = null,
+        location = null,
+        contact = null,
         replyToMessage = null
     } = payload;
 
@@ -283,13 +285,17 @@ export const sendSocketMessage = payload => {
         type,
         text,
         media,
+        location,
+        contact,
         replyTo: replyToMessage
             ? {
                   _id: replyToMessage._id,
                   text: replyToMessage.text,
                   type: replyToMessage.type,
                   sender: replyToMessage.sender,
-                  media: replyToMessage.media
+                  media: replyToMessage.media,
+                  location: replyToMessage.location,
+                  contact: replyToMessage.contact
               }
             : null,
         status: "sent",
@@ -307,6 +313,8 @@ export const sendSocketMessage = payload => {
         type,
         text,
         media,
+        location,
+        contact,
         replyTo: replyToMessage?._id || null
     };
 
