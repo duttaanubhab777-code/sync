@@ -1,53 +1,139 @@
-# Sync Media & Mail Relay Service (Flask)
+# Sync Media and Mail Relay Service
 
-> বাংলা নির্দেশনা: প্রজেক্ট রুটের `OTP_AND_MAIL_RELAY_SETUP_GUIDE.md` এবং `docs/PYTHONANYWHERE_DEPLOYMENT_GUIDE.md` দেখো।
+The Sync Python service is a lightweight Flask microservice designed to run independently from the Node.js application. It provides two server-side capabilities:
 
-A lightweight Flask service designed for the PythonAnywhere free plan. It handles two jobs:
-1. **`POST /media/sign`** — Creates Cloudinary signed-upload signatures locally (never receives or stores media files).
-2. **`POST /mail/send` & `GET /mail/diag`** — Sends signup OTP verification emails via Gmail SMTP (`smtp.gmail.com`), because Render's free tier blocks outbound SMTP ports.
+1. **Cloudinary upload signing** — POST /media/sign validates a Node-issued access token and creates a short-lived Cloudinary upload signature. The browser uploads media directly to Cloudinary; this service never receives or stores the media file.
+2. **Signup OTP email delivery** — POST /mail/send accepts authenticated server-to-server requests from the Node backend and sends verification emails through Gmail SMTP.
 
-```
-[Media Upload]
-Browser --(Bearer access token)--> POST /media/sign  (PythonAnywhere) --> {cloudName, apiKey, timestamp, folder, signature}
-Browser --(file + signature)-----> Cloudinary                         --> secure_url
-Browser --(url + metadata)-------> Node.js backend (Render)           --> MongoDB
+The service is designed for the PythonAnywhere deployment used by Sync.
 
-[Signup OTP Email Relay]
-Browser --(signup form)----------> POST /api/auth/register/send-otp (Render Node.js)
-Node.js --(X-Relay-Key header)---> POST /mail/send (PythonAnywhere)   --> Gmail SMTP (465/587) --> User Inbox
-Browser --(6-digit OTP)----------> POST /api/auth/register/verify-otp --> Account Created + JWT Issued
-```
+## Architecture
 
-## Endpoints
+### Media upload
 
-| Method | Path          | Auth                     | Purpose |
-| ------ | ------------- | ------------------------ | ------- |
-| GET    | `/health`     | none                     | `{status, service, version, timestamp, configured, mailConfigured}`. No secrets. |
-| POST   | `/media/sign` | `Bearer <accessToken>`   | Returns Cloudinary signed upload parameters. |
-| POST   | `/mail/send`  | `X-Relay-Key: <secret>`  | Server-to-server email relay for signup OTP codes. Rejects browser `Origin` headers. |
-| GET    | `/mail/diag`  | `X-Relay-Key` or `?key=` | Owner self-test for Gmail SMTP ports (`465`/`587`) and optional `&to=you@gmail.com` test email. |
+~~~text
+Browser -- Bearer access token --> PythonAnywhere /media/sign
+Browser <-- signed parameters ---- PythonAnywhere
+Browser -- file + signature -----> Cloudinary
+Browser -- media URL + metadata -> Node.js backend -> MongoDB
+~~~
 
-`POST /media/sign` body: `{}` or `{"purpose": "chat|voice|avatar|story|group|notice"}`. Default purpose is `chat`.
+### Signup email
 
-## Configuration (`config.py`)
+~~~text
+Browser -> Node.js /api/auth/register/send-otp
+Node.js -> PythonAnywhere /mail/send (X-Relay-Key)
+PythonAnywhere -> Gmail SMTP -> User inbox
+Browser -> Node.js /api/auth/register/verify-otp
+~~~
 
-Copy `config.example.py` to `config.py` and fill in your values (never commit `config.py`):
+## API endpoints
 
-- **Media Signing**:
-  - `JWT_SECRET` — Must match `JWT_SECRET` on Render exactly.
-  - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
-  - `ALLOWED_ORIGINS` — e.g. `"https://sync-5lfm.onrender.com"`
-- **Signup OTP Mail Relay**:
-  - `GMAIL_USER` — Your Gmail address (e.g. `"sync93346@gmail.com"`)
-  - `GMAIL_APP_PASSWORD` — 16-character Google App Password (from Google Account → Security → 2-Step Verification → App passwords)
-  - `MAIL_RELAY_SECRET` — Random secret string (24+ characters); must match `MAIL_RELAY_SECRET` on Render exactly.
+| Method | Path | Authentication | Purpose |
+| --- | --- | --- | --- |
+| GET | /health | None | Returns service/version status and non-secret configuration indicators. |
+| POST | /media/sign | Authorization: Bearer <accessToken> | Returns signed Cloudinary upload parameters. |
+| POST | /mail/send | X-Relay-Key: <secret> | Sends a signup OTP email on behalf of the Node backend. Requests with a browser Origin header are rejected. |
+| GET | /mail/diag | X-Relay-Key or supported key query parameter | Owner diagnostic for SMTP connectivity; can optionally send a test message. |
 
-## Self-Check & Diagnostics
+### Media-signing request
 
-```bash
+The request body may be empty or include one of the supported upload purposes:
+
+~~~json
+{
+  "purpose": "chat"
+}
+~~~
+
+Supported values: chat, voice, avatar, story, group, and notice. If omitted, the service uses chat.
+
+The signing response includes the Cloudinary cloud name, API key, timestamp, folder, signature, and purpose. It must never expose CLOUDINARY_API_SECRET or JWT_SECRET.
+
+## Configuration
+
+The service loads configuration from environment variables first, then from a local config.py file in this directory. Environment variables take precedence.
+
+Create the local configuration from the safe template:
+
+~~~bash
+cp config.example.py config.py
+~~~
+
+Populate the required settings:
+
+### Media signing
+
+- JWT_SECRET — Must exactly match the Node backend's JWT_SECRET.
+- CLOUDINARY_CLOUD_NAME
+- CLOUDINARY_API_KEY
+- CLOUDINARY_API_SECRET — Private; keep it only in the Python service environment/configuration.
+- ALLOWED_ORIGINS — Comma-separated list of approved browser origins. Do not use *.
+
+### Signup OTP mail relay
+
+- GMAIL_USER — Dedicated Gmail sender address.
+- GMAIL_APP_PASSWORD — Google App Password, not the normal Gmail password.
+- MAIL_RELAY_SECRET — Random secret of at least 24 characters. It must match the Node backend's value exactly.
+
+Optional settings, including SMTP mode and rate limits, are documented in config.example.py.
+
+> [!WARNING]
+> Never commit config.py, real credentials, App Passwords, or relay secrets. The real configuration file is excluded by .gitignore. Do not place private values in frontend code or VITE_* variables.
+
+## Local development
+
+Requirements: Python 3.10 or later and pip.
+
+From the repository root:
+
+~~~bash
+cd python-service
+python -m venv .venv
+~~~
+
+Activate the virtual environment:
+
+~~~bash
+# Windows
+.venv\Scripts\activate
+
+# macOS / Linux
+source .venv/bin/activate
+~~~
+
+Install dependencies:
+
+~~~bash
+pip install -r requirements.txt
+~~~
+
+Create and populate config.py, then start the Flask development process:
+
+~~~bash
+python app.py
+~~~
+
+The local service listens on http://127.0.0.1:5001 by default. Configure the Node backend's PYTHON_SERVICE_URL and add the local frontend origin to ALLOWED_ORIGINS when testing browser uploads.
+
+## Self-check and diagnostics
+
+Run the configuration/dependency check:
+
+~~~bash
 python verify_install.py
-```
+~~~
 
-After reloading your PythonAnywhere Web App, verify in your browser:
-- `https://<YOUR_USERNAME>.pythonanywhere.com/health` → `"configured": true, "mailConfigured": true`
-- `https://<YOUR_USERNAME>.pythonanywhere.com/mail/diag?key=<MAIL_RELAY_SECRET>&to=<YOUR_EMAIL>` → sends a test email and reports port `465`/`587` status.
+After deployment and a PythonAnywhere web-app reload, verify:
+
+~~~text
+https://<YOUR_PYTHONANYWHERE_USERNAME>.pythonanywhere.com/health
+~~~
+
+Use the owner-only /mail/diag endpoint to investigate SMTP connectivity. Protect the relay key as a password; avoid posting diagnostic URLs containing the key in public logs, screenshots, or issue reports.
+
+## Deployment and API documentation
+
+- [PythonAnywhere deployment guide](../docs/PYTHONANYWHERE_DEPLOYMENT_GUIDE.md)
+- [Signup OTP and mail relay setup](../docs/OTP_AND_MAIL_RELAY_SETUP_GUIDE.md)
+- [Sync API reference](../docs/API.md)
