@@ -1,83 +1,147 @@
-# 📡 Sync API চুক্তি
+# Sync API Reference
 
-Node সার্ভার **একই Render service** থেকে API, Socket.io আর `frontend/` ফোল্ডার serve করে।
-তাই frontend-এ কোনো আলাদা `NODE_URL` লাগে না, সব রিকোয়েস্ট একই origin-এ:
+This document describes the HTTP interfaces exposed by the Sync Node.js application and its PythonAnywhere service. The Node service serves the frontend, REST API, and Socket.IO from the same origin, so production clients do not need a separate Node API URL.
 
-```js
-fetch("/api/conversations", { headers: { Authorization: `Bearer ${token}` } });
-const socket = io({ auth: { token } }); // <script src="/socket.io/socket.io.js"></script>
-```
+~~~js
+fetch("/api/conversations", {
+  headers: { Authorization: "Bearer " + accessToken },
+});
+const socket = io({ auth: { token: accessToken } });
+~~~
 
-## সাধারণ নিয়ম
+## API conventions
 
-**সফল উত্তর:** `{ "statusCode": 200, "data": ..., "message": "success", "success": true }`
-**ভুল উত্তর:** `{ "success": false, "statusCode": 4xx, "message": "...", "errors": [] }`
+### Response format
 
-**Auth:** `Authorization: Bearer <accessToken>` (অথবা `accessToken` cookie, লগইনের পর নিজে সেট হয়)।
-Access token ছোট মেয়াদের (`JWT_EXPIRES_IN`, যেমন ১৫ মিনিট)। মেয়াদ শেষে `401` এলে `POST /api/auth/refresh` ডেকে নতুন token নিয়ে আবার চেষ্টা করো।
-**Socket reconnect-এর আগে অবশ্যই নতুন access token নিও।**
+Successful responses use this envelope:
 
-Rate limit: সব `/api`-তে মিনিটে ৩০০টা; register/login-এ ১৫ মিনিটে ২০টা ব্যর্থ চেষ্টা; OTP পাঠাতে ১৫ মিনিটে ১০টা এবং যাচাইয়ে ১৫ মিনিটে ৩০টা ব্যর্থ চেষ্টা। সীমা পার হলে `429`।
+~~~json
+{
+  "statusCode": 200,
+  "data": {},
+  "message": "success",
+  "success": true
+}
+~~~
 
-Cloudinary-র ছবি/ভিডিও/ভয়েসের URL অবশ্যই `https://res.cloudinary.com/<CLOUD_NAME>/...` হতে হবে (avatar, group icon, story, media মেসেজ সবখানে)।
+Error responses use this envelope:
+
+~~~json
+{
+  "success": false,
+  "statusCode": 400,
+  "message": "A human-readable error message",
+  "errors": []
+}
+~~~
+
+### Authentication
+
+Send the short-lived access token in the Authorization header using the Bearer scheme. The authentication flow may also maintain an access-token cookie. When an access token expires, call POST /api/auth/refresh and retry the original request with the new access token. Obtain a fresh access token before reconnecting a Socket.IO client.
+
+### Rate limits
+
+The current application limits include:
+
+- General /api traffic: 300 requests per minute.
+- Failed registration/login attempts: 20 per 15 minutes.
+- OTP send requests: 10 per 15 minutes.
+- Failed OTP verification attempts: 30 per 15 minutes.
+
+A request that exceeds its applicable limit receives HTTP 429 Too Many Requests. These values are implementation settings and may change.
+
+### Media URLs
+
+Media URLs accepted by the Node API must belong to the configured Cloudinary account and use the secure Cloudinary delivery host:
+
+~~~text
+https://res.cloudinary.com/<CLOUD_NAME>/...
+~~~
+
+This validation applies to avatars, group icons, stories, and message attachments.
 
 ---
 
-## 🟦 REST
+## Node.js REST API
 
 ### Health
 
-| Method | Path      | কাজ                                              |
-| ------ | --------- | ------------------------------------------------ |
-| GET    | `/health` | জীবিত কিনা (`dbConnected`, `pythonServiceUrl`, `cloudinaryCloudName`, `mailRelayConfigured`) |
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | /health | Reports service health and integration status, including database connectivity, the configured Python service URL, Cloudinary cloud name, and mail-relay configuration. |
 
-### Auth — `/api/auth`
+### Authentication — /api/auth
 
-| Method | Path                   | Auth | Body / কাজ                                                                                         |
-| ------ | ---------------------- | ---- | -------------------------------------------------------------------------------------------------- |
-| POST   | `/register/send-otp`   | —    | `{ username, fullName, email, phoneNumber, password, avatar? }` → ইমেইলে ৬-সংখ্যার OTP পাঠায় এবং `{ email, expiresInSeconds, resendAfterSeconds }` ফেরত দেয় (200) |
-| POST   | `/register/resend-otp` | —    | `{ email }` → কুলডাউন শেষে নতুন ৬-সংখ্যার OTP পাঠায় এবং `{ email, expiresInSeconds, resendAfterSeconds }` ফেরত দেয় (200) |
-| POST   | `/register/verify-otp` | —    | `{ email, otp }` → OTP সঠিক হলে আসল অ্যাকাউন্ট তৈরি করে `{ user, accessToken, refreshToken }` ফেরত দেয় (201) |
-| POST   | `/register`            | —    | `/register/send-otp`-এরই alias (OTP ছাড়া সরাসরি অ্যাকাউন্ট তৈরি হয় না)                          |
-| POST   | `/login`               | —    | `{ identifier, password }` (identifier = username / email / ফোন) → `{ user, accessToken, refreshToken }` |
-| POST   | `/refresh`             | —    | cookie অথবা `{ refreshToken }` → `{ accessToken }`                                                  |
-| POST   | `/logout`              | —    | cookie অথবা `{ refreshToken }` পাঠালে ওই ডিভাইসের session শেষ হয়                                   |
-| GET    | `/me`                  | ✅   | নিজের প্রোফাইল                                                                                      |
+| Method | Path | Authentication | Request body / behavior |
+| --- | --- | --- | --- |
+| POST | /register/send-otp | Public | { username, fullName, email, phoneNumber, password, avatar? }. Validates registration details, creates a pending signup, and sends a six-digit email verification code. |
+| POST | /register/resend-otp | Public | { email }. Sends a replacement code when the resend cooldown permits it. |
+| POST | /register/verify-otp | Public | { email, otp }. Verifies the code, creates the account, and returns the user and authentication tokens. |
+| POST | /register | Public | Compatibility alias for /register/send-otp; it does not bypass email verification. |
+| POST | /login | Public | { identifier, password }, where identifier can be a username, email address, or phone number. |
+| POST | /refresh | Refresh session | Accepts the refresh cookie or { refreshToken } and returns a new access token. |
+| POST | /logout | Refresh session | Accepts the refresh cookie or { refreshToken } and terminates the current device session. |
+| GET | /me | Required | Returns the authenticated user's profile. |
 
-একসাথে সর্বোচ্চ ৫টা ডিভাইসে লগইন থাকে। ভুল পাসওয়ার্ড/ইউজার দুটোতেই একই `401 Invalid credentials`।
+A user can have up to five active device sessions. Invalid usernames and incorrect passwords return the same 401 Invalid credentials response.
 
-### Users — `/api/users` (সব ✅)
+### Users — /api/users
 
-| Method | Path                | কাজ                                                                                          |
-| ------ | ------------------- | -------------------------------------------------------------------------------------------- |
-| GET    | `/?search=`         | কমপক্ষে ২ অক্ষর। username/নামে খোঁজে; শুধু সংখ্যা দিলে ফোন নম্বর হুবহু মিললে পাওয়া যায়। সর্বোচ্চ ২০ |
-| GET    | `/:id`              | অন্যের পাবলিক প্রোফাইল (`online`, `blockedByMe` সহ)                                          |
-| PATCH  | `/me`               | `{ fullName?, about?, avatar? }` (`avatar: ""` দিলে ছবি মুছে যায়)                           |
-| GET    | `/blocked`          | আমার block লিস্ট                                                                              |
-| POST   | `/:id/block`        | block করা                                                                                     |
-| DELETE | `/:id/block`        | unblock                                                                                       |
+All routes in this section require authentication.
 
-### Conversations — `/api/conversations` (সব ✅)
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | /?search=<query> | Searches usernames and display names. The query must contain at least two characters. Numeric queries can match a phone number exactly. Results are limited to 20 users. |
+| GET | /:id | Returns another user's public profile, including relevant online and block-status information. |
+| PATCH | /me | Updates { fullName?, about?, avatar? }. Set avatar to an empty string to remove the current avatar. |
+| GET | /blocked | Returns the authenticated user's block list. |
+| POST | /:id/block | Blocks the specified user. |
+| DELETE | /:id/block | Unblocks the specified user. |
 
-| Method | Path                         | কাজ                                                                                              |
-| ------ | ---------------------------- | ------------------------------------------------------------------------------------------------ |
-| GET    | `/`                          | আমার চ্যাট লিস্ট (নতুন আগে)। প্রতিটায় নিজের `unread` সংখ্যা, direct-এ `partner`                |
-| POST   | `/`                          | `{ partnerId }` — direct চ্যাট শুরু; আগে থাকলে সেটাই ফেরত (201 নতুন, 200 পুরনো)                   |
-| POST   | `/group`                     | `{ groupName, groupDescription?, groupIcon?, memberIds: [] }` → গ্রুপ (বানানেওয়ালা admin)         |
-| GET    | `/:id`                       | একটা চ্যাটের বিবরণ                                                                               |
-| PATCH  | `/:id`                       | শুধু group admin: `{ groupName?, groupDescription?, groupIcon?, onlyAdminCanMessage? }`          |
-| PATCH  | `/:id/members`               | শুধু group admin: `{ action: "add"｜"remove"｜"make_admin"｜"remove_admin", targetUserId }`        |
-| POST   | `/:id/leave`                 | গ্রুপ ছাড়া। শেষ admin ছাড়লে সবচেয়ে পুরনো সদস্য admin হয়; শেষ সদস্য ছাড়লে গ্রুপ মুছে যায়       |
-| POST   | `/:id/read`                  | `{ upToMessageId? }` — পড়া হয়েছে (socket-এর `message:seen`-এর REST বিকল্প)                       |
-| GET    | `/:id/messages?before=&limit=` | ইতিহাস। `limit` ডিফল্ট ৩০ (সর্বোচ্চ ১০০)। উত্তর পুরনো → নতুন ক্রমে: `{ messages, hasMore, nextBefore }`। আরও পুরনো চাইলে `before=nextBefore` |
+### Conversations — /api/conversations
+
+All routes in this section require authentication.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | / | Returns the user's conversations, newest first, including unread counts and the direct-chat partner where applicable. |
+| POST | / | Accepts { partnerId } and creates or returns the existing direct conversation. |
+| POST | /group | Accepts { groupName, groupDescription?, groupIcon?, memberIds: [] } and creates a group. The creator becomes a group admin. |
+| GET | /:id | Returns the details of a conversation. |
+| PATCH | /:id | Group-admin only. Updates { groupName?, groupDescription?, groupIcon?, onlyAdminCanMessage? }. |
+| PATCH | /:id/members | Group-admin only. Accepts { action, targetUserId }; supported actions are add, remove, make_admin, and remove_admin. |
+| POST | /:id/leave | Leaves a group. If the last admin leaves, the oldest remaining member becomes an admin. The group is removed when its final member leaves. |
+| POST | /:id/read | Accepts { upToMessageId? } and marks messages as read. This is the REST alternative to the Socket.IO message:seen event. |
+| GET | /:id/messages?before=<cursor>&limit=<n> | Returns paginated message history. The default page size is 30 and the maximum is 100. Results are ordered oldest to newest and include messages, hasMore, and nextBefore. Use nextBefore to request the preceding page. |
 
 ---
 
-## 🟨 Python (PythonAnywhere)
+## Python service — PythonAnywhere
 
-| Method | Path          | Auth                     | কাজ                                      |
-| ------ | ------------- | ------------------------ | ---------------------------------------- |
-| GET    | `/health`     | —                        | জীবিত কিনা (`configured`, `mailConfigured`) |
-| POST   | `/media/sign` | `Bearer JWT`             | Cloudinary signed-upload signature       |
-| POST   | `/mail/send`  | `X-Relay-Key`            | Node ব্যাকএন্ডের হয়ে Gmail SMTP দিয়ে OTP ইমেইল পাঠানো |
-| GET    | `/mail/diag`  | `X-Relay-Key` বা `?key=` | মেইল রিলে ও SMTP পোর্ট (465/587) পরীক্ষা |
+| Method | Path | Authentication | Description |
+| --- | --- | --- | --- |
+| GET | /health | None | Returns service status and configuration indicators without exposing secrets. |
+| POST | /media/sign | Authorization: Bearer <accessToken> | Validates a Node-issued access token and returns signed Cloudinary upload parameters. |
+| POST | /mail/send | X-Relay-Key: <secret> | Accepts server-to-server signup OTP mail requests from the Node backend. Browser-origin requests are rejected. |
+| GET | /mail/diag | X-Relay-Key or supported key query parameter | Owner diagnostic endpoint for checking Gmail SMTP connectivity and optionally sending a test email. |
+
+### Media-signing request
+
+The request body may be empty or specify an upload purpose:
+
+~~~json
+{
+  "purpose": "chat"
+}
+~~~
+
+Supported purposes are chat, voice, avatar, story, group, and notice. The default purpose is chat.
+
+The response contains the Cloudinary cloud name, API key, timestamp, target folder, signature, and purpose. It must never contain the Cloudinary API secret or the JWT signing secret.
+
+### Related documentation
+
+- [Python service setup and diagnostics](../python-service/README.md)
+- [PythonAnywhere deployment guide](PYTHONANYWHERE_DEPLOYMENT_GUIDE.md)
+- [Signup OTP and mail-relay setup](OTP_AND_MAIL_RELAY_SETUP_GUIDE.md)
+- [Contact page configuration](CONTACT_PAGE_SETUP.md)
