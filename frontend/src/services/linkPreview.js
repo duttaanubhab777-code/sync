@@ -54,7 +54,7 @@ export const fetchLinkPreview = url => {
     const promise = new Promise(resolve => {
         queue.push(async () => {
             try {
-                const res = await api.get("/api/link-preview", {
+                const res = await api.get("/api/v1/link-preview", {
                     params: { url },
                     timeout: 12000
                 });
