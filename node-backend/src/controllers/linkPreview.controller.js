@@ -3,7 +3,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { getLinkPreview, normalizeUrl } from "../utils/linkPreview.js";
 
-// GET /api/link-preview?url=https://...
+// GET /api/v1/link-preview?url=https://...
 // preview পাওয়া না গেলে data: null (frontend তখন সাধারণ লিংক কার্ড দেখায়)
 export const getLinkPreviewHandler = asyncHandler(async (req, res) => {
     const raw = typeof req.query.url === "string" ? req.query.url : "";
