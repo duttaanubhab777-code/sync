@@ -55,9 +55,9 @@ const readRefreshToken = req =>
     req.cookies?.refreshToken || req.body?.refreshToken || null;
 
 // ---------- OTP দিয়ে register ----------
-// ধাপ ১: POST /api/auth/register/send-otp   (তথ্য যাচাই -> pending সংরক্ষণ -> ইমেইলে ৬ অঙ্কের কোড)
-// ধাপ ২: POST /api/auth/register/verify-otp (সঠিক কোড দিলে আসল অ্যাকাউন্ট তৈরি + লগইন)
-// কোড না এলে: POST /api/auth/register/resend-otp
+// ধাপ ১: POST /api/v1/auth/register/send-otp   (তথ্য যাচাই -> pending সংরক্ষণ -> ইমেইলে ৬ অঙ্কের কোড)
+// ধাপ ২: POST /api/v1/auth/register/verify-otp (সঠিক কোড দিলে আসল অ্যাকাউন্ট তৈরি + লগইন)
+// কোড না এলে: POST /api/v1/auth/register/resend-otp
 
 const secondsLeft = ms => Math.max(1, Math.ceil(ms / 1000));
 
@@ -181,7 +181,7 @@ const otpSentResponse = (res, pending) =>
         )
     );
 
-// POST /api/auth/register/send-otp   (পুরনো POST /api/auth/register-ও এখানেই আসে, OTP ছাড়া account বানানোর রাস্তা নেই)
+// POST /api/v1/auth/register/send-otp   (পুরনো POST /api/v1/auth/register-ও এখানেই আসে, OTP ছাড়া account বানানোর রাস্তা নেই)
 export const register = asyncHandler(async (req, res) => {
     const { username, fullName, email, phoneNumber, password, avatar } =
         req.body;
@@ -209,7 +209,7 @@ export const register = asyncHandler(async (req, res) => {
 });
 
 // ---------- username যাচাই ----------
-// GET /api/auth/username-available?username=jarvis_01
+// GET /api/v1/auth/username-available?username=jarvis_01
 // -> { available, username, suggestion }  (নেওয়া থাকলে suggestion হিসেবে ফাঁকা একটা username দেওয়া হয়)
 const USERNAME_RE = /^[a-z][a-z0-9_]{2,19}$/;
 
@@ -285,7 +285,7 @@ export const checkUsername = asyncHandler(async (req, res) => {
     );
 });
 
-// POST /api/auth/register/resend-otp   body: { email }
+// POST /api/v1/auth/register/resend-otp   body: { email }
 export const resendOtp = asyncHandler(async (req, res) => {
     const { email } = req.body;
 
@@ -322,7 +322,7 @@ export const resendOtp = asyncHandler(async (req, res) => {
     otpSentResponse(res, pending);
 });
 
-// POST /api/auth/register/verify-otp   body: { email, otp }
+// POST /api/v1/auth/register/verify-otp   body: { email, otp }
 export const verifyOtp = asyncHandler(async (req, res) => {
     const { email, otp } = req.body;
     const now = new Date();
@@ -418,7 +418,7 @@ export const verifyOtp = asyncHandler(async (req, res) => {
     );
 });
 
-// POST /api/auth/login   body: { identifier: username | email | phone, password }
+// POST /api/v1/auth/login   body: { identifier: username | email | phone, password }
 export const login = asyncHandler(async (req, res) => {
     const { identifier, password } = req.body;
 
@@ -461,7 +461,7 @@ export const login = asyncHandler(async (req, res) => {
     );
 });
 
-// POST /api/auth/refresh   (cookie অথবা body.refreshToken) -> নতুন access token
+// POST /api/v1/auth/refresh   (cookie অথবা body.refreshToken) -> নতুন access token
 export const refresh = asyncHandler(async (req, res) => {
     const token = readRefreshToken(req);
     if (!token) throw new ApiError(401, "Refresh token is missing");
@@ -495,7 +495,7 @@ export const refresh = asyncHandler(async (req, res) => {
     );
 });
 
-// POST /api/auth/logout
+// POST /api/v1/auth/logout
 // access token মেয়াদ শেষ হয়ে গেলেও লগআউট যেন কাজ করে, তাই verifyJWT লাগে না
 export const logout = asyncHandler(async (req, res) => {
     const token = readRefreshToken(req);
@@ -514,7 +514,7 @@ export const logout = asyncHandler(async (req, res) => {
     res.status(200).json(new ApiResponse(200, null, "Logged out"));
 });
 
-// GET /api/auth/me
+// GET /api/v1/auth/me
 export const getMe = asyncHandler(async (req, res) => {
     res.status(200).json(new ApiResponse(200, publicUser(req.user)));
 });
