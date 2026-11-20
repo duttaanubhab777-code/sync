@@ -21,10 +21,10 @@ Browser -- media URL + metadata -> Node.js backend -> MongoDB
 ### Signup email
 
 ~~~text
-Browser -> Node.js /api/auth/register/send-otp
+Browser -> Node.js /api/v1/auth/register/send-otp
 Node.js -> PythonAnywhere /mail/send (X-Relay-Key)
 PythonAnywhere -> Gmail SMTP -> User inbox
-Browser -> Node.js /api/auth/register/verify-otp
+Browser -> Node.js /api/v1/auth/register/verify-otp
 ~~~
 
 ## API endpoints
