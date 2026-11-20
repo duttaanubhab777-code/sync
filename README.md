@@ -50,7 +50,7 @@
 
 The Node service serves both the API and the production-built frontend. The Python service is intentionally separate: it signs short-lived media upload parameters and relays OTP emails through Gmail SMTP. Files are uploaded by the browser directly to Cloudinary; neither application server handles the media file bytes.
 
-The interface is responsive and installable as a Progressive Web App. The repository also contains an Android APK release workflow and an in-app release/update experience.
+The interface is responsive and installable as a Progressive Web App. The repository also contains a Capacitor-based Android application, an automated APK release workflow, native push-notification enhancements, and an in-app release/update experience. The Android shell loads the live web application, so most frontend and backend updates do not require a new APK.
 
 > [!NOTE]
 > The public web demo uses free hosting tiers. A service may need a short wake-up period after inactivity, and availability depends on the hosting provider.
@@ -95,6 +95,8 @@ The interface is responsive and installable as a Progressive Web App. The reposi
 - Short-lived access tokens and rotating, per-device refresh sessions
 - Secure password hashing, logout and session refresh
 - Profile details, avatar and personal status/about text
+- Optional profile photo upload during signup, with image preview before account completion
+- Automatically suggested usernames based on the email address, live availability checks, and alternative suggestions for taken names
 - Block and unblock other users
 
 ### Direct & group messaging
@@ -102,6 +104,11 @@ The interface is responsive and installable as a Progressive Web App. The reposi
 - One-to-one conversations and multi-member group chats
 - Real-time message delivery with Socket.IO
 - Text, image, video, audio/voice and general file attachments
+- A dedicated attachment sheet with Gallery, Camera, Video, Document and Audio pickers
+- Share the current location with an OpenStreetMap preview and links to Google Maps or OpenStreetMap
+- Share contact cards through the browser Contact Picker where supported, with a manual-entry fallback; recipients can copy or call shared numbers
+- Document cards preserve filenames, show file types and sizes, and provide direct downloads
+- Select and send multiple files sequentially, with per-file upload progress, speed/ETA feedback and independent failure handling
 - Browser voice recording with pause/resume, waveform feedback and playback
 - Swipe-to-reply and quoted message context
 - Sent, delivered and seen states, including group delivery/read information
@@ -132,6 +139,9 @@ The interface is responsive and installable as a Progressive Web App. The reposi
 - Android native push notifications using Firebase Cloud Messaging (FCM HTTP v1)
 - Device subscriptions stored per user; expired endpoints/tokens are cleaned up
 - Notification permission/enable flow in the client
+- Rich Android notifications with sender avatars, grouped message stacks, group-sender context, image previews and deep links to the relevant conversation
+- Dedicated Sync notification tones for messages and notices on supported Android devices
+- Unread-count badges on supported Android launchers and PWAs, with a browser-tab title count fallback; badges clear when messages are read or the user signs out
 - Real-time updates for messages, stories, notices and account-role changes
 
 ### Admin workspace
@@ -152,8 +162,11 @@ The interface is responsive and installable as a Progressive Web App. The reposi
 - Contact form integration with the separate Email Sender service
 - Android release lookup from GitHub Releases, latest APK download and release history
 - In-app update popup and dedicated Updates page
-- Responsive layouts for mobile, tablet and desktop
-- PWA manifest, service worker, app icons and install support
+- Responsive layouts for mobile, tablet and desktop, including a mobile-friendly floating chat action button
+- PWA manifest, service worker, app icons, install support and unread app-badge integration
+- A native Android app built with Capacitor that loads the live Sync web application
+- Branded animated splash screens and an offline/retry experience for unavailable networks or a sleeping web service
+- Android notification channels with custom Sync sounds, native badge support and notification-to-chat navigation
 - Sound feedback, animated interface elements and consistent Sync branding
 
 <a id="contact"></a>
@@ -191,7 +204,9 @@ The public Contact page allows visitors to submit a name, email address, subject
 | Cloudinary | Cloudinary | Uploaded chat media, voice notes, avatars, stories, group icons and notice banners |
 | Firebase Cloud Messaging | Firebase | Native Android push delivery |
 | Web Push (VAPID) | Browser push services | Browser and installed-PWA notifications |
-| GitHub Releases | GitHub | Android APK release metadata and downloads |
+| Capacitor Android shell | Android app | Native app container, geolocation integration, push notification handling, launcher badges and app lifecycle integration |
+| GitHub Actions | GitHub Actions | Automated Android APK builds and GitHub Release publishing |
+| GitHub Releases | GitHub | Android APK release metadata, changelogs and downloads |
 
 ### Media upload flow
 
@@ -222,7 +237,8 @@ The Python service does **not** receive or proxy the uploaded file.
 | Database | MongoDB Atlas |
 | Media storage | Cloudinary |
 | Browser notifications | Web Push / VAPID |
-| Android notifications | Firebase Cloud Messaging HTTP v1 |
+| Android notifications | Firebase Cloud Messaging HTTP v1, Capacitor Push Notifications and native Android notification channels |
+| Android runtime | Capacitor 7, Android native Java integration and Geolocation plugin |
 | Hosting | Render, PythonAnywhere |
 | Android distribution | GitHub Releases |
 
@@ -248,9 +264,10 @@ sync/
 ├── frontend/
 │   └── src/
 │       ├── components/           # Layout, dialogs, media players, notifications
-│       ├── hooks/
+│       │   └── chat/             # Attachment sheet, location, contact and document cards
+│       ├── hooks/                # App badge, sign-out and shared UI hooks
 │       ├── pages/                # Auth, chats, stories, profile, admin, contact, updates
-│       ├── services/             # API, Socket.IO, media, previews, sounds, contact mail
+│       ├── services/             # API, Socket.IO, media, previews, sounds, app badges, contact mail
 │       ├── store/                # Redux Toolkit slices
 │       ├── styles/
 │       └── utils/
@@ -273,6 +290,11 @@ sync/
 │   ├── app.py
 │   ├── config.example.py
 │   └── requirements.txt
+├── mobile/                       # Capacitor Android wrapper and native build scripts
+│   ├── assets/sounds/            # Custom Android notification tones
+│   ├── scripts/                  # Android permissions, icons, badges and notification setup
+│   ├── www/                      # Local fallback and offline screens
+│   └── capacitor.config.json
 ├── package.json                  # Root monorepo scripts
 ├── render.yaml                   # Render Blueprint
 └── README.md
