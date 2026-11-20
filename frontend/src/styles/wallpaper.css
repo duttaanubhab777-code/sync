@@ -23,13 +23,7 @@
 /* আগে থেকে ডিভাইসে থাকা ছবি: কোনো fade নেই, প্রথম ফ্রেমেই */
 .sync-wallpaper-layer.is-instant { transition: none; }
 
-/* লেখা যাতে যেকোনো ছবিতে পড়া যায়: হালকা গাঢ় আবরণ */
-.sync-wallpaper-layer::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(180deg, rgba(2, 15, 12, 0.38), rgba(2, 15, 12, 0.5));
-}
+/* ছবির আসল উজ্জ্বলতা অক্ষুণ্ণ: কোনো dim/গাঢ় আবরণ নেই */
 
 /* ---------- preview (ছোট ফোনের মতো) ---------- */
 .sync-wp-preview {
@@ -46,12 +40,6 @@
 .sync-wp-preview-img,
 .sync-wp-preview-plain { position: absolute; inset: 0; }
 .sync-wp-preview-img { background-size: cover; background-position: center; }
-.sync-wp-preview-img::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(180deg, rgba(2, 15, 12, 0.38), rgba(2, 15, 12, 0.5));
-}
 .sync-wp-preview-plain {
     background:
         radial-gradient(160px 130px at 88% 0%, rgba(182, 243, 77, 0.1), transparent 70%),
