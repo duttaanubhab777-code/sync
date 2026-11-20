@@ -121,9 +121,9 @@ All routes in this section require authentication.
 | Method | Path | Authentication | Description |
 | --- | --- | --- | --- |
 | GET | /health | None | Returns service status and configuration indicators without exposing secrets. |
-| POST | /media/sign | Authorization: Bearer <accessToken> | Validates a Node-issued access token and returns signed Cloudinary upload parameters. |
-| POST | /mail/send | X-Relay-Key: <secret> | Accepts server-to-server signup OTP mail requests from the Node backend. Browser-origin requests are rejected. |
-| GET | /mail/diag | X-Relay-Key or supported key query parameter | Owner diagnostic endpoint for checking Gmail SMTP connectivity and optionally sending a test email. |
+| POST | /api/v1/media/sign | Authorization: Bearer <accessToken> | Validates a Node-issued access token and returns signed Cloudinary upload parameters. |
+| POST | /api/v1/mail/send | X-Relay-Key: <secret> | Accepts server-to-server signup OTP mail requests from the Node backend. Browser-origin requests are rejected. |
+| GET | /api/v1/mail/diag | X-Relay-Key or supported key query parameter | Owner diagnostic endpoint for checking Gmail SMTP connectivity and optionally sending a test email. |
 
 ### Media-signing request
 

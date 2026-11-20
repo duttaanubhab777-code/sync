@@ -1,4 +1,4 @@
-"""POST /media/sign - hand out a Cloudinary signed-upload signature to logged-in users."""
+"""POST /api/v1/media/sign - hand out a Cloudinary signed-upload signature to logged-in users."""
 from __future__ import annotations
 
 import logging

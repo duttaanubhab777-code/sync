@@ -210,7 +210,7 @@ The public Contact page allows visitors to submit a name, email address, subject
 
 ### Media upload flow
 
-1. The authenticated browser requests a signature from the Flask service at `/media/sign`.
+1. The authenticated browser requests a signature from the Flask service at `/api/v1/media/sign`.
 2. Flask verifies the Node-issued access token and validates the requested upload purpose.
 3. Flask signs the Cloudinary upload parameters locally and returns the short-lived signature.
 4. The browser uploads the file directly to Cloudinary and reports upload progress.
@@ -446,7 +446,7 @@ The repository includes [`render.yaml`](render.yaml).
 - Keep the service Root Directory at the repository root.
 - The Blueprint installs frontend dependencies, builds `frontend/dist`, installs backend dependencies and starts the Node server.
 - Configure the required secrets in the Render Environment tab.
-- The health-check endpoint is `/health`.
+- The Python service health-check endpoint is `/api/v1/health`.
 - The service serves the compiled React app and API from the same origin.
 - `python-service/**` is excluded from the Node service's auto-deploy build filter; deploy the Python service separately.
 
@@ -479,7 +479,7 @@ The Node API is mounted under `/api`. Most application endpoints require a valid
 | Link previews | `/api/v1/link-preview` | Fetch metadata for a URL |
 | App updates | `/api/v1/app/updates` | Public Android release/update metadata |
 | Offline sync | `/api/v1/sync` | Recover messages and message updates missed while disconnected |
-| Health | `/health` | Service health and non-secret runtime configuration status |
+| Python service health | `/api/v1/health` | Service health and non-secret runtime configuration status |
 
 ### Real-time events
 

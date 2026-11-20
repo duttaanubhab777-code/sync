@@ -1,4 +1,4 @@
-"""GET /health - public liveness check. Never returns secrets."""
+"""GET /api/v1/health - public liveness check. Never returns secrets."""
 from __future__ import annotations
 
 from datetime import datetime, timezone

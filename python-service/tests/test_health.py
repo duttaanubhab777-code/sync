@@ -15,7 +15,7 @@ from settings import SERVICE_NAME, SERVICE_VERSION, load_settings
 
 class HealthEndpointTests(unittest.TestCase):
     def test_health_works_without_authentication(self):
-        res = make_client().get("/health")
+        res = make_client().get("/api/v1/health")
         self.assertEqual(res.status_code, 200)
         body = res.get_json()
         self.assertEqual(body["status"], "ok")
@@ -25,14 +25,14 @@ class HealthEndpointTests(unittest.TestCase):
         self.assertTrue(body["configured"])
 
     def test_health_does_not_leak_secrets_or_config(self):
-        text = make_client().get("/health").get_data(as_text=True)
+        text = make_client().get("/api/v1/health").get_data(as_text=True)
         for secret in (TEST_JWT_SECRET, TEST_API_SECRET, "123456789012345", "demo-cloud"):
             self.assertNotIn(secret, text)
 
     def test_health_still_works_when_unconfigured_and_says_so(self):
         settings = load_settings(environ={}, config_file=NO_CONFIG_FILE)
         client = create_app(settings).test_client()
-        res = client.get("/health")
+        res = client.get("/api/v1/health")
         self.assertEqual(res.status_code, 200)
         self.assertFalse(res.get_json()["configured"])
 
@@ -41,7 +41,7 @@ class HealthEndpointTests(unittest.TestCase):
         res = client.get("/nope")
         self.assertEqual(res.status_code, 404)
         self.assertFalse(res.get_json()["success"])
-        res = client.post("/health")
+        res = client.post("/api/v1/health")
         self.assertEqual(res.status_code, 405)
         self.assertFalse(res.get_json()["success"])
 

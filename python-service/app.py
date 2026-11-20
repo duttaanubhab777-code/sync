@@ -69,9 +69,9 @@ def create_app(settings: Optional[Settings] = None) -> Flask:
     if settings.is_configured:
         logger.info("Sync Media Service ready (allowed origins: %s)", ", ".join(settings.allowed_origins) or "none")
 
-    app.register_blueprint(health_bp)
-    app.register_blueprint(media_bp)
-    app.register_blueprint(mail_bp)
+    app.register_blueprint(health_bp, url_prefix="/api/v1")
+    app.register_blueprint(media_bp, url_prefix="/api/v1")
+    app.register_blueprint(mail_bp, url_prefix="/api/v1")
 
     # ---------- CORS (explicit allow-list, never "*") ----------
     @app.before_request
@@ -97,7 +97,7 @@ def create_app(settings: Optional[Settings] = None) -> Flask:
                 response.headers["Access-Control-Max-Age"] = CORS_MAX_AGE_SECONDS
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
-        if request.path == "/media/sign" or request.path.startswith("/mail/"):
+        if request.path == "/api/v1/media/sign" or request.path.startswith("/api/v1/mail/"):
             response.headers["Cache-Control"] = "no-store"
         return response
 

@@ -1,8 +1,8 @@
 """Mail relay for the Node backend (Render free plan cannot send email itself).
 
-POST /mail/send   header  X-Relay-Key: <MAIL_RELAY_SECRET>
+POST /api/v1/mail/send   header  X-Relay-Key: <MAIL_RELAY_SECRET>
                   body    {"to": "...", "subject": "...", "html": "...", "fromName"?, "replyTo"?}
-GET  /mail/diag   header X-Relay-Key, or ?key=<MAIL_RELAY_SECRET> so it opens in a phone browser
+GET  /api/v1/mail/diag   header X-Relay-Key, or ?key=<MAIL_RELAY_SECRET> so it opens in a phone browser
                   (+ optional &to=you@gmail.com to send a test mail)
 
 Server-to-server only: any request that carries a browser Origin header is refused.
@@ -103,7 +103,7 @@ def send():
     return success_response({"port": port}, "Mail sent")
 
 
-@mail_bp.get("/mail/diag")
+@mail_bp.get("/api/v1/mail/diag")
 def diag():
     """Owner-only self-test (phone browser can't send headers, so use curl / the Bash console)."""
     _runtime, settings, _ip, failed = _guard(allow_query_key=True)

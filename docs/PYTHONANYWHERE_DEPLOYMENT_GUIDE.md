@@ -254,7 +254,7 @@ Save the environment changes and allow Render to redeploy.
 Open:
 
 ~~~text
-https://<YOUR_PYTHONANYWHERE_USERNAME>.pythonanywhere.com/health
+https://<YOUR_PYTHONANYWHERE_USERNAME>.pythonanywhere.com/api/v1/health
 ~~~
 
 Confirm that the service reports a healthy status and that the media/mail configuration indicators are enabled. The endpoint must not expose credentials.
@@ -289,11 +289,11 @@ Do not paste real access tokens, OTPs, App Passwords, or relay secrets into publ
 
 | Symptom | Likely cause | Action |
 | --- | --- | --- |
-| Python /health returns an error page | Incorrect WSGI path, missing dependency, or web-app configuration issue. | Review the PythonAnywhere Error log and confirm the source-code and virtualenv paths. |
-| HTTP 401 from /media/sign | Missing, invalid, or expired access token; JWT secrets may not match. | Sign in again and verify that JWT_SECRET matches exactly in both services. |
+| Python /api/v1/health returns an error page | Incorrect WSGI path, missing dependency, or web-app configuration issue. | Review the PythonAnywhere Error log and confirm the source-code and virtualenv paths. |
+| HTTP 401 from /api/v1/media/sign | Missing, invalid, or expired access token; JWT secrets may not match. | Sign in again and verify that JWT_SECRET matches exactly in both services. |
 | HTTP 403 or an origin error | The browser origin is not in ALLOWED_ORIGINS. | Add the exact HTTPS origin, save config.py, and reload the PythonAnywhere app. |
 | HTTP 429 | A rate limit has been reached. | Wait before retrying and review the relevant service logs. |
-| HTTP 503 from /media/sign | Required media configuration is incomplete. | Run python verify_install.py and correct the reported settings. |
+| HTTP 503 from /api/v1/media/sign | Required media configuration is incomplete. | Run python verify_install.py and correct the reported settings. |
 | OTP email is not delivered | Gmail App Password, mail-relay secret, or Python service URL is incorrect. | Verify GMAIL_USER, GMAIL_APP_PASSWORD, MAIL_RELAY_SECRET, and PYTHON_SERVICE_URL. |
 | Cloudinary reports an invalid signature | The Cloudinary cloud name, API key, or API secret does not belong to the same account. | Recheck the values in Python config.py and reload the service. |
 | Cloudinary rejects the file | File type, file size, or account quota is outside the provider's limits. | Check the Cloudinary response and account limits. |
@@ -341,7 +341,7 @@ Do not overwrite or delete config.py when uploading an updated service package.
 - [ ] verify_install.py completes without configuration errors.
 - [ ] The WSGI file imports app as application from the correct directory.
 - [ ] The web app has been reloaded.
-- [ ] The /health endpoint reports a healthy service.
+- [ ] The /api/v1/health endpoint reports a healthy service.
 
 ### Render
 

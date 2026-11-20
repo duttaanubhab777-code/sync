@@ -37,7 +37,7 @@ class NodeTokenCompatibilityTests(unittest.TestCase):
         ).stdout.strip()
         verified = verify_access_token(token, TEST_JWT_SECRET)
         self.assertEqual(verified.user_id, USER_ID)
-        res = make_client().post("/media/sign", headers=auth(token), json={})
+        res = make_client().post("/api/v1/media/sign", headers=auth(token), json={})
         self.assertEqual(res.status_code, 200)
 
     @unittest.skipUnless(NODE, "node is not installed")
@@ -84,7 +84,7 @@ class WsgiFileTests(unittest.TestCase):
         namespace: dict = {}
         exec(compile(patched, "pythonanywhere_wsgi.py", "exec"), namespace)
         application = namespace["application"]
-        res = Client(application).get("/health")
+        res = Client(application).get("/api/v1/health")
         self.assertEqual(res.status_code, 200)
 
     def test_app_py_has_no_unguarded_app_run(self):
