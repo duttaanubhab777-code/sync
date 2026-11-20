@@ -1,21 +1,43 @@
-# Contact page setup
+# Contact Page Configuration
 
-The public Contact page is available at `/contact`. Visitors can fill in their name, email address, subject and message without creating an account or signing in. The page is deliberately separate from the login and registration screens.
+The public Contact page is available at /contact. Visitors can submit their name, email address, subject, and message without creating an account or signing in. The Contact page is independent of the authentication and signup flows.
 
-## Email Sender
+## Email delivery
 
-The form sends submissions to the Email Sender API using the access key in `frontend/src/config/contact.js`. The access key already supplied for this project is kept in the frontend configuration. You can optionally override it at build time with `VITE_EMAIL_SENDER_KEY`.
+The frontend submits contact requests to the separately hosted Email Sender API. Its client configuration is maintained in:
 
-The Email Sender account/key must be configured in the Email Sender service to deliver contact submissions to the Sync support inbox. The browser request sends the visitor's email as the reply-to/contact email and does not choose an arbitrary recipient.
+~~~text
+frontend/src/config/contact.js
+~~~
 
-**Important:** a key embedded in frontend code is public and can be inspected by any visitor. Only use an Email Sender key designed for public form submissions. Apply provider-side origin restrictions, quotas and rate limits if the service supports them. Never put account passwords, private API secrets or the Sync mail-relay secret in frontend code.
+The API key used by the browser can optionally be overridden at build time with VITE_EMAIL_SENDER_KEY. The Email Sender service must be configured to deliver submissions to the Sync support inbox. The visitor's email address is used as the reply-to/contact address; the browser does not select an arbitrary recipient.
 
-The form keeps pending submissions in a local outbox and retries temporary network failures. This improves resilience but does not replace server-side rate limiting or spam controls.
+> [!IMPORTANT]
+> Any credential included in frontend code is public and can be inspected by visitors. Use only a key explicitly intended for public form submissions. Apply provider-side origin restrictions, quotas, and rate limits where supported. Never place account passwords, private API secrets, or MAIL_RELAY_SECRET in frontend code.
 
-Signup OTP continues to use the existing server-side mail relay configured with `PYTHON_SERVICE_URL` and `MAIL_RELAY_SECRET`. Keep `MAIL_RELAY_SECRET` on the server only; it is unrelated to the public Contact form.
+## Reliability and abuse protection
 
-## Troubleshooting: form says "Message sent" but no email arrives
+The form keeps pending submissions in a local outbox and retries temporary network failures. This improves resilience, but it does not replace server-side validation, rate limiting, or spam prevention.
 
-The browser sends the form straight to the Email Sender API, so the Sync server's Content-Security-Policy (`connect-src`) must allow that origin. `node-backend/src/app.js` now adds it automatically (default `https://email-sender-wy5o.onrender.com`). If you move Email Sender to another URL, set `EMAIL_SENDER_URL` in the Render environment and update `frontend/src/config/contact.js` to match.
+Signup OTP delivery is a separate server-to-server workflow. The Node backend calls the Python mail relay using PYTHON_SERVICE_URL and MAIL_RELAY_SECRET. Keep the relay secret on the server only.
 
-Also make sure the Sync site's origin (for example `https://sync-5lfm.onrender.com`) is allowed for the access key on the Email Sender side.
+## Troubleshooting
+
+### The form reports success, but no email arrives
+
+The browser sends the request directly to the Email Sender API. The Sync server's Content Security Policy must therefore allow the Email Sender origin in connect-src.
+
+The Node application adds the configured Email Sender origin automatically. The default service URL is:
+
+~~~text
+https://email-sender-wy5o.onrender.com
+~~~
+
+If the Email Sender service moves:
+
+1. Set EMAIL_SENDER_URL in the Render environment to the new service origin.
+2. Update the matching origin in frontend/src/config/contact.js.
+3. Deploy the updated application.
+4. Confirm that the Sync website's origin is permitted by the Email Sender key/service configuration.
+
+Also check the Email Sender service logs and delivery configuration. A successful browser request does not necessarily mean the destination inbox accepted or delivered the message.

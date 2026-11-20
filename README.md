@@ -165,6 +165,15 @@ The public Contact page allows visitors to submit a name, email address, subject
 - The contact form is separate from signup OTP delivery. Signup OTP email is sent server-to-server through the Python mail relay.
 - Setup notes: [Contact page setup](docs/CONTACT_PAGE_SETUP.md).
 
+### Documentation
+
+- [API reference](docs/API.md)
+- [Contact page configuration](docs/CONTACT_PAGE_SETUP.md)
+- [Signup OTP and mail-relay setup](docs/OTP_AND_MAIL_RELAY_SETUP_GUIDE.md)
+- [PythonAnywhere deployment guide](docs/PYTHONANYWHERE_DEPLOYMENT_GUIDE.md)
+- [Python service README](python-service/README.md)
+- [Screenshot asset guidelines](docs/screenshots/README.md)
+
 <a id="architecture"></a>
 <img src="docs/assets/headers/architecture.svg" alt="Architecture" height="64"/>
 
@@ -234,7 +243,6 @@ sync/
 │   ├── screenshots/
 │   ├── API.md
 │   ├── CONTACT_PAGE_SETUP.md
-│   ├── DEVELOPMENT_GUIDE.md
 │   ├── OTP_AND_MAIL_RELAY_SETUP_GUIDE.md
 │   └── PYTHONANYWHERE_DEPLOYMENT_GUIDE.md
 ├── frontend/

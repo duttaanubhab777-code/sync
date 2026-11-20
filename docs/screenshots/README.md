@@ -1,19 +1,23 @@
-# Screenshots
+# Screenshot Assets
 
-The main README loads every image from this folder by **file name**.
-To update a screenshot, replace the file with a new one that has the **same name**
-(keep the `.jpg` extension). No README edit is needed.
+The main [Sync README](../../README.md) references screenshots in this directory by their exact filenames. To refresh a screenshot, replace the existing image while keeping its filename and .jpg extension. No README markup change is required when the filename remains the same.
 
-| File | Shown in README as |
+| Filename | README placement |
 | --- | --- |
-| `chat-conversation.jpg` | Real-time conversations (large, top) |
-| `chats-home.jpg` | Chats |
-| `stories.jpg` | Stories |
-| `profile.jpg` | Profile (**blur email and phone before uploading**) |
-| `install-pwa.jpg` | Installable PWA |
-| `admin-dashboard.jpg` | Super Admin control center |
+| chat-conversation.jpg | Main conversation preview |
+| chats-home.jpg | Chats overview |
+| stories.jpg | Stories interface |
+| profile.jpg | User profile |
+| install-pwa.jpg | PWA installation experience |
+| admin-dashboard.jpg | Super Admin dashboard |
 
-Tips: use 16:9 images (for example 1366×768) so the grid stays tidy, and keep each file under ~500 KB.
-To add a new screenshot, copy any `<td>` block in the README table and change the file name and caption.
+## Image guidelines
 
-The logo used by the README banner is `docs/assets/logo.png`.
+- Prefer a 16:9 aspect ratio, such as 1366 × 768 pixels.
+- Keep each image reasonably optimized; approximately 500 KB or less is a useful target.
+- Before publishing profile screenshots, blur or remove email addresses, phone numbers, and other personal information.
+- Use clear, current screenshots that match the deployed application.
+
+To add another screenshot, place the image in this directory and add a corresponding image entry and caption to the screenshot section of the main README.
+
+The logo used by the README banner is located at docs/assets/logo.png.
