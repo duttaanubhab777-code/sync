@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { api, extractErrorMessage } from "./api.js";
+import { prefetchWallpapers, pruneWallpaperCache } from "./wallpaperCache.js";
 
 // চ্যাট wallpaper-এর ক্লায়েন্ট স্টোর (সবাই একই state দেখে, তাই Redux ছাড়াই হালকাভাবে)।
 // - wallpapers : admin-দের আপলোড করা সব wallpaper
@@ -58,6 +59,22 @@ export const resolveWallpaper = s => {
 };
 
 let inflight = null;
+let lastLoadOk = false;
+
+// তালিকা আসার পর: বর্তমান wallpaper আগে, তারপর বাকি সব (ফুল + thumbnail) ডিভাইসে নামিয়ে রাখা
+const warmCache = () => {
+    const list = state.wallpapers;
+    if (!list.length) return;
+    const current = resolveWallpaper(state);
+    const def = list.find(w => w._id === state.defaultId);
+    const ordered = [current, def, ...list].filter(Boolean);
+    const fulls = ordered.map(w => wallpaperFullUrl(w.url));
+    const thumbs = list.map(w => wallpaperThumbUrl(w.url));
+    const keep = new Set([...fulls, ...thumbs]);
+    pruneWallpaperCache(keep).finally(() => {
+        prefetchWallpapers([fulls[0], ...thumbs, ...fulls]);
+    });
+};
 
 export const loadWallpapers = async () => {
     if (inflight) return inflight;
@@ -71,15 +88,30 @@ export const loadWallpapers = async () => {
                 myChoice: d.myChoice || null,
                 loaded: true
             });
+            lastLoadOk = true;
+            warmCache();
         } catch {
-            // নেট না থাকলে আগের cache দিয়েই চলবে
+            // নেট না থাকলে আগের cache দিয়েই চলবে (নেট ফিরলে নিচের listener আবার চেষ্টা করবে)
+            lastLoadOk = false;
             setState({ loaded: true });
+            // আগের সেভ করা তালিকা থাকলে অন্তত তার ছবিগুলো নিশ্চিত করা
+            warmCache();
         } finally {
             inflight = null;
         }
     })();
     return inflight;
 };
+
+// নেট ফিরলে বা অ্যাপ আবার সামনে এলে, আগের লোড ব্যর্থ হয়ে থাকলে আবার আনা
+if (typeof window !== "undefined") {
+    const retryIfNeeded = () => {
+        if (document.visibilityState === "hidden") return;
+        if (!lastLoadOk) loadWallpapers();
+    };
+    window.addEventListener("online", retryIfNeeded);
+    document.addEventListener("visibilitychange", retryIfNeeded);
+}
 
 // আমার wallpaper বদলানো। id = null মানে "Default"
 export const chooseWallpaper = async id => {
@@ -117,8 +149,12 @@ const withTransform = (url, transform) => {
 
 // চ্যাটের পেছনে পূর্ণ আকারে (ফোনে ১০৮০px চওড়া যথেষ্ট, ডেস্কটপে বড়)
 export const wallpaperFullUrl = url => {
-    const wide =
-        typeof window !== "undefined" && window.innerWidth > 900 ? 1600 : 1080;
+    // screen.width ধরে ঠিক করা, যাতে উইন্ডো resize করলে URL বদলে আবার ডাউনলোড না হয়
+    const screenW =
+        typeof window !== "undefined" && window.screen
+            ? Math.max(window.screen.width || 0, window.innerWidth || 0)
+            : 0;
+    const wide = screenW > 900 ? 1600 : 1080;
     return withTransform(url, `f_auto,q_auto,w_${wide},c_limit`);
 };
 

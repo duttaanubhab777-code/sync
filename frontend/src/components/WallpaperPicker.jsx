@@ -8,15 +8,26 @@ import {
     wallpaperFullUrl,
     wallpaperThumbUrl
 } from "../services/wallpaper.js";
+import { useCachedWallpaper } from "../services/wallpaperCache.js";
+
+// ডিভাইসে সেভ করা ছবি দেখায় (নেট ছাড়াই), নাহলে সরাসরি URL
+export function CachedImg({ url, alt = "", ...rest }) {
+    const src = useCachedWallpaper(url);
+    if (!src) return <span className="sync-wp-thumb-plain" />;
+    return <img src={src} alt={alt} draggable="false" {...rest} />;
+}
 
 // ছোট ফোনের মতো preview: wallpaper + কয়েকটা নমুনা মেসেজ, যাতে আসলে কেমন দেখাবে বোঝা যায়
 export function WallpaperPreview({ url, className = "" }) {
+    const isRemote = Boolean(url) && !url.startsWith("blob:") && !url.startsWith("data:");
+    const cached = useCachedWallpaper(isRemote ? url : "");
+    const shown = isRemote ? cached : url;
     return (
         <div className={`sync-wp-preview ${className}`}>
-            {url ? (
+            {shown ? (
                 <div
                     className="sync-wp-preview-img"
-                    style={{ backgroundImage: `url("${url}")` }}
+                    style={{ backgroundImage: `url("${shown}")` }}
                 />
             ) : (
                 <div className="sync-wp-preview-plain" />
@@ -138,14 +149,11 @@ export default function WallpaperPicker({ onClose }) {
                             >
                                 <span className="sync-wp-thumb">
                                     {defaultWallpaper ? (
-                                        <img
-                                            src={wallpaperThumbUrl(
+                                        <CachedImg
+                                            url={wallpaperThumbUrl(
                                                 defaultWallpaper.url
                                             )}
-                                            alt=""
-                                            loading="lazy"
-                                            draggable="false"
-                                        />
+                                            />
                                     ) : (
                                         <span className="sync-wp-thumb-plain">
                                             <ImageIcon size={22} />
@@ -182,12 +190,9 @@ export default function WallpaperPicker({ onClose }) {
                                     onClick={() => pick(w._id)}
                                 >
                                     <span className="sync-wp-thumb">
-                                        <img
-                                            src={wallpaperThumbUrl(w.url)}
-                                            alt=""
-                                            loading="lazy"
-                                            draggable="false"
-                                        />
+                                        <CachedImg
+                                            url={wallpaperThumbUrl(w.url)}
+                                            />
                                         {selected === w._id && (
                                             <span className="sync-wp-check">
                                                 <Check

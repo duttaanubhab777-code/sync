@@ -11,7 +11,7 @@ import {
     X
 } from "lucide-react";
 import ConfirmDialog from "./ConfirmDialog.jsx";
-import { WallpaperPreview } from "./WallpaperPicker.jsx";
+import { WallpaperPreview, CachedImg } from "./WallpaperPicker.jsx";
 import { api, extractErrorMessage } from "../services/api.js";
 import { uploadMediaToCloudinary } from "../services/media.js";
 import { wallpaperThumbUrl } from "../services/wallpaper.js";
@@ -430,12 +430,10 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
                                     }`}
                                 >
                                     <div className="sync-wp-thumb">
-                                        <img
-                                            src={wallpaperThumbUrl(item.url)}
+                                        <CachedImg
+                                            url={wallpaperThumbUrl(item.url)}
                                             alt={item.name}
-                                            loading="lazy"
-                                            draggable="false"
-                                        />
+                                            />
                                         {item.isDefault && (
                                             <span className="sync-wp-default-tag">
                                                 <Star size={11} /> Default

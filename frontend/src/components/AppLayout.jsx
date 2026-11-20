@@ -24,6 +24,7 @@ import { fetchConversations, resetChatState } from "../store/chatSlice.js";
 import { fetchStories } from "../store/storySlice.js";
 import { connectSocket, disconnectSocket } from "../services/socket.js";
 import { isPlatformAdmin } from "../App.jsx";
+import { loadWallpapers } from "../services/wallpaper.js";
 import { clearAppBadge } from "../services/appBadge.js";
 import { useAppUpdates, isAndroidApp } from "../services/appUpdate.js";
 
@@ -65,6 +66,7 @@ export default function AppLayout() {
         if (!isAuthenticated) return;
         dispatch(fetchConversations());
         dispatch(fetchStories());
+        loadWallpapers(); // wallpaper তালিকা আনা + সব ছবি ডিভাইসে নামিয়ে রাখা
         connectSocket();
 
         return () => {
