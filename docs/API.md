@@ -3,7 +3,7 @@
 This document describes the HTTP interfaces exposed by the Sync Node.js application and its PythonAnywhere service. The Node service serves the frontend, REST API, and Socket.IO from the same origin, so production clients do not need a separate Node API URL.
 
 ~~~js
-fetch("/api/conversations", {
+fetch("/api/v1/conversations", {
   headers: { Authorization: "Bearer " + accessToken },
 });
 const socket = io({ auth: { token: accessToken } });
@@ -37,7 +37,7 @@ Error responses use this envelope:
 
 ### Authentication
 
-Send the short-lived access token in the Authorization header using the Bearer scheme. The authentication flow may also maintain an access-token cookie. When an access token expires, call POST /api/auth/refresh and retry the original request with the new access token. Obtain a fresh access token before reconnecting a Socket.IO client.
+Send the short-lived access token in the Authorization header using the Bearer scheme. The authentication flow may also maintain an access-token cookie. When an access token expires, call POST /api/v1/auth/refresh and retry the original request with the new access token. Obtain a fresh access token before reconnecting a Socket.IO client.
 
 ### Rate limits
 
@@ -70,7 +70,7 @@ This validation applies to avatars, group icons, stories, and message attachment
 | --- | --- | --- |
 | GET | /health | Reports service health and integration status, including database connectivity, the configured Python service URL, Cloudinary cloud name, and mail-relay configuration. |
 
-### Authentication — /api/auth
+### Authentication — /api/v1/auth
 
 | Method | Path | Authentication | Request body / behavior |
 | --- | --- | --- | --- |
@@ -85,7 +85,7 @@ This validation applies to avatars, group icons, stories, and message attachment
 
 A user can have up to five active device sessions. Invalid usernames and incorrect passwords return the same 401 Invalid credentials response.
 
-### Users — /api/users
+### Users — /api/v1/users
 
 All routes in this section require authentication.
 
@@ -98,7 +98,7 @@ All routes in this section require authentication.
 | POST | /:id/block | Blocks the specified user. |
 | DELETE | /:id/block | Unblocks the specified user. |
 
-### Conversations — /api/conversations
+### Conversations — /api/v1/conversations
 
 All routes in this section require authentication.
 
