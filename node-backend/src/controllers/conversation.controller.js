@@ -45,7 +45,7 @@ const checkIcon = icon => {
     }
 };
 
-// GET /api/conversations   — আমার চ্যাট লিস্ট (নতুন মেসেজ আগে)
+// GET /api/v1/conversations   — আমার চ্যাট লিস্ট (নতুন মেসেজ আগে)
 // একজনের শুরু করা direct চ্যাটে মেসেজ না যাওয়া পর্যন্ত অপর পক্ষের লিস্টে দেখানো হয় না
 export const listConversations = asyncHandler(async (req, res) => {
     const me = String(req.user._id);
@@ -70,7 +70,7 @@ export const listConversations = asyncHandler(async (req, res) => {
     );
 });
 
-// POST /api/conversations   body: { partnerId }  — direct চ্যাট শুরু (আগে থাকলে সেটাই ফেরত)
+// POST /api/v1/conversations   body: { partnerId }  — direct চ্যাট শুরু (আগে থাকলে সেটাই ফেরত)
 export const getOrCreateDirect = asyncHandler(async (req, res) => {
     const me = String(req.user._id);
     const io = req.app.get("io");
@@ -115,7 +115,7 @@ export const getOrCreateDirect = asyncHandler(async (req, res) => {
     send(res, created ? 201 : 200, serializeConversation(conv, me));
 });
 
-// POST /api/conversations/group
+// POST /api/v1/conversations/group
 export const createGroup = asyncHandler(async (req, res) => {
     const me = String(req.user._id);
     const io = req.app.get("io");
@@ -159,7 +159,7 @@ export const createGroup = asyncHandler(async (req, res) => {
     send(res, 201, serializeConversation(conv, me), "Group created");
 });
 
-// GET /api/conversations/:id
+// GET /api/v1/conversations/:id
 export const getConversation = asyncHandler(async (req, res) => {
     const me = String(req.user._id);
     const conv = await loadMemberConversation(req.params.id, me);
@@ -167,7 +167,7 @@ export const getConversation = asyncHandler(async (req, res) => {
     send(res, 200, serializeConversation(conv, me));
 });
 
-// PATCH /api/conversations/:id   (শুধু group admin)
+// PATCH /api/v1/conversations/:id   (শুধু group admin)
 export const updateGroup = asyncHandler(async (req, res) => {
     const me = String(req.user._id);
     const io = req.app.get("io");
@@ -193,7 +193,7 @@ export const updateGroup = asyncHandler(async (req, res) => {
     send(res, 200, serializeConversation(conv, me), "Group updated");
 });
 
-// PATCH /api/conversations/:id/members   body: { action, targetUserId }  (শুধু group admin)
+// PATCH /api/v1/conversations/:id/members   body: { action, targetUserId }  (শুধু group admin)
 // action: add | remove | make_admin | remove_admin
 export const updateMembers = asyncHandler(async (req, res) => {
     const me = String(req.user._id);
@@ -278,7 +278,7 @@ export const updateMembers = asyncHandler(async (req, res) => {
     send(res, 200, serializeConversation(conv, me), "Members updated");
 });
 
-// POST /api/conversations/:id/leave   — গ্রুপ ছাড়া
+// POST /api/v1/conversations/:id/leave   — গ্রুপ ছাড়া
 // শেষ সদস্য ছাড়লে গ্রুপ ও তার মেসেজ মুছে যায়; শেষ admin ছাড়লে সবচেয়ে পুরনো সদস্য admin হয়
 export const leaveGroup = asyncHandler(async (req, res) => {
     const me = String(req.user._id);
@@ -312,7 +312,7 @@ export const leaveGroup = asyncHandler(async (req, res) => {
     send(res, 200, null, "Left the group");
 });
 
-// POST /api/conversations/:id/read   body: { upToMessageId? }  — Socket-এর message:seen এর REST বিকল্প
+// POST /api/v1/conversations/:id/read   body: { upToMessageId? }  — Socket-এর message:seen এর REST বিকল্প
 export const markConversationRead = asyncHandler(async (req, res) => {
     const me = String(req.user._id);
     const conv = await loadMemberConversation(req.params.id, me);

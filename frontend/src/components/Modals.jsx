@@ -48,7 +48,7 @@ export function NewDirectChatModal({ onClose, onChatReady }) {
             setError("");
             try {
                 const res = await api.get(
-                    `/api/users?search=${encodeURIComponent(trimmed)}`
+                    `/api/v1/users?search=${encodeURIComponent(trimmed)}`
                 );
                 setResults(res.data?.data || []);
             } catch (err) {
@@ -183,7 +183,7 @@ export function NewGroupChatModal({ onClose, onGroupReady }) {
         const timer = setTimeout(async () => {
             try {
                 const res = await api.get(
-                    `/api/users?search=${encodeURIComponent(trimmed)}`
+                    `/api/v1/users?search=${encodeURIComponent(trimmed)}`
                 );
                 setResults(res.data?.data || []);
             } catch {
@@ -434,7 +434,7 @@ export function ChatInfoDrawer({ conversation, onClose }) {
     useEffect(() => {
         if (!conversation || isGroup || !conversation.partner?._id) return;
         let active = true;
-        api.get(`/api/users/${conversation.partner._id}`)
+        api.get(`/api/v1/users/${conversation.partner._id}`)
             .then(res => {
                 if (active) setPartnerProfile(res.data?.data || null);
             })
@@ -454,7 +454,7 @@ export function ChatInfoDrawer({ conversation, onClose }) {
         const timer = setTimeout(async () => {
             try {
                 const res = await api.get(
-                    `/api/users?search=${encodeURIComponent(trimmed)}`
+                    `/api/v1/users?search=${encodeURIComponent(trimmed)}`
                 );
                 const memberSet = new Set(
                     (conversation.members || []).map(m => String(m._id || m))

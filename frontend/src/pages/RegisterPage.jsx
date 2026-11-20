@@ -156,7 +156,7 @@ export default function RegisterPage() {
         const controller = new AbortController();
         const timer = setTimeout(async () => {
             try {
-                const res = await api.get("/api/auth/username-available", {
+                const res = await api.get("/api/v1/auth/username-available", {
                     params: { username: name, email: form.email.trim().toLowerCase() },
                     signal: controller.signal
                 });

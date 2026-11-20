@@ -21,11 +21,11 @@ export const setAuthCookies = (res, { accessToken, refreshToken }) => {
         path: "/",
         maxAge: maxAgeOf(accessToken)
     });
-    // refresh token শুধু /api/auth পথে ব্রাউজার পাঠাবে
+    // refresh token শুধু /api/v1/auth পথে ব্রাউজার পাঠাবে
     if (refreshToken) {
         res.cookie("refreshToken", refreshToken, {
             ...baseOptions(),
-            path: "/api/auth",
+            path: "/api/v1/auth",
             maxAge: maxAgeOf(refreshToken)
         });
     }
@@ -33,5 +33,5 @@ export const setAuthCookies = (res, { accessToken, refreshToken }) => {
 
 export const clearAuthCookies = res => {
     res.clearCookie("accessToken", { ...baseOptions(), path: "/" });
-    res.clearCookie("refreshToken", { ...baseOptions(), path: "/api/auth" });
+    res.clearCookie("refreshToken", { ...baseOptions(), path: "/api/v1/auth" });
 };

@@ -2,7 +2,7 @@
 // - App shell precache (logo + icons), পরের বার অফলাইনেও UI খুলবে
 // - Vite এর hashed /assets/* ফাইল: cache-first (immutable)
 // - HTML: network-first, নেট না থাকলে cached shell
-// - /api ও /socket.io কখনো cache হয় না
+// - /api/v1 ও /socket.io কখনো cache হয় না
 const VERSION = "v4";
 const SHELL_CACHE = `sync-shell-${VERSION}`;
 const ASSET_CACHE = `sync-assets-${VERSION}`;
@@ -53,7 +53,7 @@ self.addEventListener("fetch", event => {
     const url = new URL(request.url);
     if (url.origin !== self.location.origin) return;
     if (
-        url.pathname.startsWith("/api/") ||
+        url.pathname.startsWith("/api/v1/") ||
         url.pathname.startsWith("/socket.io/") ||
         url.pathname === "/health" ||
         url.pathname === "/sw.js" ||

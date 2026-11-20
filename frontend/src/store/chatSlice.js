@@ -18,7 +18,7 @@ export const fetchConversations = createAsyncThunk(
     "chat/fetchConversations",
     async (_, { rejectWithValue }) => {
         try {
-            const res = await api.get("/api/conversations");
+            const res = await api.get("/api/v1/conversations");
             return res.data?.data || [];
         } catch (err) {
             return rejectWithValue(
@@ -32,7 +32,7 @@ export const startDirectChat = createAsyncThunk(
     "chat/startDirectChat",
     async (partnerId, { rejectWithValue }) => {
         try {
-            const res = await api.post("/api/conversations", { partnerId });
+            const res = await api.post("/api/v1/conversations", { partnerId });
             return res.data?.data;
         } catch (err) {
             return rejectWithValue(
@@ -46,7 +46,7 @@ export const createGroupChat = createAsyncThunk(
     "chat/createGroupChat",
     async (payload, { rejectWithValue }) => {
         try {
-            const res = await api.post("/api/conversations/group", payload);
+            const res = await api.post("/api/v1/conversations/group", payload);
             return res.data?.data;
         } catch (err) {
             return rejectWithValue(
@@ -61,7 +61,7 @@ export const updateGroupDetails = createAsyncThunk(
     async ({ conversationId, ...updates }, { rejectWithValue }) => {
         try {
             const res = await api.patch(
-                `/api/conversations/${conversationId}`,
+                `/api/v1/conversations/${conversationId}`,
                 updates
             );
             return res.data?.data;
@@ -78,7 +78,7 @@ export const updateGroupMember = createAsyncThunk(
     async ({ conversationId, action, targetUserId }, { rejectWithValue }) => {
         try {
             const res = await api.patch(
-                `/api/conversations/${conversationId}/members`,
+                `/api/v1/conversations/${conversationId}/members`,
                 { action, targetUserId }
             );
             return res.data?.data;
@@ -94,7 +94,7 @@ export const leaveGroupChat = createAsyncThunk(
     "chat/leaveGroupChat",
     async (conversationId, { rejectWithValue }) => {
         try {
-            await api.post(`/api/conversations/${conversationId}/leave`);
+            await api.post(`/api/v1/conversations/${conversationId}/leave`);
             return conversationId;
         } catch (err) {
             return rejectWithValue(
@@ -111,7 +111,7 @@ export const fetchMessages = createAsyncThunk(
             const params = new URLSearchParams({ limit: String(limit) });
             if (before) params.set("before", before);
             const res = await api.get(
-                `/api/conversations/${conversationId}/messages?${params.toString()}`
+                `/api/v1/conversations/${conversationId}/messages?${params.toString()}`
             );
             return {
                 conversationId,
@@ -153,7 +153,7 @@ export const syncMissedMessages = createAsyncThunk(
                 if (after) params.set("after", after);
                 if (since && safetyCounter === 1) params.set("since", since);
 
-                const res = await api.get(`/api/sync?${params.toString()}`);
+                const res = await api.get(`/api/v1/sync?${params.toString()}`);
                 const data = res.data?.data || {};
                 const batch = data.messages || [];
                 const updated = data.updated || [];

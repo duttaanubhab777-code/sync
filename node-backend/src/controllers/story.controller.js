@@ -65,7 +65,7 @@ const toPublicStory = (s, me) => ({
 const creating = new Map();
 const DUPLICATE_WINDOW_MS = 30 * 1000;
 
-// POST /api/stories   body: { type, caption?, backgroundColor?, media?, clientStoryId? }  (২৪ ঘণ্টা পরে নিজে মুছে যায়)
+// POST /api/v1/stories   body: { type, caption?, backgroundColor?, media?, clientStoryId? }  (২৪ ঘণ্টা পরে নিজে মুছে যায়)
 export const createStory = asyncHandler(async (req, res) => {
     const me = String(req.user._id);
     const { type, caption, backgroundColor, media, clientStoryId } = req.body;
@@ -153,7 +153,7 @@ export const createStory = asyncHandler(async (req, res) => {
     );
 });
 
-// GET /api/stories   — আমার + contact-দের চলতি story, লেখক ধরে ভাগ করা
+// GET /api/v1/stories   — আমার + contact-দের চলতি story, লেখক ধরে ভাগ করা
 // [{ author, stories: [...], hasUnseen, isMine }]  (আমারটা প্রথমে, তারপর না-দেখা আগে)
 export const getStoryFeed = asyncHandler(async (req, res) => {
     const me = String(req.user._id);
@@ -195,7 +195,7 @@ export const getStoryFeed = asyncHandler(async (req, res) => {
     send(res, 200, groups);
 });
 
-// POST /api/stories/:id/view   — story দেখা হয়েছে (লেখক রিয়েল-টাইমে জানতে পারে)
+// POST /api/v1/stories/:id/view   — story দেখা হয়েছে (লেখক রিয়েল-টাইমে জানতে পারে)
 export const viewStory = asyncHandler(async (req, res) => {
     const me = String(req.user._id);
     const id = assertObjectId(req.params.id, "story id");
@@ -234,7 +234,7 @@ export const viewStory = asyncHandler(async (req, res) => {
     send(res, 200, null, "OK");
 });
 
-// GET /api/stories/:id/viewers   — শুধু লেখক দেখতে পারবে
+// GET /api/v1/stories/:id/viewers   — শুধু লেখক দেখতে পারবে
 export const getStoryViewers = asyncHandler(async (req, res) => {
     const id = assertObjectId(req.params.id, "story id");
     const story = await Story.findOne({
@@ -259,7 +259,7 @@ export const getStoryViewers = asyncHandler(async (req, res) => {
     send(res, 200, viewers);
 });
 
-// DELETE /api/stories/:id   — শুধু লেখক
+// DELETE /api/v1/stories/:id   — শুধু লেখক
 export const deleteStory = asyncHandler(async (req, res) => {
     const me = String(req.user._id);
     const id = assertObjectId(req.params.id, "story id");
@@ -315,7 +315,7 @@ const storyThumbnail = story => {
     return "";
 };
 
-// POST /api/stories/:id/react   body: { emoji }   (emoji খালি/null হলে react সরে যায়)
+// POST /api/v1/stories/:id/react   body: { emoji }   (emoji খালি/null হলে react সরে যায়)
 export const reactToStory = asyncHandler(async (req, res) => {
     const me = String(req.user._id);
     const id = assertObjectId(req.params.id, "story id");
@@ -421,7 +421,7 @@ export const reactToStory = asyncHandler(async (req, res) => {
     send(res, 200, { myReaction: emoji || null, reactionCount }, "OK");
 });
 
-// POST /api/stories/:id/reply   body: { text }  — story-র লেখকের সাথে direct চ্যাটে মেসেজ হয়ে যায়
+// POST /api/v1/stories/:id/reply   body: { text }  — story-র লেখকের সাথে direct চ্যাটে মেসেজ হয়ে যায়
 export const replyToStory = asyncHandler(async (req, res) => {
     const me = String(req.user._id);
     const id = assertObjectId(req.params.id, "story id");

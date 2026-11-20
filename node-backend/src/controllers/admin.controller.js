@@ -39,7 +39,7 @@ const assertCanManage = (actor, target) => {
     }
 };
 
-// GET /api/admin/stats
+// GET /api/v1/admin/stats
 export const getStats = asyncHandler(async (_req, res) => {
     const now = new Date();
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -91,7 +91,7 @@ export const getStats = asyncHandler(async (_req, res) => {
     );
 });
 
-// GET /api/admin/users?search=&filter=all|admins|blocked&page=1&limit=20
+// GET /api/v1/admin/users?search=&filter=all|admins|blocked&page=1&limit=20
 export const listUsers = asyncHandler(async (req, res) => {
     const search = String(req.query.search ?? "").trim().slice(0, 50);
     const filter = String(req.query.filter ?? "all");
@@ -131,7 +131,7 @@ export const listUsers = asyncHandler(async (req, res) => {
     );
 });
 
-// POST /api/admin/users/:id/block   |   DELETE /api/admin/users/:id/block
+// POST /api/v1/admin/users/:id/block   |   DELETE /api/v1/admin/users/:id/block
 const setBlocked = blocked =>
     asyncHandler(async (req, res) => {
         const id = assertObjectId(req.params.id, "user id");
@@ -165,7 +165,7 @@ const setBlocked = blocked =>
 export const blockUserByAdmin = setBlocked(true);
 export const unblockUserByAdmin = setBlocked(false);
 
-// PATCH /api/admin/users/:id/role   body: { role: "admin" | "user" }   (শুধু Super Admin)
+// PATCH /api/v1/admin/users/:id/role   body: { role: "admin" | "user" }   (শুধু Super Admin)
 export const setUserRole = asyncHandler(async (req, res) => {
     const id = assertObjectId(req.params.id, "user id");
     const role = req.body?.role;
@@ -199,7 +199,7 @@ export const setUserRole = asyncHandler(async (req, res) => {
     );
 });
 
-// POST /api/admin/admins   (শুধু Super Admin) — সরাসরি নতুন Admin অ্যাকাউন্ট বানানো
+// POST /api/v1/admin/admins   (শুধু Super Admin) — সরাসরি নতুন Admin অ্যাকাউন্ট বানানো
 // body: { fullName, username, email, phoneNumber, password }  (validate: createAdminSchema)
 export const createAdmin = asyncHandler(async (req, res) => {
     const { username, fullName, email, phoneNumber, password } = req.body;
@@ -250,7 +250,7 @@ export const createAdmin = asyncHandler(async (req, res) => {
     );
 });
 
-// DELETE /api/admin/users/:id — ইউজার অ্যাকাউন্ট স্থায়ীভাবে মুছে ফেলা
+// DELETE /api/v1/admin/users/:id — ইউজার অ্যাকাউন্ট স্থায়ীভাবে মুছে ফেলা
 export const deleteUserByAdmin = asyncHandler(async (req, res) => {
     const id = assertObjectId(req.params.id, "user id");
     const target = await User.findById(id).select(ADMIN_USER_FIELDS);
@@ -286,7 +286,7 @@ const conversationLabel = conv => {
     return { id: String(conv._id), type: "direct", name: names.join(" ↔ ") || "Direct chat" };
 };
 
-// GET /api/admin/media?source=chat|story&kind=all|image|video&before=<id>&limit=24
+// GET /api/v1/admin/media?source=chat|story&kind=all|image|video&before=<id>&limit=24
 export const listMedia = asyncHandler(async (req, res) => {
     const source = req.query.source === "story" ? "story" : "chat";
     const kind = ["image", "video"].includes(req.query.kind) ? req.query.kind : "all";
@@ -365,7 +365,7 @@ export const listMedia = asyncHandler(async (req, res) => {
     );
 });
 
-// DELETE /api/admin/media/chat/:id   — আপত্তিকর ছবি/ভিডিও সবার জন্য মুছে ফেলা
+// DELETE /api/v1/admin/media/chat/:id   — আপত্তিকর ছবি/ভিডিও সবার জন্য মুছে ফেলা
 export const removeChatMedia = asyncHandler(async (req, res) => {
     const id = assertObjectId(req.params.id, "message id");
     const msg = await Message.findById(id);
@@ -399,7 +399,7 @@ export const removeChatMedia = asyncHandler(async (req, res) => {
     res.status(200).json(new ApiResponse(200, null, "Media removed"));
 });
 
-// DELETE /api/admin/media/story/:id
+// DELETE /api/v1/admin/media/story/:id
 export const removeStoryMedia = asyncHandler(async (req, res) => {
     const id = assertObjectId(req.params.id, "story id");
     const story = await Story.findByIdAndDelete(id).select("author").lean();
@@ -416,7 +416,7 @@ export const removeStoryMedia = asyncHandler(async (req, res) => {
 
 // ---------- Groups ----------
 
-// GET /api/admin/groups?search=   (গ্রুপের নাম, সদস্য সংখ্যা, group admin কারা — কোনো মেসেজ নয়)
+// GET /api/v1/admin/groups?search=   (গ্রুপের নাম, সদস্য সংখ্যা, group admin কারা — কোনো মেসেজ নয়)
 export const listGroups = asyncHandler(async (req, res) => {
     const search = String(req.query.search ?? "").trim().slice(0, 50);
     const query = { type: "group" };
@@ -453,7 +453,7 @@ export const listGroups = asyncHandler(async (req, res) => {
     );
 });
 
-// DELETE /api/admin/groups/:id — আপত্তিকর গ্রুপ মুছে ফেলা
+// DELETE /api/v1/admin/groups/:id — আপত্তিকর গ্রুপ মুছে ফেলা
 export const deleteGroupByAdmin = asyncHandler(async (req, res) => {
     const id = assertObjectId(req.params.id, "group id");
     const conv = await Conversation.findOneAndDelete({
