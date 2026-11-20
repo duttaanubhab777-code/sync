@@ -1858,6 +1858,7 @@ export default function ChatPage() {
                                                 type="submit"
                                                 className="sync-send-btn"
                                                 title="Send Message"
+                                                onPointerDown={event => event.preventDefault()}
                                             >
                                                 <Send size={18} />
                                             </button>
