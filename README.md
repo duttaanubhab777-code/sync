@@ -237,7 +237,8 @@ The Python service does **not** receive or proxy the uploaded file.
 | Database | MongoDB Atlas |
 | Media storage | Cloudinary |
 | Browser notifications | Web Push / VAPID |
-| Android notifications | Firebase Cloud Messaging HTTP v1 |
+| Android notifications | Firebase Cloud Messaging HTTP v1, Capacitor Push Notifications and native Android notification channels |
+| Android runtime | Capacitor 7, Android native Java integration and Geolocation plugin |
 | Hosting | Render, PythonAnywhere |
 | Android distribution | GitHub Releases |
 
@@ -290,9 +291,9 @@ sync/
 │   ├── config.example.py
 │   └── requirements.txt
 ├── mobile/                       # Capacitor Android wrapper and native build scripts
-│   ├── assets/sounds/             # Custom Android notification tones
-│   ├── scripts/                   # Android permissions, icons, badges and notification setup
-│   ├── www/                       # Local fallback and offline screens
+│   ├── assets/sounds/            # Custom Android notification tones
+│   ├── scripts/                  # Android permissions, icons, badges and notification setup
+│   ├── www/                      # Local fallback and offline screens
 │   └── capacitor.config.json
 ├── package.json                  # Root monorepo scripts
 ├── render.yaml                   # Render Blueprint
