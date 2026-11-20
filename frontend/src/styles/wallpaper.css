@@ -1,0 +1,225 @@
+/* ==========================================================================
+   Chat wallpaper: চ্যাটের পেছনের ছবি, user picker, admin tab
+   শুধু transform/opacity অ্যানিমেট হয়, তাই lag হয় না
+   ========================================================================== */
+
+/* ---------- চ্যাটের পেছনের layer ---------- */
+.sync-active-chat-wrap { position: relative; isolation: isolate; }
+
+.sync-wallpaper-layer {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    opacity: 0;
+    transition: opacity 0.45s ease;
+    /* ছবি আলাদা GPU layer-এ, স্ক্রলের সময় আবার আঁকতে হয় না */
+    transform: translateZ(0);
+}
+.sync-wallpaper-layer.is-ready { opacity: 1; }
+
+/* লেখা যাতে যেকোনো ছবিতে পড়া যায়: হালকা গাঢ় আবরণ */
+.sync-wallpaper-layer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(2, 15, 12, 0.38), rgba(2, 15, 12, 0.5));
+}
+
+/* ---------- preview (ছোট ফোনের মতো) ---------- */
+.sync-wp-preview {
+    position: relative;
+    align-self: center;
+    width: min(100%, 210px);
+    aspect-ratio: 9 / 16;
+    overflow: hidden;
+    border-radius: 22px;
+    border: 1px solid var(--line-strong);
+    background: var(--bg-chat);
+    flex-shrink: 0;
+}
+.sync-wp-preview-img,
+.sync-wp-preview-plain { position: absolute; inset: 0; }
+.sync-wp-preview-img { background-size: cover; background-position: center; }
+.sync-wp-preview-img::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(2, 15, 12, 0.38), rgba(2, 15, 12, 0.5));
+}
+.sync-wp-preview-plain {
+    background:
+        radial-gradient(160px 130px at 88% 0%, rgba(182, 243, 77, 0.1), transparent 70%),
+        radial-gradient(170px 140px at 6% 100%, rgba(31, 167, 176, 0.14), transparent 70%),
+        var(--bg-chat);
+}
+.sync-wp-preview-bubbles {
+    position: absolute;
+    inset: auto 10px 18px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    font-size: 0.7rem;
+    line-height: 1.3;
+}
+.sync-wp-preview-bubbles span {
+    max-width: 78%;
+    padding: 6px 10px;
+    border-radius: 12px;
+    color: var(--text);
+}
+.sync-wp-preview-bubbles .in { align-self: flex-start; background: var(--bg-2); border-bottom-left-radius: 4px; }
+.sync-wp-preview-bubbles .out { align-self: flex-end; background: var(--grad-out); border-bottom-right-radius: 4px; }
+
+/* ---------- user picker ---------- */
+.sync-wp-modal { max-width: 520px; }
+
+.sync-wp-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.sync-wp-card {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 0;
+    background: none;
+    border: 0;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    min-width: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+.sync-wp-card:active .sync-wp-thumb { transform: scale(0.97); }
+
+.sync-wp-thumb {
+    position: relative;
+    display: block;
+    aspect-ratio: 9 / 16;
+    overflow: hidden;
+    border-radius: 16px;
+    background: var(--bg-3);
+    border: 2px solid var(--line);
+    transition: transform 0.18s var(--ease), border-color 0.2s, box-shadow 0.2s;
+}
+.sync-wp-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sync-wp-thumb-plain {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-3);
+    background:
+        radial-gradient(90px 80px at 88% 0%, rgba(182, 243, 77, 0.1), transparent 70%),
+        var(--bg-chat);
+}
+.sync-wp-card.is-selected .sync-wp-thumb {
+    border-color: var(--mongo);
+    box-shadow: 0 0 0 3px rgba(0, 237, 100, 0.18);
+}
+
+.sync-wp-check {
+    position: absolute;
+    top: 7px;
+    right: 7px;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--grad-btn);
+    color: var(--on-brand);
+    animation: sync-pop 0.22s var(--ease) both;
+}
+.sync-wp-current,
+.sync-wp-default-tag {
+    position: absolute;
+    left: 6px;
+    bottom: 6px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: #fff;
+    background: rgba(2, 15, 12, 0.72);
+}
+.sync-wp-default-tag { display: inline-flex; align-items: center; gap: 4px; color: var(--mongo); top: 6px; bottom: auto; }
+
+.sync-wp-name {
+    font-size: 0.82rem;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.sync-wp-sub { margin-top: -3px; font-size: 0.72rem; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.sync-wp-hint { font-size: 0.8rem; line-height: 1.5; color: var(--text-2); }
+.sync-wp-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 28px 12px;
+    font-size: 0.88rem;
+    color: var(--text-2);
+    text-align: center;
+}
+
+/* ---------- admin tab ---------- */
+.sync-wp-admin-form { display: grid; grid-template-columns: 210px 1fr; gap: 18px; align-items: start; margin-top: 14px; }
+.sync-wp-admin-preview { display: flex; justify-content: center; }
+.sync-wp-admin-fields { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+.sync-wp-meta { display: block; margin-top: 6px; font-size: 0.76rem; color: var(--text-3); }
+.sync-wp-warn { display: block; margin-top: 6px; font-size: 0.78rem; line-height: 1.45; color: #ffcf6b; }
+
+.sync-wp-check-row { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; font-size: 0.88rem; font-weight: 600; }
+.sync-wp-check-row input { margin-top: 3px; accent-color: var(--mongo); width: 16px; height: 16px; flex-shrink: 0; }
+.sync-wp-check-row em { display: block; margin-top: 2px; font-style: normal; font-weight: 400; font-size: 0.78rem; line-height: 1.45; color: var(--text-2); }
+
+.sync-wp-progress { height: 6px; overflow: hidden; border-radius: 999px; background: var(--bg-3); }
+.sync-wp-progress i { display: block; height: 100%; width: 100%; transform-origin: left; background: var(--grad-btn); transition: transform 0.2s linear; }
+
+.sync-wp-head-actions { display: flex; gap: 8px; align-items: center; }
+
+.sync-wp-admin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; margin-top: 14px; }
+.sync-wp-admin-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    border-radius: 18px;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+}
+.sync-wp-admin-card.is-default { border-color: rgba(0, 237, 100, 0.45); box-shadow: 0 0 0 3px rgba(0, 237, 100, 0.08); }
+.sync-wp-admin-card .sync-wp-thumb { border-width: 1px; border-radius: 12px; }
+.sync-wp-admin-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 0 2px; }
+.sync-wp-admin-info strong { font-size: 0.86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sync-wp-admin-info small { font-size: 0.72rem; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sync-wp-admin-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.sync-wp-admin-actions .sync-btn { flex: 1; justify-content: center; }
+.sync-wp-rename { display: flex; align-items: center; gap: 4px; }
+.sync-wp-rename input { flex: 1; min-width: 0; padding: 6px 9px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--bg-1); color: var(--text); font-size: 0.82rem; }
+
+@media (max-width: 920px) {
+    .sync-wp-admin-form { grid-template-columns: 1fr; }
+}
+@media (max-width: 520px) {
+    .sync-wp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .sync-wp-admin-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sync-wallpaper-layer, .sync-wp-thumb, .sync-wp-check { transition: none; animation: none; }
+}

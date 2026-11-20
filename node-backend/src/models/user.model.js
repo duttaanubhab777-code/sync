@@ -87,6 +87,14 @@ const userSchema = new mongoose.Schema(
             default: false
         },
 
+        // ইউজারের বেছে নেওয়া chat wallpaper (Wallpaper-এর _id)।
+        // null মানে কিছু বাছেনি, তাই admin-এর default wallpaper-ই দেখবে (default বদলালে সাথে সাথে বদলাবে)।
+        wallpaperChoice: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Wallpaper",
+            default: null
+        },
+
         //whatsapp style bio
 
         about: {

@@ -22,6 +22,7 @@ import {
     syncMissedMessages,
     upsertConversation
 } from "../store/chatSlice.js";
+import { handleWallpaperChanged } from "./wallpaper.js";
 import {
     fetchStories,
     recordRealtimeStoryView,
@@ -234,6 +235,9 @@ export const connectSocket = () => {
             new CustomEvent("sync:notice-removed", { detail: payload.noticeId })
         );
     });
+
+    // admin wallpaper যোগ/default/মোছা করলে সবার তালিকা নিজে থেকে নতুন হয়
+    socket.on("wallpaper:changed", () => handleWallpaperChanged());
 
     // রিয়েল-টাইমে রোল আপডেট বা ব্লক হলে সাথে সাথে কার্যকর
     socket.on("user:role_updated", payload => {

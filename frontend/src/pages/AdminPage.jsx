@@ -30,10 +30,12 @@ import {
     Bell,
     Camera,
     MessageSquare,
-    TrendingUp
+    TrendingUp,
+    Palette
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncLogo from "../components/SyncLogo.jsx";
+import WallpaperAdmin from "../components/WallpaperAdmin.jsx";
 import {
     formatCountdownHMS,
     formatNoticeDeadlineLine
@@ -715,6 +717,11 @@ export default function AdminPage() {
                             id: "groups",
                             label: "Groups",
                             icon: Shield
+                        },
+                        {
+                            id: "wallpapers",
+                            label: "Wallpapers",
+                            icon: Palette
                         }
                     ].map(t => {
                         const Icon = t.icon;
@@ -1988,6 +1995,16 @@ export default function AdminPage() {
                             )}
                         </div>
                     </section>
+                )}
+
+                {/* =========================================================
+                    TAB 6: CHAT WALLPAPERS
+                   ========================================================= */}
+                {activeTab === "wallpapers" && (
+                    <WallpaperAdmin
+                        flashSuccess={flashSuccess}
+                        flashError={flashError}
+                    />
                 )}
 
                 {/* =========================================================
