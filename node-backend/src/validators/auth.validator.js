@@ -69,7 +69,7 @@ const emailField = z
     .toLowerCase()
     .email("Enter a valid email address");
 
-// POST /api/auth/register/verify-otp
+// POST /api/v1/auth/register/verify-otp
 export const verifyOtpSchema = z.object({
     email: emailField,
     otp: z
@@ -78,5 +78,5 @@ export const verifyOtpSchema = z.object({
         .regex(/^\d{6}$/, "Enter the 6-digit code")
 });
 
-// POST /api/auth/register/resend-otp
+// POST /api/v1/auth/register/resend-otp
 export const resendOtpSchema = z.object({ email: emailField });
