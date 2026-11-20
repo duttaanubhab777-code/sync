@@ -10,7 +10,7 @@ import { publicUser } from "./auth.controller.js";
 
 const withOnline = u => ({ ...u, online: isUserOnline(u._id) });
 
-// GET /api/users?search=
+// GET /api/v1/users?search=
 // username/নাম দিয়ে খোঁজা যায়; শুধু সংখ্যা দিলে ফোন নম্বর হুবহু মিললে তবেই পাওয়া যায়
 // (ইমেইল/ফোন কখনো ফেরত দেওয়া হয় না)
 export const searchUsers = asyncHandler(async (req, res) => {
@@ -51,7 +51,7 @@ export const searchUsers = asyncHandler(async (req, res) => {
     res.status(200).json(new ApiResponse(200, users.map(withOnline)));
 });
 
-// GET /api/users/blocked
+// GET /api/v1/users/blocked
 export const getBlockedUsers = asyncHandler(async (req, res) => {
     const me = await User.findById(req.user._id)
         .select("blockedUser")
@@ -60,7 +60,7 @@ export const getBlockedUsers = asyncHandler(async (req, res) => {
     res.status(200).json(new ApiResponse(200, me?.blockedUser || []));
 });
 
-// GET /api/users/:id
+// GET /api/v1/users/:id
 export const getUserProfile = asyncHandler(async (req, res) => {
     const id = assertObjectId(req.params.id, "user id");
     const user = await User.findById(id)
@@ -83,7 +83,7 @@ export const getUserProfile = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, { ...withOnline(user), blockedByMe }));
 });
 
-// PATCH /api/users/me   body: { fullName?, about?, avatar? }  (avatar: "" দিলে ছবি মুছে যাবে)
+// PATCH /api/v1/users/me   body: { fullName?, about?, avatar? }  (avatar: "" দিলে ছবি মুছে যাবে)
 export const updateMyProfile = asyncHandler(async (req, res) => {
     const { fullName, about, avatar } = req.body;
     const update = {};
@@ -106,7 +106,7 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, publicUser(user), "Profile updated"));
 });
 
-// POST /api/users/:id/block
+// POST /api/v1/users/:id/block
 export const blockUser = asyncHandler(async (req, res) => {
     const id = assertObjectId(req.params.id, "user id");
     if (id === String(req.user._id)) {
@@ -122,7 +122,7 @@ export const blockUser = asyncHandler(async (req, res) => {
     res.status(200).json(new ApiResponse(200, null, "User blocked"));
 });
 
-// DELETE /api/users/:id/block
+// DELETE /api/v1/users/:id/block
 export const unblockUser = asyncHandler(async (req, res) => {
     const id = assertObjectId(req.params.id, "user id");
     await User.updateOne({ _id: req.user._id }, { $pull: { blockedUser: id } });
