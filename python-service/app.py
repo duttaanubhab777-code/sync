@@ -1,8 +1,8 @@
 """Sync Media Service - Flask application.
 
 Two jobs, both small enough for the PythonAnywhere free plan:
-  1. /media/sign - creates Cloudinary upload signatures (stores no files).
-  2. /mail/send  - mail relay: sends the signup OTP emails through Gmail SMTP,
+  1. /api/v1/media/sign - creates Cloudinary upload signatures (stores no files).
+  2. /api/v1/mail/send  - mail relay: sends the signup OTP emails through Gmail SMTP,
                    because Render's free plan cannot send email itself.
 
 PythonAnywhere (WSGI) imports ``app`` from here, see pythonanywhere_wsgi.py.
