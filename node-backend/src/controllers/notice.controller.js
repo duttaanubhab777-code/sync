@@ -22,7 +22,7 @@ const toClientNotice = n => ({
 
 // ---------------- সব ইউজারের জন্য ----------------
 
-// GET /api/notices/pending : আমি এখনো "OK" চাপিনি এমন সব চালু নোটিস (পুরনো আগে)
+// GET /api/v1/notices/pending : আমি এখনো "OK" চাপিনি এমন সব চালু নোটিস (পুরনো আগে)
 export const getPendingNotices = asyncHandler(async (req, res) => {
     const acked = await NoticeAck.find({ user: req.user._id }, { notice: 1 }).lean();
     const notices = await Notice.find({
@@ -35,7 +35,7 @@ export const getPendingNotices = asyncHandler(async (req, res) => {
     res.status(200).json(new ApiResponse(200, notices.map(toClientNotice)));
 });
 
-// POST /api/notices/:id/ack : "OK" চাপা হয়েছে
+// POST /api/v1/notices/:id/ack : "OK" চাপা হয়েছে
 export const acknowledgeNotice = asyncHandler(async (req, res) => {
     const id = assertObjectId(req.params.id, "notice id");
     const notice = await Notice.findById(id).select("expiresAt").lean();
@@ -74,7 +74,7 @@ const buildPushPayload = notice => ({
     data: { url: "/", noticeId: String(notice._id) }
 });
 
-// POST /api/admin/notices
+// POST /api/v1/admin/notices
 export const createNotice = asyncHandler(async (req, res) => {
     const { title, body, imageUrl, imagePublicId, countdownTo, showDays } = req.body || {};
 
@@ -140,7 +140,7 @@ export const createNotice = asyncHandler(async (req, res) => {
     res.status(201).json(new ApiResponse(201, toClientNotice(notice), "Notice published"));
 });
 
-// GET /api/admin/notices : সব নোটিস + কতজন OK চেপেছে
+// GET /api/v1/admin/notices : সব নোটিস + কতজন OK চেপেছে
 export const listNotices = asyncHandler(async (_req, res) => {
     const notices = await Notice.find()
         .sort({ createdAt: -1 })
@@ -173,7 +173,7 @@ export const listNotices = asyncHandler(async (_req, res) => {
     );
 });
 
-// DELETE /api/admin/notices/:id
+// DELETE /api/v1/admin/notices/:id
 export const deleteNotice = asyncHandler(async (req, res) => {
     const id = assertObjectId(req.params.id, "notice id");
     const notice = await Notice.findByIdAndDelete(id);
