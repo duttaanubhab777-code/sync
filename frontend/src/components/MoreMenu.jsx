@@ -7,11 +7,9 @@ import {
     VolumeX,
     Download,
     Mail,
-    LogOut,
-    Image as ImageIcon
+    LogOut
 } from "lucide-react";
 import { isSoundEnabled, setSoundEnabled } from "../services/sounds.js";
-import WallpaperPicker from "./WallpaperPicker.jsx";
 
 // নেভবার-এ জায়গা বাঁচাতে সব কম-দরকারি জিনিস এই এক ⋮ মেনুতে।
 // মোবাইলে নিচ থেকে উঠে আসা sheet, ডেস্কটপে বাটনের নিচে ছোট popover।
@@ -23,7 +21,6 @@ export default function MoreMenu({ onSignOut, hasUpdate = false, className = "" 
     const [closing, setClosing] = useState(false);
     const [pos, setPos] = useState({ top: 0, right: 0 });
     const [soundOn, setSoundOn] = useState(isSoundEnabled());
-    const [showWallpaper, setShowWallpaper] = useState(false);
 
     const close = useCallback(() => {
         setClosing(true);
@@ -104,21 +101,6 @@ export default function MoreMenu({ onSignOut, hasUpdate = false, className = "" 
                                 </span>
                             </button>
 
-                            <button
-                                type="button"
-                                role="menuitem"
-                                className="sync-more-item"
-                                onClick={() => {
-                                    close();
-                                    setTimeout(() => setShowWallpaper(true), 120);
-                                }}
-                            >
-                                <span className="sync-more-ico">
-                                    <ImageIcon size={18} />
-                                </span>
-                                <span className="sync-more-text">Chat wallpaper</span>
-                            </button>
-
                             <button type="button" role="menuitem" className="sync-more-item" onClick={() => go("/updates")}>
                                 <span className="sync-more-ico">
                                     <Download size={18} />
@@ -155,8 +137,6 @@ export default function MoreMenu({ onSignOut, hasUpdate = false, className = "" 
                     </div>,
                     document.body
                 )}
-
-            {showWallpaper && <WallpaperPicker onClose={() => setShowWallpaper(false)} />}
         </>
     );
 }

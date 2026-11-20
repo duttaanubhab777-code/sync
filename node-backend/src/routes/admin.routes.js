@@ -17,13 +17,6 @@ import {
     deleteGroupByAdmin
 } from "../controllers/admin.controller.js";
 import { createNotice, listNotices, deleteNotice } from "../controllers/notice.controller.js";
-import {
-    adminListWallpapers,
-    createWallpaper,
-    renameWallpaper,
-    setDefaultWallpaper,
-    deleteWallpaper
-} from "../controllers/wallpaper.controller.js";
 
 const router = Router();
 
@@ -50,13 +43,5 @@ router.delete("/groups/:id", deleteGroupByAdmin);
 router.get("/notices", listNotices);
 router.post("/notices", createNotice);
 router.delete("/notices/:id", deleteNotice);
-
-// চ্যাট wallpaper: Admin ও Super Admin দুজনেই যোগ/default/মোছা করতে পারবে
-// "/wallpapers/default" অবশ্যই "/wallpapers/:id"-এর আগে থাকতে হবে
-router.get("/wallpapers", adminListWallpapers);
-router.post("/wallpapers", createWallpaper);
-router.put("/wallpapers/default", setDefaultWallpaper);
-router.patch("/wallpapers/:id", renameWallpaper);
-router.delete("/wallpapers/:id", deleteWallpaper);
 
 export default router;

@@ -62,7 +62,6 @@ import {
 import { playSound } from "../services/sounds.js";
 import MoreMenu from "../components/MoreMenu.jsx";
 import ChatFab from "../components/ChatFab.jsx";
-import ChatWallpaperLayer from "../components/ChatWallpaperLayer.jsx";
 import { useAppUpdates, isAndroidApp } from "../services/appUpdate.js";
 import {
     formatBytes,
@@ -1196,7 +1195,6 @@ export default function ChatPage() {
                     </div>
                 ) : (
                     <div className="sync-active-chat-wrap">
-                        <ChatWallpaperLayer />
                         <header className="sync-chat-header">
                             <div
                                 className="sync-chat-header-left"
