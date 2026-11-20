@@ -193,7 +193,7 @@ export default function AdminPage() {
     const loadStats = useCallback(async () => {
         setLoadingStats(true);
         try {
-            const res = await api.get("/api/admin/stats");
+            const res = await api.get("/api/v1/admin/stats");
             setStats(res.data?.data || null);
         } catch (err) {
             flashError(err);
@@ -212,7 +212,7 @@ export default function AdminPage() {
                     filter: userFilter
                 });
                 if (userSearch.trim()) params.set("search", userSearch.trim());
-                const res = await api.get(`/api/admin/users?${params}`);
+                const res = await api.get(`/api/v1/admin/users?${params}`);
                 const data = res.data?.data || {};
                 setUsers(data.users || []);
                 setUserTotal(data.total || 0);
@@ -237,7 +237,7 @@ export default function AdminPage() {
                     limit: "24"
                 });
                 if (before) params.set("before", before);
-                const res = await api.get(`/api/admin/media?${params}`);
+                const res = await api.get(`/api/v1/admin/media?${params}`);
                 const data = res.data?.data || {};
                 const list = data.items || [];
                 setMediaItems(prev => (before ? [...prev, ...list] : list));
@@ -254,7 +254,7 @@ export default function AdminPage() {
     const loadNotices = useCallback(async () => {
         setLoadingNotices(true);
         try {
-            const res = await api.get("/api/admin/notices");
+            const res = await api.get("/api/v1/admin/notices");
             const data = res.data?.data || {};
             setNotices(data.notices || []);
             setNoticeTotalUsers(data.totalUsers || 0);
@@ -270,7 +270,7 @@ export default function AdminPage() {
         try {
             const params = new URLSearchParams();
             if (groupSearch.trim()) params.set("search", groupSearch.trim());
-            const res = await api.get(`/api/admin/groups?${params}`);
+            const res = await api.get(`/api/v1/admin/groups?${params}`);
             setGroups(res.data?.data || []);
         } catch (err) {
             flashError(err);
@@ -329,7 +329,7 @@ export default function AdminPage() {
         setCreatingAdmin(true);
         setBannerErr("");
         try {
-            const res = await api.post("/api/admin/admins", {
+            const res = await api.post("/api/v1/admin/admins", {
                 fullName: newAdminForm.fullName.trim(),
                 username: newAdminForm.username.trim().toLowerCase(),
                 email: newAdminForm.email.trim().toLowerCase(),
@@ -364,8 +364,8 @@ export default function AdminPage() {
         setBusyUserId(target._id);
         try {
             const res = target.isBlocked
-                ? await api.delete(`/api/admin/users/${target._id}/block`)
-                : await api.post(`/api/admin/users/${target._id}/block`);
+                ? await api.delete(`/api/v1/admin/users/${target._id}/block`)
+                : await api.post(`/api/v1/admin/users/${target._id}/block`);
             const updated = res.data?.data;
             setUsers(prev =>
                 prev.map(u => (u._id === target._id ? updated : u))
@@ -387,7 +387,7 @@ export default function AdminPage() {
         const nextRole = target.role === "admin" ? "user" : "admin";
         setBusyUserId(target._id);
         try {
-            const res = await api.patch(`/api/admin/users/${target._id}/role`, {
+            const res = await api.patch(`/api/v1/admin/users/${target._id}/role`, {
                 role: nextRole
             });
             const updated = res.data?.data;
@@ -417,7 +417,7 @@ export default function AdminPage() {
         }
         setBusyUserId(target._id);
         try {
-            await api.delete(`/api/admin/users/${target._id}`);
+            await api.delete(`/api/v1/admin/users/${target._id}`);
             setUsers(prev => prev.filter(u => u._id !== target._id));
             setUserTotal(t => Math.max(0, t - 1));
             flashSuccess(`User @${target.username} deleted`);
@@ -444,8 +444,8 @@ export default function AdminPage() {
         try {
             const endpoint =
                 item.source === "story"
-                    ? `/api/admin/media/story/${item.id}`
-                    : `/api/admin/media/chat/${item.id}`;
+                    ? `/api/v1/admin/media/story/${item.id}`
+                    : `/api/v1/admin/media/chat/${item.id}`;
             await api.delete(endpoint);
             setMediaItems(prev => prev.filter(m => m.id !== item.id));
             if (previewMedia?.id === item.id) setPreviewMedia(null);
@@ -532,7 +532,7 @@ export default function AdminPage() {
                     : null,
                 showDays: Number(noticeShowDays) || 7
             };
-            await api.post("/api/admin/notices", payload);
+            await api.post("/api/v1/admin/notices", payload);
             setNoticeTitle("");
             setNoticeBody("");
             setNoticeImageUrl("");
@@ -553,7 +553,7 @@ export default function AdminPage() {
     const handleDeleteNotice = async id => {
         if (!window.confirm("Delete this notice for all users?")) return;
         try {
-            await api.delete(`/api/admin/notices/${id}`);
+            await api.delete(`/api/v1/admin/notices/${id}`);
             setNotices(prev => prev.filter(n => n._id !== id));
             flashSuccess("Notice removed");
             loadStats();
@@ -573,7 +573,7 @@ export default function AdminPage() {
         }
         setDeletingGroupId(g.id);
         try {
-            await api.delete(`/api/admin/groups/${g.id}`);
+            await api.delete(`/api/v1/admin/groups/${g.id}`);
             setGroups(prev => prev.filter(item => item.id !== g.id));
             flashSuccess(`Group "${g.name}" deleted`);
             loadStats();
