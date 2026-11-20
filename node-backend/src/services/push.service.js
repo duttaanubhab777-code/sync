@@ -175,6 +175,15 @@ export const buildFcmDataMap = (payload = {}) => {
             nested.url ||
             payload.url ||
             (nested.conversationId ? `/chats/${nested.conversationId}` : "/"),
+        // অ্যাপ আইকনের badge সংখ্যা (০ হলেও পাঠানো হয়, যাতে badge মুছে যায়)
+        badgeCount:
+            payload.badgeCount === undefined || payload.badgeCount === null
+                ? ""
+                : String(Math.max(0, Math.floor(Number(payload.badgeCount) || 0))),
+        chatUnread:
+            payload.chatUnread === undefined || payload.chatUnread === null
+                ? ""
+                : String(Math.max(0, Math.floor(Number(payload.chatUnread) || 0))),
         timestamp: String(Date.now())
     };
 

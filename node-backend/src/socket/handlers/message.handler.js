@@ -10,6 +10,7 @@ import {
 import { isObjectId } from "../../utils/helpers.js";
 import { Notification } from "../../models/notification.model.js";
 import { sendPushToUser } from "../../services/push.service.js";
+import { getTotalUnread } from "../../services/conversation.service.js";
 
 const ALLOWED_TYPES = [
     "text",
@@ -129,6 +130,11 @@ async function notifyRecipients({
         data
     };
 
+    // unread সংখ্যা এই মেসেজ যোগ হওয়ার পরের (আগেই updateOne হয়ে গেছে)
+    const freshConv = await Conversation.findById(conv._id, { unread: 1 })
+        .lean()
+        .catch(() => null);
+
     await Promise.allSettled(
         recipients.map(async recipientId => {
             await Notification.create({
@@ -139,7 +145,20 @@ async function notifyRecipients({
                 body,
                 data
             });
-            await sendPushToUser(recipientId, pushPayload);
+
+            // অ্যাপ আইকনের badge: মোট না-পড়া (badgeCount) ও এই চ্যাটের না-পড়া (chatUnread)
+            const badgeCount = await getTotalUnread(recipientId).catch(
+                () => 0
+            );
+            const chatUnread = Math.max(
+                0,
+                Math.floor(Number(freshConv?.unread?.[recipientId]) || 0)
+            );
+            await sendPushToUser(recipientId, {
+                ...pushPayload,
+                badgeCount,
+                chatUnread
+            });
         })
     );
 }

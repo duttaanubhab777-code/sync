@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { Conversation } from "../models/conversation.model.js";
 import { PUBLIC_USER_FIELDS, idOf } from "../utils/helpers.js";
 import { isUserOnline } from "../socket/store.js";
@@ -77,4 +78,20 @@ export const getContactIds = async userId => {
         }
     }
     return [...set];
+};
+
+// ইউজারের সব চ্যাট মিলিয়ে মোট না-পড়া মেসেজ (অ্যাপ আইকনের badge সংখ্যা, WhatsApp-এর মতো)
+export const getTotalUnread = async userId => {
+    const key = String(userId || "");
+    if (!mongoose.isValidObjectId(key)) return 0;
+    const rows = await Conversation.aggregate([
+        { $match: { members: new mongoose.Types.ObjectId(key) } },
+        {
+            $group: {
+                _id: null,
+                total: { $sum: { $ifNull: [`$unread.${key}`, 0] } }
+            }
+        }
+    ]);
+    return Math.max(0, Math.floor(Number(rows[0]?.total) || 0));
 };

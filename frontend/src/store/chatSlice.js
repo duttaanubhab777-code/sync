@@ -196,6 +196,7 @@ export const syncMissedMessages = createAsyncThunk(
 const initialState = {
     conversations: [],
     conversationsLoading: false,
+    conversationsLoaded: false,
     activeConversationId: null,
     messagesByConv: {},
     onlineUsers: {},
@@ -555,6 +556,7 @@ const chatSlice = createSlice({
             })
             .addCase(fetchConversations.fulfilled, (state, action) => {
                 state.conversationsLoading = false;
+                state.conversationsLoaded = true;
                 state.conversations = action.payload;
                 for (const c of action.payload) {
                     if (c.partner?._id) {

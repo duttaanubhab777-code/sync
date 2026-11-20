@@ -57,6 +57,23 @@ perms = [
     "android.permission.VIBRATE",
     "android.permission.WAKE_LOCK",
     "android.permission.RECEIVE_BOOT_COMPLETED",
+    # অ্যাপ আইকনের unread badge সংখ্যা (বিভিন্ন কোম্পানির লঞ্চারের জন্য)
+    "com.sec.android.provider.badge.permission.READ",
+    "com.sec.android.provider.badge.permission.WRITE",
+    "com.htc.launcher.permission.READ_SETTINGS",
+    "com.htc.launcher.permission.UPDATE_SHORTCUT",
+    "com.sonyericsson.home.permission.BROADCAST_BADGE",
+    "com.sonymobile.home.permission.PROVIDER_INSERT_BADGE",
+    "com.anddoes.launcher.permission.UPDATE_COUNT",
+    "com.majeur.launcher.permission.UPDATE_BADGE",
+    "com.huawei.android.launcher.permission.CHANGE_BADGE",
+    "com.huawei.android.launcher.permission.READ_SETTINGS",
+    "com.huawei.android.launcher.permission.WRITE_SETTINGS",
+    "android.permission.READ_APP_BADGE",
+    "com.oppo.launcher.permission.READ_SETTINGS",
+    "com.oppo.launcher.permission.WRITE_SETTINGS",
+    "me.everything.badger.permission.BADGE_COUNT_READ",
+    "me.everything.badger.permission.BADGE_COUNT_WRITE",
 ]
 feats = ["android.hardware.camera", "android.hardware.microphone", "android.hardware.location.gps"]
 add = ""
@@ -254,6 +271,17 @@ public class MainActivity extends BridgeActivity {
             return url != null ? url : "";
         }
 
+        // ওয়েব অংশ মোট unread পাঠায় → লঞ্চার আইকনে badge (০ হলে মুছে যায়)
+        @JavascriptInterface
+        public void setBadge(int count) {
+            BadgeHelper.set(MainActivity.this, count);
+        }
+
+        @JavascriptInterface
+        public void clearBadge() {
+            BadgeHelper.set(MainActivity.this, 0);
+        }
+
         @JavascriptInterface
         public void setActiveChat(String conversationId) {
             String clean = conversationId != null ? conversationId.trim() : "";
@@ -261,6 +289,50 @@ public class MainActivity extends BridgeActivity {
             if (!clean.isEmpty()) {
                 SyncMessagingService.clearConversationNotifications(MainActivity.this, clean);
             }
+        }
+    }
+}
+JAVA
+
+cat > "$JAVA_DIR/BadgeHelper.java" <<'JAVA'
+package com.sync.chat;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+import me.leolin.shortcutbadger.ShortcutBadger;
+
+// অ্যাপ আইকনের unread সংখ্যা (WhatsApp-এর মতো)। Samsung, Xiaomi, Oppo/Realme, Vivo, Huawei, Sony ইত্যাদির লঞ্চারে কাজ করে।
+// Pixel/AOSP লঞ্চারে সংখ্যা আসে নোটিফিকেশনের number থেকে (SyncMessagingService এ বসানো হয়)।
+public final class BadgeHelper {
+    private static final String PREFS = "sync_badge";
+    private static final String KEY = "count";
+
+    private BadgeHelper() {}
+
+    public static void set(Context context, int count) {
+        if (context == null) return;
+        int safe = Math.max(0, count);
+        try {
+            SharedPreferences prefs = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            prefs.edit().putInt(KEY, safe).apply();
+        } catch (Exception ignored) {
+        }
+        try {
+            if (safe > 0) {
+                ShortcutBadger.applyCount(context.getApplicationContext(), safe);
+            } else {
+                ShortcutBadger.removeCount(context.getApplicationContext());
+            }
+        } catch (Throwable ignored) {
+            // কিছু লঞ্চার badge সাপোর্ট করে না, সমস্যা নেই
+        }
+    }
+
+    public static int get(Context context) {
+        try {
+            return context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY, 0);
+        } catch (Exception e) {
+            return 0;
         }
     }
 }
@@ -431,6 +503,13 @@ public class SyncMessagingService extends MessagingService {
             return;
         }
 
+        // সার্ভার থেকে আসা মোট unread (badgeCount) ও এই চ্যাটের unread (chatUnread)
+        int badgeCount = parseCount(valueOr(data, "badgeCount", ""), -1);
+        int chatUnread = parseCount(valueOr(data, "chatUnread", ""), 0);
+        if (!"notice".equals(type) && badgeCount >= 0) {
+            BadgeHelper.set(this, badgeCount);
+        }
+
         String senderName = valueOr(data, "senderName", title);
         String messageText = valueOr(data, "messageText", body);
         String senderAvatarUrl = valueOr(data, "senderAvatar", "");
@@ -480,6 +559,7 @@ public class SyncMessagingService extends MessagingService {
                 messageId,
                 tag,
                 isGroup,
+                chatUnread,
                 contentIntent
             );
         }
@@ -497,6 +577,7 @@ public class SyncMessagingService extends MessagingService {
         String messageId,
         String tag,
         boolean isGroup,
+        int chatUnread,
         PendingIntent contentIntent
     ) {
         Bitmap senderCircle = loadAvatarOrInitials(senderAvatarUrl, senderName);
@@ -557,6 +638,12 @@ public class SyncMessagingService extends MessagingService {
             .setShowWhen(true)
             .setGroup(GROUP_KEY_CHATS)
             .setContentIntent(contentIntent);
+
+        // লঞ্চারের সংখ্যা: প্রতিটা চ্যাটের নোটিফিকেশনে ওই চ্যাটের unread (যোগ করলে মোট হয়)
+        if (chatUnread > 0) {
+            builder.setNumber(chatUnread);
+            builder.setBadgeIconType(NotificationCompat.BADGE_ICON_LARGE);
+        }
 
         if (photoBitmap != null && msgCount <= 1) {
             NotificationCompat.BigPictureStyle picStyle = new NotificationCompat.BigPictureStyle()
@@ -839,6 +926,15 @@ public class SyncMessagingService extends MessagingService {
         return sb.length() > 0 ? sb.toString() : "S";
     }
 
+    private static int parseCount(String raw, int fallback) {
+        if (raw == null || raw.isEmpty()) return fallback;
+        try {
+            return Math.max(0, Integer.parseInt(raw.trim()));
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
     private static String valueOr(Map<String, String> map, String key, String fallback) {
         if (map == null) return fallback;
         String val = map.get(key);
@@ -931,12 +1027,12 @@ python3 - "$GRADLE" <<'PY'
 import re, sys
 path = sys.argv[1]
 s = open(path, encoding="utf-8").read()
-if "firebase-messaging" in s:
-    print("firebase-messaging already present"); sys.exit(0)
+if "ShortcutBadger" in s:
+    print("dependencies already present"); sys.exit(0)
 m = re.search(r"^dependencies\s*\{", s, re.M)
 if not m:
     print("dependencies block not found", file=sys.stderr); sys.exit(1)
-dep = "\n    implementation 'com.google.firebase:firebase-messaging:24.1.0'\n    implementation 'androidx.core:core:1.15.0'"
+dep = "\n    implementation 'com.google.firebase:firebase-messaging:24.1.0'\n    implementation 'androidx.core:core:1.15.0'\n    implementation 'me.leolin:ShortcutBadger:1.1.22@aar'"
 s = s[:m.end()] + dep + s[m.end():]
 open(path, "w", encoding="utf-8").write(s)
 print("firebase-messaging dependency added")

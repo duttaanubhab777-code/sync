@@ -18,11 +18,13 @@ import NoticePopup from "./NoticePopup.jsx";
 import MoreMenu from "./MoreMenu.jsx";
 import EnableNotifications from "./notifications/EnableNotifications.jsx";
 import useSignOut from "../hooks/useSignOut.js";
+import useAppBadge from "../hooks/useAppBadge.js";
 import { forceLogout } from "../store/authSlice.js";
 import { fetchConversations, resetChatState } from "../store/chatSlice.js";
 import { fetchStories } from "../store/storySlice.js";
 import { connectSocket, disconnectSocket } from "../services/socket.js";
 import { isPlatformAdmin } from "../App.jsx";
+import { clearAppBadge } from "../services/appBadge.js";
 import { useAppUpdates, isAndroidApp } from "../services/appUpdate.js";
 
 export default function AppLayout() {
@@ -30,6 +32,7 @@ export default function AppLayout() {
     const navigate = useNavigate();
     const location = useLocation();
     const signOut = useSignOut();
+    useAppBadge(); // অ্যাপ আইকনে unread badge
     const { hasUpdate } = useAppUpdates({ autoLoad: isAndroidApp });
 
     const { user, isAuthenticated, serverWaking } = useSelector(
@@ -72,6 +75,7 @@ export default function AppLayout() {
     useEffect(() => {
         const handleUnauthorized = () => {
             disconnectSocket();
+            clearAppBadge();
             dispatch(resetChatState());
             dispatch(forceLogout());
             navigate("/login", { replace: true });

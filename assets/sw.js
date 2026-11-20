@@ -38,6 +38,21 @@ const endsLine = iso => {
     return `⏳ Ends ${when} at ${timeFmt.format(end).toLowerCase()} · ⏱ ${hrs}:${mins}:${secs}`;
 };
 
+// অ্যাপ আইকনের unread badge (PWA ইনস্টল করা থাকলে; সার্ভার badgeCount পাঠায়)
+const applyBadge = async count => {
+    try {
+        const n = Math.max(0, Math.floor(Number(count) || 0));
+        const nav = self.navigator;
+        if (n > 0 && nav && typeof nav.setAppBadge === "function") {
+            await nav.setAppBadge(n);
+        } else if (n === 0 && nav && typeof nav.clearAppBadge === "function") {
+            await nav.clearAppBadge();
+        }
+    } catch {
+        // সব ডিভাইসে Badging API নেই, সমস্যা নেই
+    }
+};
+
 self.addEventListener("push", event => {
     let payload = {};
     try {
@@ -51,6 +66,11 @@ self.addEventListener("push", event => {
             const type = payload.type || "message";
             const data = payload.data || {};
             const convId = data.conversationId ? String(data.conversationId) : "";
+
+            // চ্যাট মেসেজ হলে আইকনে মোট unread সংখ্যা বসানো (notice-এ badge বদলায় না)
+            if (type !== "notice" && payload.badgeCount !== undefined) {
+                await applyBadge(payload.badgeCount);
+            }
 
             // ইউজার যদি অ্যাপ খুলে ঠিক ওই চ্যাটেই থাকে, তবে চ্যাট মেসেজের আলাদা push দেখানোর দরকার নেই
             if (type !== "notice" && convId) {

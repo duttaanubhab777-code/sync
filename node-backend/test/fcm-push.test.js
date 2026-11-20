@@ -96,3 +96,21 @@ test("buildFcmDataMap converts all fields to strings for FCM HTTP v1", () => {
         assert.equal(typeof val, "string");
     }
 });
+
+test("buildFcmDataMap carries unread badge counts, including zero", () => {
+    const withBadge = buildFcmDataMap({
+        type: "message",
+        title: "Arnab",
+        body: "hi",
+        badgeCount: 7,
+        chatUnread: 3
+    });
+    assert.equal(withBadge.badgeCount, "7");
+    assert.equal(withBadge.chatUnread, "3");
+
+    const zero = buildFcmDataMap({ type: "message", badgeCount: 0 });
+    assert.equal(zero.badgeCount, "0");
+
+    const missing = buildFcmDataMap({ type: "message" });
+    assert.equal("badgeCount" in missing, false);
+});
