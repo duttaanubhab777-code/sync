@@ -1,165 +1,171 @@
-# Sync App — OTP Account Creation ও PythonAnywhere Email Relay সম্পূর্ণ গাইড
+# Sync Signup OTP and Mail Relay Setup
 
-Render-এর ফ্রি প্ল্যানে সরাসরি ইমেইল পাঠানো (SMTP Port `465` / `587`) ব্লক থাকে। তাই **Sync App**-এ নতুন অ্যাকাউন্ট খোলার সময় ৬-ডিজিটের **OTP Verification System** চালানোর জন্য **PythonAnywhere**-কে **Email Relay** হিসেবে যুক্ত করা হয়েছে।
+This guide explains how Sync verifies new accounts by email and how the PythonAnywhere Flask service delivers signup verification codes on behalf of the Node.js backend.
 
----
+## 1. Architecture and request flow
 
-## ১. পুরো সিস্টেমটা কীভাবে কাজ করে?
+Render hosts the Node.js application. The Node backend creates and verifies signup OTPs, while the PythonAnywhere service sends the email through Gmail SMTP.
 
-```text
-[ইউজার (Browser)]
-   │
-   ├─ ১. রেজিস্টার ফর্মে নাম, ইমেইল, ফোন, পাসওয়ার্ড দিয়ে "Send verification code" চাপে
-   ▼
-[Node.js Backend (Render)]  ──(POST /api/auth/register/send-otp)
-   │  • তথ্য যাচাই করে PendingSignup কালেকশনে সাময়িকভাবে রাখে (পাসওয়ার্ড ও OTP হ্যাশ করে)
-   │  • X-Relay-Key হেডারসহ PythonAnywhere-কে ইমেইল পাঠাতে বলে
-   ▼
-[Flask Mail Relay (PythonAnywhere)] ──(POST /mail/send)
-   │  • X-Relay-Key যাচাই করে
-   │  • Gmail SMTP (Port 465 SSL / 587 STARTTLS) দিয়ে ইউজারের ইমেইলে ৬-ডিজিট OTP পাঠায়
-   ▼
-[ইউজার (Browser)]
-   │  • ইমেইল থেকে ৬-ডিজিটের কোডটি বসিয়ে "Verify & create account" চাপে
-   ▼
-[Node.js Backend (Render)]  ──(POST /api/auth/register/verify-otp)
-   │  • OTP মিলে গেলে আসল User অ্যাকাউন্ট তৈরি করে এবং সাথে সাথে লগইন করিয়ে চ্যাটে নিয়ে যায়!
-```
+~~~text
+Browser
+  |
+  | POST /api/auth/register/send-otp
+  v
+Node.js backend (Render)
+  |  - validates registration details
+  |  - stores a temporary pending signup
+  |  - protects the OTP and password data
+  |
+  | POST /mail/send + X-Relay-Key
+  v
+PythonAnywhere Flask mail relay
+  |  - validates the shared relay secret
+  |  - sends the OTP through Gmail SMTP
+  v
+User's email inbox
 
----
+Browser
+  | POST /api/auth/register/verify-otp
+  v
+Node.js backend
+  |  - verifies the OTP and expiry
+  |  - creates the account after successful verification
+  v
+Authenticated Sync session
+~~~
 
-## ২. আপনার করা ফাইলের সাথে নতুন কী কী যোগ ও সম্পূর্ণ করা হয়েছে?
+The OTP is generated and verified by the Node backend. The Python service is only a protected delivery relay; it does not create user accounts or verify OTPs.
 
-আপনি ব্যাকএন্ড এবং পাইথন রিলের ফাইলগুলো চমৎকারভাবে তৈরি করেছিলেন। পুরো সিস্টেমটি যাতে শুরু থেকে শেষ পর্যন্ত নির্ভুলভাবে কাজ করে, তার জন্য নিচের বাকি কাজগুলো সম্পূর্ণ করা হয়েছে:
+## 2. Signup flow behavior
 
-| অংশ | ফাইল | কী যোগ করা হয়েছে |
-| :--- | :--- | :--- |
-| **Frontend (React)** | `frontend/src/pages/RegisterPage.jsx` | ২-ধাপের রেজিস্ট্রেশন UI: **ধাপ ১**-এ ইউজারের তথ্য নেওয়া ও ভ্যালিডেশন, আর **ধাপ ২**-এ ৬টি আলাদা OTP বক্স (কপি-পেস্ট ও ব্যাকস্পেস সাপোর্টসহ), ১০ মিনিটের মেয়াদ টাইমার, ৬০ সেকেন্ডের **Resend code** টাইমার এবং ভুল ইমেইল সংশোধনের জন্য **Change details** বাটন। |
-| **Frontend (Redux)** | `frontend/src/store/authSlice.js` | `sendSignupOtp` (`/api/auth/register/send-otp`), `resendSignupOtp` (`/api/auth/register/resend-otp`), এবং `verifySignupOtp` (`/api/auth/register/verify-otp`) থাঙ্ক ও রেট-লিমিট (`retryAfterSeconds`) হ্যান্ডলিং। |
-| **Frontend (CSS)** | `frontend/src/styles/auth-shell.css` | Sync-এর ডার্ক-গ্রিন থিমের সাথে মিলিয়ে OTP ইনপুট গ্রিড, ইমেইল ব্যাজ, টাইমার ও মোবাইল রেসপনসিভ স্টাইল। |
-| **Python Tests** | `python-service/tests/test_mail_relay.py` | `/mail/send`, `/mail/diag`, `X-Relay-Key` নিরাপত্তা ও রেট-লিমিটের অটোমেটেড টেস্ট। |
-| **Node Tests** | `node-backend/test/otp-and-mail.test.js` | OTP জেনারেশন, HMAC হ্যাশিং, ইমেইল টেমপ্লেট ও রিলের অটোমেটেড টেস্ট। |
-| **Documentation** | `OTP_AND_MAIL_RELAY_SETUP_GUIDE.md`, `docs/API.md`, `python-service/README.md` | সম্পূর্ণ বাংলা সেটআপ গাইড ও আপডেটেড API ডকুমেন্টেশন। |
+1. The user submits the required account details.
+2. The backend validates the details and sends a six-digit verification code.
+3. The user enters the code before it expires.
+4. The backend verifies the code and creates the account.
+5. The user receives an authenticated session after successful verification.
 
----
+The frontend supports separate OTP input fields, paste handling, a resend cooldown, an expiry countdown, and the ability to return to the registration details.
 
-## ৩. ধাপ ১ — Gmail থেকে ১৬-অক্ষরের App Password তৈরি করা
+The backend enforces resend and verification-attempt limits. A client-side timer is only a usability feature; server-side limits remain authoritative.
 
-PythonAnywhere থেকে ইমেইল পাঠানোর জন্য আপনার সাধারণ Gmail পাসওয়ার্ড কাজ করবে না; Google-এর **App Password** লাগবে:
+## 3. Gmail sender requirements
 
-1. যে Gmail অ্যাকাউন্ট থেকে OTP ইমেইল পাঠাতে চান (যেমন `sync93346@gmail.com`), সেই অ্যাকাউন্টে লগইন করে [Google Account Security](https://myaccount.google.com/security)-তে যান।
-2. **2-Step Verification** চালু না থাকলে সেটি **On** করুন।
-3. উপরের সার্চ বারে লিখুন **App passwords** এবং সেখানে ঢুকুন।
-4. App name হিসেবে লিখুন `Sync Mail Relay` এবং **Create** চাপুন।
-5. স্ক্রিনে ১৬ অক্ষরের একটি কোড দেখাবে (যেমন: `abcd efgh ijkl mnop`)। এটি কপি করে রাখুন।
+Use a dedicated Gmail account for automated signup email.
 
----
+1. Sign in to the Google Account that will send Sync verification emails.
+2. Open [Google Account Security](https://myaccount.google.com/security).
+3. Enable 2-Step Verification if it is not already enabled.
+4. Open **App passwords** from the Google Account security settings.
+5. Create an app password for the Sync mail relay.
+6. Store the generated app password securely. Do not commit it to GitHub or share it in screenshots.
 
-## ৪. ধাপ ২ — PythonAnywhere-এ সেটআপ (`/home/sync2026/mysite`)
+A normal Gmail account password is not supported. Google may change the availability or location of App Password settings.
 
-আপনার স্ক্রিনশট অনুযায়ী আপনার PythonAnywhere ইউজারনেম `sync2026` এবং ফোল্ডার হলো `/home/sync2026/mysite`।
+## 4. Configure the PythonAnywhere service
 
-### ৪.১ ফাইল আপডেট করা
-যদি আপনি ইতিমধ্যে নতুন `app.py`, `settings.py`, `verify_install.py`, `routes/mail.py`, `services/mail_service.py` ফাইলগুলো `/home/sync2026/mysite`-এ তুলে থাকেন, তাহলে আবার তোলার দরকার নেই। আর যদি একসাথে তুলতে চান, তবে প্রজেক্টের `python-service/` ফোল্ডারের ফাইলগুলো `/home/sync2026/mysite`-এ রাখুন।
+Deploy the Flask service by following the [PythonAnywhere deployment guide](PYTHONANYWHERE_DEPLOYMENT_GUIDE.md). After the service files and dependencies are in place, create a private config.py beside app.py.
 
-### ৪.২ `config.py` ফাইলে Gmail ও Relay Secret বসানো
-1. PythonAnywhere-এর **Files** ট্যাবে গিয়ে `/home/sync2026/mysite/config.py` ফাইলটিতে ক্লিক করে ওপেন করুন।
-2. সেখানে আগের `JWT_SECRET` ও `CLOUDINARY_...` ভ্যারিয়েবলগুলোর নিচে এই ৩টি নতুন লাইন যোগ করুন:
+Copy the template:
 
-```python
-# --- আগের সেটিংস (যেমন আছে তেমনই থাকবে) ---
-JWT_SECRET = "আপনার_রেন্ডারের_JWT_SECRET"
-CLOUDINARY_CLOUD_NAME = "আপনার_cloud_name"
-CLOUDINARY_API_KEY = "আপনার_api_key"
-CLOUDINARY_API_SECRET = "আপনার_api_secret"
+~~~bash
+cd ~/sync-media-service
+cp config.example.py config.py
+chmod 600 config.py
+~~~
+
+Set the following values in config.py:
+
+~~~python
+# Media signing
+JWT_SECRET = "<same value used by the Node backend>"
+CLOUDINARY_CLOUD_NAME = "<Cloudinary cloud name>"
+CLOUDINARY_API_KEY = "<Cloudinary API key>"
+CLOUDINARY_API_SECRET = "<Cloudinary API secret>"
 ALLOWED_ORIGINS = "https://sync-5lfm.onrender.com"
 
-# --- নতুন যোগ করুন: Signup OTP Mail Relay ---
-GMAIL_USER = "sync93346@gmail.com"
-GMAIL_APP_PASSWORD = "abcd efgh ijkl mnop"
-MAIL_RELAY_SECRET = "SyncRelaySecret2026Key9876543210"
-```
+# Signup OTP mail relay
+GMAIL_USER = "<dedicated Gmail sender address>"
+GMAIL_APP_PASSWORD = "<Google App Password>"
+MAIL_RELAY_SECRET = "<long random secret of at least 24 characters>"
+~~~
 
-> **গুরুত্বপূর্ণ:**
-> - `GMAIL_USER`: আপনার আসল Gmail অ্যাড্রেস দিন।
-> - `GMAIL_APP_PASSWORD`: ধাপ ১-এ পাওয়া ১৬ অক্ষরের App Password দিন (মাঝখানে স্পেস থাকলেও অসুবিধা নেই)।
-> - `MAIL_RELAY_SECRET`: কমপক্ষে ২৪ অক্ষরের যেকোনো লম্বা গোপন টেক্সট দিন (ইংরেজি অক্ষর ও সংখ্যা মিলিয়ে)। **এই একই টেক্সট হুবহু Render-এর Environment-এও বসাতে হবে।**
+Replace every placeholder with the actual value. Do not copy the placeholders literally.
 
-3. উপরে ডানদিকে **Save** বাটন চাপুন।
+### Configuration rules
 
-### ৪.৩ WSGI ফাইল চেক করা
-যেহেতু আপনার ফোল্ডারের নাম `mysite`, তাই PythonAnywhere-এর **Web** ট্যাবে গিয়ে **WSGI configuration file** লিংকে ক্লিক করে নিশ্চিত হয়ে নিন `PROJECT_HOME` ঠিক আছে:
+| Setting | Requirement |
+| --- | --- |
+| JWT_SECRET | Must exactly match the Node backend's JWT_SECRET. |
+| CLOUDINARY_CLOUD_NAME | Must identify the Cloudinary account used by Sync. |
+| CLOUDINARY_API_KEY | Cloudinary API key for the same account. |
+| CLOUDINARY_API_SECRET | Private Cloudinary secret. Keep it only in the Python service configuration. |
+| ALLOWED_ORIGINS | Comma-separated list of approved browser origins. Do not use a wildcard. |
+| GMAIL_USER | Dedicated Gmail sender address. |
+| GMAIL_APP_PASSWORD | Google App Password, not the normal account password. |
+| MAIL_RELAY_SECRET | Long random shared secret; it must match the Node backend value exactly. |
 
-```python
-import sys
+The service also supports environment variables. When both an environment variable and a value in config.py are present, the environment variable takes precedence.
 
-PROJECT_HOME = "/home/sync2026/mysite"
+Never commit config.py. The file is excluded by the Python service's .gitignore.
 
-if PROJECT_HOME not in sys.path:
-    sys.path.insert(0, PROJECT_HOME)
+## 5. Configure the Node backend on Render
 
-from app import app as application
-```
+In the Render dashboard, open the Sync web service and select **Environment**. Add or verify these variables:
 
-### ৪.৪ কনসোলে চেক ও Web App Reload দেওয়া
-1. PythonAnywhere-এর **Consoles** ট্যাব থেকে আপনার Bash console খুলুন এবং চালান:
-   ```bash
-   cd ~/mysite
-   python verify_install.py
-   ```
-2. সব ঠিক থাকলে দেখবেন:
-   - `OK       configuration is complete`
-   - `OK       mail relay configuration is complete (sender: ...)`
-   - `RESULT: everything looks good`
-3. এবার **Web** ট্যাবে গিয়ে বড় সবুজ **Reload sync2026.pythonanywhere.com** বাটন চাপুন।
+| Variable | Value |
+| --- | --- |
+| PYTHON_SERVICE_URL | The base URL of the PythonAnywhere app, without a trailing slash or endpoint path. |
+| MAIL_RELAY_SECRET | Exactly the same value configured in PythonAnywhere. |
+| JWT_SECRET | Exactly the same value configured in PythonAnywhere. |
+| CLOUDINARY_CLOUD_NAME | The Cloudinary cloud name used by the Python service. |
 
----
+Save the environment changes and allow Render to redeploy the service.
 
-## ৫. ধাপ ৩ — PythonAnywhere Mail Relay কাজ করছে কিনা পরীক্ষা করা
+Do not add CLOUDINARY_API_SECRET to the Render frontend or to any VITE_* variable. The private Cloudinary API secret belongs only in the Python service configuration.
 
-Reload দেওয়ার পর আপনার ফোনের বা কম্পিউটারের ব্রাউজারে নিচের দুটি লিংক খুলে চেক করুন:
+## 6. Verify the mail relay
 
-1. **Health Check:**
-   ```text
-   https://sync2026.pythonanywhere.com/health
-   ```
-   এখানে `"configured": true` এবং `"mailConfigured": true` দেখাবে।
+After saving config.py, run the service's self-check from the PythonAnywhere Bash console:
 
-2. **সরাসরি টেস্ট ইমেইল পাঠানো (`/mail/diag`):**
-   ব্রাউজারে এই লিংকটি খুলুন (`<MAIL_RELAY_SECRET>` এবং `<YOUR_EMAIL>`-এর জায়গায় আপনার মান বসান):
-   ```text
-   https://sync2026.pythonanywhere.com/mail/diag?key=<MAIL_RELAY_SECRET>&to=<YOUR_EMAIL>
-   ```
-   উদাহরণ:
-   `https://sync2026.pythonanywhere.com/mail/diag?key=SyncRelaySecret2026Key9876543210&to=sync93346@gmail.com`
+~~~bash
+cd ~/sync-media-service
+python verify_install.py
+~~~
 
-   সব ঠিক থাকলে উত্তরে `"ok": true` এবং `"testMail": "Sent via port 465"` দেখাবে এবং আপনার ইনবক্সে একটি টেস্ট ইমেইল চলে আসবে!
+Resolve any reported configuration problems, then reload the PythonAnywhere web app.
 
----
+Open the health endpoint:
 
-## ৬. ধাপ ৪ — GitHub Push ও Render-এ Environment Variable সেটআপ
+~~~text
+https://<YOUR_PYTHONANYWHERE_USERNAME>.pythonanywhere.com/health
+~~~
 
-1. **GitHub-এ কোড Push করুন:**
-   এই ZIP ফাইলের আপডেট করা প্রজেক্টটি আপনার GitHub রিপোজিটরিতে push করুন (যাতে নতুন `RegisterPage.jsx`, `authSlice.js`, `auth-shell.css` ও ব্যাকএন্ডের ফাইলগুলো Render-এ চলে যায়)।
-2. **Render Dashboard-এ Environment Variable যোগ করুন:**
-   - [Render Dashboard](https://dashboard.render.com)-এ আপনার **sync** সার্ভিসে যান → বাঁদিকে **Environment** ট্যাবে ক্লিক করুন।
-   - নিচের ভ্যারিয়েবল দুটি যোগ/আপডেট করুন:
+The response should indicate that the service is healthy and that mail configuration is available. Health responses must not expose secret values.
 
-| Key | Value |
-| :--- | :--- |
-| `PYTHON_SERVICE_URL` | `https://sync2026.pythonanywhere.com` *(শেষে `/` দেবেন না)* |
-| `MAIL_RELAY_SECRET` | `config.py`-তে যে `MAIL_RELAY_SECRET` দিয়েছেন **হুবহু সেটি** |
+For an owner-only SMTP diagnostic, use the /mail/diag endpoint with the relay key as documented in [the Python service README](../python-service/README.md). Treat the relay key as a password. Prefer the X-Relay-Key request header where supported; avoid sharing diagnostic URLs because query strings can be retained in browser history and server logs.
 
-3. **Save Changes** চাপুন। Render নিজে থেকে নতুন ফ্রন্টএন্ড বিল্ড করে সার্ভার চালু করবে।
-4. ডিপ্লয় শেষ হলে ব্রাউজারে `https://sync-5lfm.onrender.com/health` খুললে `"mailRelayConfigured": true` দেখতে পাবেন।
+Then check the Node health endpoint:
 
----
+~~~text
+https://sync-5lfm.onrender.com/health
+~~~
 
-## ৭. সাধারণ সমস্যা ও দ্রুত সমাধান (Troubleshooting)
+Confirm that the mail relay is reported as configured.
 
-| সমস্যা / এরর মেসেজ | কারণ | সমাধান |
-| :--- | :--- | :--- |
-| `/health`-এ `"mailConfigured": false` | PythonAnywhere-এর `config.py`-তে `GMAIL_USER`, `GMAIL_APP_PASSWORD` বা `MAIL_RELAY_SECRET` ঠিকমতো বসেনি বা ২৪ অক্ষরের কম। | `cd ~/mysite && python verify_install.py` চালিয়ে দেখুন কোনটা ভুল দেখাচ্ছে, ঠিক করে Web ট্যাবে **Reload** দিন। |
-| `/mail/diag`-এ `FAIL gmail_auth_failed` | সাধারণ Gmail পাসওয়ার্ড দেওয়া হয়েছে অথবা App Password ভুল। | Google Account → Security → 2-Step Verification চালু করে নতুন ১৬-অক্ষরের **App Password** বানিয়ে `config.py`-তে বসান ও **Reload** দিন। |
-| রেজিস্টার করার সময় `We could not send the verification email right now (503)` | Render-এ `PYTHON_SERVICE_URL` বা `MAIL_RELAY_SECRET` সেট করা নেই, অথবা দুপাশে `MAIL_RELAY_SECRET` মেলেনি। | `https://sync-5lfm.onrender.com/health` খুলে দেখুন `mailRelayConfigured: true` কিনা এবং দুই জায়গায় `MAIL_RELAY_SECRET` হুবহু এক কিনা মিলিয়ে নিন। |
-| রেজিস্টার পেজে কোড পাঠানোর ফর্ম আসছে কিন্তু OTP বক্স আসছে না | ব্রাউজারে পুরনো ক্যাশ বা গিটহাবে নতুন `frontend/` ফাইলগুলো push হয়নি। | আপডেট করা `frontend/` ফোল্ডারসহ GitHub-এ push করুন যাতে Render আবার `npm run build` চালায়, এবং ব্রাউজার হার্ড-রিফ্রেশ করুন। |
+Finally, test the complete registration flow with an email address you control. Request a code, verify that it arrives, and complete registration. Do not publish OTPs, app passwords, or relay secrets in logs, screenshots, issues, or pull requests.
+
+## 7. Troubleshooting
+
+| Symptom | Likely cause | Recommended action |
+| --- | --- | --- |
+| Python /health reports mail is not configured | A Gmail setting or the relay secret is missing or invalid. | Run python verify_install.py, correct config.py, and reload the PythonAnywhere app. |
+| SMTP authentication fails | A normal Gmail password was used, or the App Password is incorrect. | Generate a valid Google App Password and update GMAIL_APP_PASSWORD. |
+| Registration reports that the verification email could not be sent | The Node service cannot reach the Python service, or the shared relay secret does not match. | Check PYTHON_SERVICE_URL, both MAIL_RELAY_SECRET values, Python health, and Render logs. |
+| The OTP interface does not appear | The deployed frontend is outdated or browser assets are cached. | Confirm the frontend changes are deployed and refresh the page. |
+| Python returns 401 for a media request | The access token is invalid, expired, or signed with a different secret. | Confirm that both services use the same JWT_SECRET; obtain a fresh access token. |
+
+## Related documentation
+
+- [API reference](API.md)
+- [Python service README](../python-service/README.md)
+- [PythonAnywhere deployment guide](PYTHONANYWHERE_DEPLOYMENT_GUIDE.md)
