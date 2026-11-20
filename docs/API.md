@@ -43,7 +43,7 @@ Send the short-lived access token in the Authorization header using the Bearer s
 
 The current application limits include:
 
-- General /api traffic: 300 requests per minute.
+- General /api/v1 traffic: 300 requests per minute.
 - Failed registration/login attempts: 20 per 15 minutes.
 - OTP send requests: 10 per 15 minutes.
 - Failed OTP verification attempts: 30 per 15 minutes.
