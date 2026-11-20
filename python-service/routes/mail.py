@@ -34,7 +34,7 @@ def _key_ok(given: str, secret: str) -> bool:
 def _guard(allow_query_key: bool = False):
     """Common checks. Returns (runtime, settings, client_ip, error_response_or_None).
 
-    ``allow_query_key`` is only for /mail/diag: a phone browser cannot send custom headers.
+    ``allow_query_key`` is only for /api/v1/mail/diag: a phone browser cannot send custom headers.
     (A key in a URL can end up in browser history, so use it only for the self-test.)
     """
     runtime = current_app.extensions["sync_media"]
@@ -45,7 +45,7 @@ def _guard(allow_query_key: bool = False):
         return runtime, settings, client_ip, error_response(403, "Forbidden")
 
     if not settings.mail_configured:
-        log.error("/mail called but the mail relay is not configured: %s", "; ".join(settings.mail_problems))
+        log.error("/api/v1/mail called but the mail relay is not configured: %s", "; ".join(settings.mail_problems))
         return runtime, settings, client_ip, error_response(503, "Mail relay is not configured")
 
     blocked, retry_after = runtime.mail_failure_limiter.is_blocked(client_ip)
@@ -103,7 +103,7 @@ def send():
     return success_response({"port": port}, "Mail sent")
 
 
-@mail_bp.get("/api/v1/mail/diag")
+@mail_bp.get("/mail/diag")
 def diag():
     """Owner-only self-test (phone browser can't send headers, so use curl / the Bash console)."""
     _runtime, settings, _ip, failed = _guard(allow_query_key=True)
