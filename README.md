@@ -469,16 +469,16 @@ The Node API is mounted under `/api`. Most application endpoints require a valid
 
 | Area | Base path | Purpose |
 | --- | --- | --- |
-| Authentication | `/api/auth` | OTP signup, resend/verify OTP, login, refresh, logout, current user |
-| Users | `/api/users` | User search, public profiles, profile updates and block controls |
-| Conversations | `/api/conversations` | Direct/group conversations, members, read state and paginated messages |
-| Stories | `/api/stories` | Story feed, create, view, viewers, reactions and replies |
-| Notifications | `/api/notifications` | In-app notifications, read state, push config and device subscriptions |
-| Notices | `/api/notices` | Pending notices and acknowledgement |
-| Admin | `/api/admin` | Platform stats, users, roles, media, groups and notices |
-| Link previews | `/api/link-preview` | Fetch metadata for a URL |
-| App updates | `/api/app/updates` | Public Android release/update metadata |
-| Offline sync | `/api/sync` | Recover messages and message updates missed while disconnected |
+| Authentication | `/api/v1/auth` | OTP signup, resend/verify OTP, login, refresh, logout, current user |
+| Users | `/api/v1/users` | User search, public profiles, profile updates and block controls |
+| Conversations | `/api/v1/conversations` | Direct/group conversations, members, read state and paginated messages |
+| Stories | `/api/v1/stories` | Story feed, create, view, viewers, reactions and replies |
+| Notifications | `/api/v1/notifications` | In-app notifications, read state, push config and device subscriptions |
+| Notices | `/api/v1/notices` | Pending notices and acknowledgement |
+| Admin | `/api/v1/admin` | Platform stats, users, roles, media, groups and notices |
+| Link previews | `/api/v1/link-preview` | Fetch metadata for a URL |
+| App updates | `/api/v1/app/updates` | Public Android release/update metadata |
+| Offline sync | `/api/v1/sync` | Recover messages and message updates missed while disconnected |
 | Health | `/health` | Service health and non-secret runtime configuration status |
 
 ### Real-time events

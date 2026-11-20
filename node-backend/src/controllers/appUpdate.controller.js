@@ -255,7 +255,7 @@ const refreshCache = async () => {
     return inflightFetch;
 };
 
-// GET /api/app/updates (public)
+// GET /api/v1/app/updates (public)
 export const getAppUpdates = asyncHandler(async (req, res) => {
     const age = Date.now() - cache.at;
     const wantsFresh = req.query.fresh === "1" && age > FRESH_MIN_GAP_MS;

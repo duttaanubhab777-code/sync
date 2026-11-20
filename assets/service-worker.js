@@ -3,7 +3,7 @@
 // - Vite এর hashed /assets/* ফাইল: cache-first (immutable)
 // - HTML: network-first, নেট না থাকলে cached shell
 // - /api ও /socket.io কখনো cache হয় না
-const VERSION = "v4";
+const VERSION = "v5";
 const SHELL_CACHE = `sync-shell-${VERSION}`;
 const ASSET_CACHE = `sync-assets-${VERSION}`;
 
