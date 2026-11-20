@@ -9,14 +9,27 @@ import {
     useCachedWallpaper
 } from "../services/wallpaperCache.js";
 
-// চ্যাটের পেছনের wallpaper (WhatsApp-এর মতো: পুরো জায়গা জুড়ে, কেন্দ্র ঠিক রেখে cover)।
-// ছবি ডিভাইসে সেভ করা থাকে, তাই চ্যাট খুললেই তাৎক্ষণিক দেখায় (নেট লাগে না)।
+// ছবি আগে থেকেই লোড/ডিকোড হয়ে আছে কিনা সিঙ্ক্রোনাসলি দেখা (HTTP cache-এ থাকলে complete = true)
+const isAlreadyLoaded = src => {
+    if (!src) return false;
+    try {
+        const img = new Image();
+        img.src = src;
+        return img.complete && img.naturalWidth > 0;
+    } catch {
+        return false;
+    }
+};
+
+// চ্যাটের পেছনের wallpaper (WhatsApp-এর মতো): চ্যাট খোলার প্রথম ফ্রেমেই ছবি থাকে।
+// - ডিভাইসে সেভ করা ছবি (blob) বা ব্রাউজারে cache করা ছবি হলে কোনো fade/delay ছাড়াই
+// - একেবারে নতুন ছবি হলে তবেই হালকা fade-in
 export default function ChatWallpaperLayer() {
     const { effective, loaded } = useWallpaper();
     const url = effective ? wallpaperFullUrl(effective.url) : "";
     const src = useCachedWallpaper(url);
     const isLocal = Boolean(src) && src === peekCachedWallpaper(url);
-    const [ready, setReady] = useState(isLocal);
+    const [ready, setReady] = useState(() => isLocal || isAlreadyLoaded(src));
 
     useEffect(() => {
         if (!loaded) loadWallpapers();
@@ -27,17 +40,17 @@ export default function ChatWallpaperLayer() {
             setReady(false);
             return undefined;
         }
-        // ডিভাইসে থাকা ছবি সাথে সাথে দেখানো; সরাসরি URL হলে পুরো লোড হলে ফুটিয়ে তোলা
-        if (isLocal) {
+        if (isLocal || isAlreadyLoaded(src)) {
             setReady(true);
             return undefined;
         }
-        setReady(false);
+        let alive = true;
         const img = new Image();
-        img.onload = () => setReady(true);
-        img.onerror = () => setReady(false);
+        img.onload = () => alive && setReady(true);
+        img.onerror = () => alive && setReady(false);
         img.src = src;
         return () => {
+            alive = false;
             img.onload = null;
             img.onerror = null;
         };
@@ -45,9 +58,12 @@ export default function ChatWallpaperLayer() {
 
     if (!src) return null;
 
+    // পুরো সিঙ্ক্রোনাস রেন্ডারে ready ধরা হয়, যাতে প্রথম paint-এই দেখা যায়
+    const instant = ready || isLocal;
+
     return (
         <div
-            className={`sync-wallpaper-layer ${ready ? "is-ready" : ""}`}
+            className={`sync-wallpaper-layer ${instant ? "is-ready is-instant" : ""}`}
             style={{ backgroundImage: `url("${src}")` }}
             aria-hidden="true"
         />

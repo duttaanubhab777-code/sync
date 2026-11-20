@@ -20,6 +20,8 @@
     transform: translateZ(0);
 }
 .sync-wallpaper-layer.is-ready { opacity: 1; }
+/* আগে থেকে ডিভাইসে থাকা ছবি: কোনো fade নেই, প্রথম ফ্রেমেই */
+.sync-wallpaper-layer.is-instant { transition: none; }
 
 /* লেখা যাতে যেকোনো ছবিতে পড়া যায়: হালকা গাঢ় আবরণ */
 .sync-wallpaper-layer::after {

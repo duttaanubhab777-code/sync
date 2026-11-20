@@ -139,36 +139,33 @@ export const prefetchWallpapers = async urls => {
     await Promise.all([worker(), worker()]);
 };
 
-// React hook: ছবির URL দিলে ডিভাইসে-সেভ করা কপির src দেয়।
-// নতুন ছবি আসার সময় আগের ছবি ধরে রাখে (ফাঁকা ঝলক হয় না); ব্যর্থ হলে সরাসরি URL।
+// React hook: ছবির URL দিলে এখনই (সিঙ্ক্রোনাসলি) দেখানোর মতো src দেয়।
+// - মেমোরিতে সেভ করা কপি থাকলে সেটা (blob) — একদম তাৎক্ষণিক
+// - না থাকলে সরাসরি URL (ব্রাউজারের HTTP cache থেকে দ্রুত আসে) — কখনোই "খালি" অপেক্ষা নেই
+// ব্যাকগ্রাউন্ডে ছবিটা ডিভাইসে সেভ হয়ে যায়, যাতে পরের বার blob দিয়ে চলে।
 export const useCachedWallpaper = url => {
-    const [src, setSrc] = useState(() => peekCachedWallpaper(url));
+    const [resolved, setResolved] = useState({ url: "", src: "" });
     const [attempt, setAttempt] = useState(0);
 
+    const hit = peekCachedWallpaper(url);
+    const src = !url ? "" : hit || (resolved.url === url ? resolved.src : url);
+
     useEffect(() => {
-        if (!url) {
-            setSrc("");
-            return undefined;
-        }
-        const hit = peekCachedWallpaper(url);
-        if (hit) {
-            setSrc(hit);
-            return undefined;
-        }
+        if (!url || peekCachedWallpaper(url)) return undefined;
         let cancelled = false;
         resolveWallpaper(url).then(local => {
-            if (cancelled) return;
-            // ডাউনলোড ব্যর্থ হলে সরাসরি URL, আর কিছুক্ষণ পরে আবার চেষ্টা
-            setSrc(local || url);
+            if (cancelled || !local) return;
+            // সরাসরি URL-এ যা দেখানো হচ্ছে সেটাই থাকে (ঝলক এড়াতে); পরের বার blob ব্যবহার হবে
+            setResolved({ url, src: url });
         });
         return () => {
             cancelled = true;
         };
     }, [url, attempt]);
 
-    // সরাসরি URL-এ আটকে থাকলে, নেট ফিরলে/অ্যাপ সামনে এলে সেভ করা কপির জন্য আবার চেষ্টা
+    // সেভ করা কপি না পেলে, নেট ফিরলে/অ্যাপ সামনে এলে আবার চেষ্টা
     useEffect(() => {
-        if (!url || !src || src !== url) return undefined;
+        if (!url || peekCachedWallpaper(url)) return undefined;
         const retry = () => {
             if (document.visibilityState === "hidden") return;
             setAttempt(n => n + 1);
@@ -181,7 +178,7 @@ export const useCachedWallpaper = url => {
             window.removeEventListener("online", retry);
             document.removeEventListener("visibilitychange", retry);
         };
-    }, [url, src]);
+    }, [url, attempt]);
 
     return src;
 };

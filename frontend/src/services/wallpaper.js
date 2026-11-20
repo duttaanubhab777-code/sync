@@ -1,6 +1,10 @@
 import { useSyncExternalStore } from "react";
 import { api, extractErrorMessage } from "./api.js";
-import { prefetchWallpapers, pruneWallpaperCache } from "./wallpaperCache.js";
+import {
+    prefetchWallpapers,
+    pruneWallpaperCache,
+    resolveWallpaper as resolveWallpaperImage
+} from "./wallpaperCache.js";
 
 // চ্যাট wallpaper-এর ক্লায়েন্ট স্টোর (সবাই একই state দেখে, তাই Redux ছাড়াই হালকাভাবে)।
 // - wallpapers : admin-দের আপলোড করা সব wallpaper
@@ -161,3 +165,21 @@ export const wallpaperFullUrl = url => {
 // picker-এর ছোট thumbnail (ফোনের মতো লম্বা আকার)
 export const wallpaperThumbUrl = url =>
     withTransform(url, "f_auto,q_auto,w_360,h_640,c_fill,g_auto");
+
+// অ্যাপ চালু হওয়া মাত্র (চ্যাট খোলার আগেই) বর্তমান wallpaper ডিভাইসের সেভ করা কপি থেকে
+// মেমোরিতে তুলে রাখা, যাতে চ্যাটে ঢুকলে এক মুহূর্তও দেরি না হয়।
+if (typeof window !== "undefined") {
+    try {
+        const current = resolveWallpaper(state);
+        if (current) {
+            const full = wallpaperFullUrl(current.url);
+            resolveWallpaperImage(full);
+            // বাকিগুলো পরে, ব্যাকগ্রাউন্ডে
+            prefetchWallpapers(
+                [full, ...state.wallpapers.map(w => wallpaperFullUrl(w.url))]
+            );
+        }
+    } catch {
+        /* ignore */
+    }
+}
