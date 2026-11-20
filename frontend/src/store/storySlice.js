@@ -5,7 +5,7 @@ export const fetchStories = createAsyncThunk(
     "story/fetchStories",
     async (_, { rejectWithValue }) => {
         try {
-            const res = await api.get("/api/stories");
+            const res = await api.get("/api/v1/stories");
             return res.data?.data || [];
         } catch (err) {
             return rejectWithValue(
@@ -19,7 +19,7 @@ export const createNewStory = createAsyncThunk(
     "story/createNewStory",
     async (payload, { dispatch, rejectWithValue }) => {
         try {
-            const res = await api.post("/api/stories", payload);
+            const res = await api.post("/api/v1/stories", payload);
             await dispatch(fetchStories());
             return res.data?.data;
         } catch (err) {
@@ -33,7 +33,7 @@ export const createNewStory = createAsyncThunk(
 export const markStoryViewed = createAsyncThunk(
     "story/markStoryViewed",
     async (storyId) => {
-        await api.post(`/api/stories/${storyId}/view`);
+        await api.post(`/api/v1/stories/${storyId}/view`);
         return storyId;
     }
 );
@@ -42,7 +42,7 @@ export const fetchStoryViewers = createAsyncThunk(
     "story/fetchStoryViewers",
     async (storyId, { rejectWithValue }) => {
         try {
-            const res = await api.get(`/api/stories/${storyId}/viewers`);
+            const res = await api.get(`/api/v1/stories/${storyId}/viewers`);
             return { storyId, viewers: res.data?.data || [] };
         } catch (err) {
             return rejectWithValue(
@@ -58,7 +58,7 @@ export const reactToStory = createAsyncThunk(
         // আগে UI-তে সাথে সাথে দেখাই (optimistic), সার্ভার ফেল করলে ফিরিয়ে আনি
         dispatch(setMyReaction({ storyId, emoji: emoji || null }));
         try {
-            const res = await api.post(`/api/stories/${storyId}/react`, {
+            const res = await api.post(`/api/v1/stories/${storyId}/react`, {
                 emoji: emoji || null
             });
             return { storyId, ...(res.data?.data || {}) };
@@ -75,7 +75,7 @@ export const replyToStory = createAsyncThunk(
     "story/replyToStory",
     async ({ storyId, text }, { rejectWithValue }) => {
         try {
-            const res = await api.post(`/api/stories/${storyId}/reply`, {
+            const res = await api.post(`/api/v1/stories/${storyId}/reply`, {
                 text
             });
             return res.data?.data;
@@ -91,7 +91,7 @@ export const deleteMyStory = createAsyncThunk(
     "story/deleteMyStory",
     async (storyId, { dispatch, rejectWithValue }) => {
         try {
-            await api.delete(`/api/stories/${storyId}`);
+            await api.delete(`/api/v1/stories/${storyId}`);
             await dispatch(fetchStories());
             return storyId;
         } catch (err) {

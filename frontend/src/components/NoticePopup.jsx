@@ -59,7 +59,7 @@ export default function NoticePopup() {
             return;
         }
         let active = true;
-        api.get("/api/notices/pending")
+        api.get("/api/v1/notices/pending")
             .then(res => {
                 if (!active) return;
                 const list = res.data?.data || [];
@@ -153,7 +153,7 @@ export default function NoticePopup() {
         setAcknowledging(true);
         const id = current._id;
         try {
-            await api.post(`/api/notices/${id}/ack`);
+            await api.post(`/api/v1/notices/${id}/ack`);
         } catch {
             // নেটওয়ার্ক এরর হলেও ইউজারকে আটকে রাখা হবে না
         } finally {

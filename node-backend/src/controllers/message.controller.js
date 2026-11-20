@@ -14,7 +14,7 @@ import { loadMemberConversation } from "./conversation.controller.js";
 const clamp = (value, fallback, min, max) =>
     Math.min(Math.max(Number(value) || fallback, min), max);
 
-// GET /api/conversations/:id/messages?before=<messageId>&limit=30
+// GET /api/v1/conversations/:id/messages?before=<messageId>&limit=30
 // পুরনো মেসেজ পেছনের দিকে পেজ করে আনা। উত্তরে মেসেজ পুরনো -> নতুন ক্রমে থাকে।
 // hasMore true হলে nextBefore পরের রিকোয়েস্টে `before` হিসেবে দাও।
 export const getMessages = asyncHandler(async (req, res) => {
@@ -47,7 +47,7 @@ export const getMessages = asyncHandler(async (req, res) => {
     );
 });
 
-// GET /api/sync?after=<শেষ দেখা messageId>&since=<আগের serverTime>
+// GET /api/v1/sync?after=<শেষ দেখা messageId>&since=<আগের serverTime>
 // reconnect-এর পর মিস হওয়া জিনিস ফেরত দেয়:
 //   messages — `after`-এর পরের সব নতুন মেসেজ (পুরনো -> নতুন, সর্বোচ্চ ২০০টা; hasMore true হলে আবার ডাকো)
 //   updated  — `since`-এর পর বদলানো পুরনো মেসেজ (tick বদল, "delete for everyone")

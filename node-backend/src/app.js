@@ -136,8 +136,8 @@ app.get("/health", (_req, res) => {
 });
 
 // ---------- API ----------
-app.use("/api", apiLimiter, apiRouter);
-app.use("/api", (_req, res) => {
+app.use("/api/v1", apiLimiter, apiRouter);
+app.use("/api/v1", (_req, res) => {
     res.status(404).json({
         success: false,
         statusCode: 404,

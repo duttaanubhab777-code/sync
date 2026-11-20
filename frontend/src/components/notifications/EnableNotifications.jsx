@@ -29,7 +29,7 @@ export const unsubscribeDevicePush = async () => {
         const savedFcmToken = localStorage.getItem(FCM_TOKEN_STORAGE_KEY);
         if (savedFcmToken) {
             await api
-                .delete("/api/notifications/push-subscriptions", {
+                .delete("/api/v1/notifications/push-subscriptions", {
                     data: { token: savedFcmToken }
                 })
                 .catch(() => {});
@@ -41,7 +41,7 @@ export const unsubscribeDevicePush = async () => {
             const sub = await reg?.pushManager?.getSubscription();
             if (sub?.endpoint) {
                 await api
-                    .delete("/api/notifications/push-subscriptions", {
+                    .delete("/api/v1/notifications/push-subscriptions", {
                         data: { endpoint: sub.endpoint }
                     })
                     .catch(() => {});
@@ -96,7 +96,7 @@ export default function EnableNotifications() {
             // যদি আগে থেকেই টোকেন পাওয়া থাকে, সাথে সাথে সার্ভারে পাঠিয়ে রাখা
             const cachedToken = localStorage.getItem(FCM_TOKEN_STORAGE_KEY);
             if (cachedToken) {
-                await api.post("/api/notifications/push-subscriptions", {
+                await api.post("/api/v1/notifications/push-subscriptions", {
                     provider: "fcm",
                     token: cachedToken,
                     platform: "android"
@@ -146,7 +146,7 @@ export default function EnableNotifications() {
             registration.update().catch(() => {});
             await navigator.serviceWorker.ready;
 
-            const configRes = await api.get("/api/notifications/push-config");
+            const configRes = await api.get("/api/v1/notifications/push-config");
             const config = configRes.data?.data;
             if (!config?.webPushEnabled || !config.publicKey) {
                 setState("error");
@@ -166,7 +166,7 @@ export default function EnableNotifications() {
                     ? subscription.toJSON()
                     : subscription;
 
-            await api.post("/api/notifications/push-subscriptions", subJson);
+            await api.post("/api/v1/notifications/push-subscriptions", subJson);
             setState("enabled");
         } catch (error) {
             console.error("[Sync notifications]", error);
@@ -203,7 +203,7 @@ export default function EnableNotifications() {
                         try {
                             localStorage.setItem(FCM_TOKEN_STORAGE_KEY, value);
                             await api.post(
-                                "/api/notifications/push-subscriptions",
+                                "/api/v1/notifications/push-subscriptions",
                                 {
                                     provider: "fcm",
                                     token: value,

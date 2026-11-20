@@ -9,7 +9,7 @@ Render hosts the Node.js application. The Node backend creates and verifies sign
 ~~~text
 Browser
   |
-  | POST /api/auth/register/send-otp
+  | POST /api/v1/auth/register/send-otp
   v
 Node.js backend (Render)
   |  - validates registration details
@@ -25,7 +25,7 @@ PythonAnywhere Flask mail relay
 User's email inbox
 
 Browser
-  | POST /api/auth/register/verify-otp
+  | POST /api/v1/auth/register/verify-otp
   v
 Node.js backend
   |  - verifies the OTP and expiry

@@ -71,7 +71,7 @@ export const initializeApp = createAsyncThunk(
         }
 
         try {
-            const meRes = await api.get("/api/auth/me");
+            const meRes = await api.get("/api/v1/auth/me");
             const user = meRes.data?.data;
             if (user) {
                 localStorage.setItem(USER_KEY, JSON.stringify(user));
@@ -92,7 +92,7 @@ export const sendSignupOtp = createAsyncThunk(
             dispatch(setServerWaking(true));
         }, 1500);
         try {
-            const res = await api.post("/api/auth/register/send-otp", payload);
+            const res = await api.post("/api/v1/auth/register/send-otp", payload);
             const data = res.data?.data || {};
             return {
                 email: data.email || payload.email,
@@ -124,7 +124,7 @@ export const resendSignupOtp = createAsyncThunk(
             dispatch(setServerWaking(true));
         }, 1500);
         try {
-            const res = await api.post("/api/auth/register/resend-otp", {
+            const res = await api.post("/api/v1/auth/register/resend-otp", {
                 email
             });
             const data = res.data?.data || {};
@@ -159,7 +159,7 @@ export const verifySignupOtp = createAsyncThunk(
             dispatch(setServerWaking(true));
         }, 1500);
         try {
-            const res = await api.post("/api/auth/register/verify-otp", {
+            const res = await api.post("/api/v1/auth/register/verify-otp", {
                 email,
                 otp
             });
@@ -188,7 +188,7 @@ export const loginUser = createAsyncThunk(
             dispatch(setServerWaking(true));
         }, 1500);
         try {
-            const res = await api.post("/api/auth/login", payload);
+            const res = await api.post("/api/v1/auth/login", payload);
             const { user, accessToken, refreshToken } = res.data?.data || {};
             setStoredTokens({ accessToken, refreshToken });
             if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
@@ -206,7 +206,7 @@ export const logoutUser = createAsyncThunk("auth/logoutUser", async () => {
     const refreshToken = getStoredRefreshToken();
     try {
         await api.post(
-            "/api/auth/logout",
+            "/api/v1/auth/logout",
             refreshToken ? { refreshToken } : {}
         );
     } catch {
@@ -220,7 +220,7 @@ export const updateMyProfile = createAsyncThunk(
     "auth/updateMyProfile",
     async (payload, { rejectWithValue }) => {
         try {
-            const res = await api.patch("/api/users/me", payload);
+            const res = await api.patch("/api/v1/users/me", payload);
             const user = res.data?.data;
             if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
             return user;
@@ -236,7 +236,7 @@ export const fetchBlockedUsers = createAsyncThunk(
     "auth/fetchBlockedUsers",
     async (_, { rejectWithValue }) => {
         try {
-            const res = await api.get("/api/users/blocked");
+            const res = await api.get("/api/v1/users/blocked");
             return res.data?.data || [];
         } catch (err) {
             return rejectWithValue(
@@ -250,7 +250,7 @@ export const blockUserById = createAsyncThunk(
     "auth/blockUserById",
     async (userId, { dispatch, rejectWithValue }) => {
         try {
-            await api.post(`/api/users/${userId}/block`);
+            await api.post(`/api/v1/users/${userId}/block`);
             dispatch(fetchBlockedUsers());
             return userId;
         } catch (err) {
@@ -265,7 +265,7 @@ export const unblockUserById = createAsyncThunk(
     "auth/unblockUserById",
     async (userId, { dispatch, rejectWithValue }) => {
         try {
-            await api.delete(`/api/users/${userId}/block`);
+            await api.delete(`/api/v1/users/${userId}/block`);
             dispatch(fetchBlockedUsers());
             return userId;
         } catch (err) {

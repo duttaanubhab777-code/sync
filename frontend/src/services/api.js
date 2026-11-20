@@ -48,7 +48,7 @@ export const refreshAccessToken = async () => {
         try {
             const refreshToken = getStoredRefreshToken();
             const res = await axios.post(
-                `${BASE_URL}/api/auth/refresh`,
+                `${BASE_URL}/api/v1/auth/refresh`,
                 refreshToken ? { refreshToken } : {},
                 { withCredentials: true }
             );
@@ -77,10 +77,10 @@ api.interceptors.response.use(
         const url = originalRequest?.url || "";
 
         const isAuthEndpoint =
-            url.includes("/api/auth/login") ||
-            url.includes("/api/auth/register") ||
-            url.includes("/api/auth/refresh") ||
-            url.includes("/api/auth/logout");
+            url.includes("/api/v1/auth/login") ||
+            url.includes("/api/v1/auth/register") ||
+            url.includes("/api/v1/auth/refresh") ||
+            url.includes("/api/v1/auth/logout");
 
         if (status === 401 && !originalRequest?._retry && !isAuthEndpoint) {
             originalRequest._retry = true;
