@@ -70,8 +70,8 @@ MAIL_RELAY_SECRET = ""
 # MEDIA_FOLDER_ROOT = "sync"
 
 # Ask Cloudinary itself to refuse unexpected file formats for avatars, group icons,
-# stories and voice messages. Off by default because it has not been tested against
-# a live Cloudinary account; see PHASE_1_2_IMPLEMENTATION_REPORT.md before enabling.
+# stories and voice messages. Off by default; validate the behavior against your
+# Cloudinary account and current upload flows before enabling.
 # ENFORCE_ALLOWED_FORMATS = False
 
 # Header PythonAnywhere uses to tell us the visitor's IP address (for rate limiting).
