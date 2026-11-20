@@ -25,12 +25,12 @@ def mail_client(**overrides):
 
 class MailRelayTests(unittest.TestCase):
     def test_health_reports_mail_configured(self):
-        self.assertFalse(make_client().get("/health").get_json()["mailConfigured"])
-        self.assertTrue(mail_client().get("/health").get_json()["mailConfigured"])
+        self.assertFalse(make_client().get("/api/v1/health").get_json()["mailConfigured"])
+        self.assertTrue(mail_client().get("/api/v1/health").get_json()["mailConfigured"])
 
     def test_send_requires_configured_relay(self):
         res = make_client().post(
-            "/mail/send",
+            "/api/v1/mail/send",
             headers={"X-Relay-Key": TEST_RELAY_KEY},
             json={"to": "u@example.com", "subject": "Code", "html": "<p>123456</p>"},
         )
@@ -39,14 +39,14 @@ class MailRelayTests(unittest.TestCase):
     def test_send_rejects_wrong_key_and_browser_origin(self):
         client = mail_client()
         res = client.post(
-            "/mail/send",
+            "/api/v1/mail/send",
             headers={"X-Relay-Key": "wrong-key"},
             json={"to": "u@example.com", "subject": "Code", "html": "<p>123456</p>"},
         )
         self.assertEqual(res.status_code, 403)
 
         res_origin = client.post(
-            "/mail/send",
+            "/api/v1/mail/send",
             headers={"X-Relay-Key": TEST_RELAY_KEY, "Origin": "https://sync-5lfm.onrender.com"},
             json={"to": "u@example.com", "subject": "Code", "html": "<p>123456</p>"},
         )
@@ -56,7 +56,7 @@ class MailRelayTests(unittest.TestCase):
         client = mail_client()
         with mock.patch("services.mail_service.send_mail", return_value=465) as mocked:
             res = client.post(
-                "/mail/send",
+                "/api/v1/mail/send",
                 headers={"X-Relay-Key": TEST_RELAY_KEY},
                 json={"to": "u@example.com", "subject": "123456 is your code", "html": "<p>123456</p>"},
             )
@@ -71,7 +71,7 @@ class MailRelayTests(unittest.TestCase):
             side_effect=smtplib.SMTPAuthenticationError(535, b"Bad credentials"),
         ):
             res = client.post(
-                "/mail/send",
+                "/api/v1/mail/send",
                 headers={"X-Relay-Key": TEST_RELAY_KEY},
                 json={"to": "u@example.com", "subject": "Code", "html": "<p>123456</p>"},
             )
@@ -83,7 +83,7 @@ class MailRelayTests(unittest.TestCase):
         with mock.patch("services.mail_service.send_mail", return_value=465):
             codes = [
                 client.post(
-                    "/mail/send",
+                    "/api/v1/mail/send",
                     headers={"X-Relay-Key": TEST_RELAY_KEY},
                     json={"to": "same@example.com", "subject": "Code", "html": "<p>1</p>"},
                 ).status_code
@@ -97,7 +97,7 @@ class MailRelayTests(unittest.TestCase):
             "services.mail_service.check_ports",
             return_value=[{"port": 465, "mode": "ssl", "result": "OK"}],
         ):
-            res = client.get(f"/mail/diag?key={TEST_RELAY_KEY}")
+            res = client.get(f"/api/v1/mail/diag?key={TEST_RELAY_KEY}")
         self.assertEqual(res.status_code, 200)
         data = res.get_json()["data"]
         self.assertTrue(data["ok"])

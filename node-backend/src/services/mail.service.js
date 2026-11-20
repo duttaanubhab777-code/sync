@@ -87,7 +87,7 @@ export const sendMail = async ({ to, subject, html, fromName }) => {
         throw new MailRelayError("mail_too_large", "", 500);
     }
 
-    const url = `${relayBase()}/mail/send`;
+    const url = `${relayBase()}/api/v1/mail/send`;
     const init = {
         method: "POST",
         headers: {

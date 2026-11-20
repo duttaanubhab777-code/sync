@@ -146,7 +146,7 @@ export const uploadMediaToCloudinary = async (file, onProgress, options = {}) =>
     let signRes;
     try {
         signRes = await axios.post(
-            `${pyBaseUrl}/media/sign`,
+            `${pyBaseUrl}/api/v1/media/sign`,
             signBody,
             {
                 headers: {
@@ -158,7 +158,7 @@ export const uploadMediaToCloudinary = async (file, onProgress, options = {}) =>
         if (err.response?.status === 401) {
             token = await refreshAccessToken();
             signRes = await axios.post(
-                `${pyBaseUrl}/media/sign`,
+                `${pyBaseUrl}/api/v1/media/sign`,
                 signBody,
                 {
                     headers: {

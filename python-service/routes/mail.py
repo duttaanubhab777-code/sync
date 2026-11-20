@@ -1,8 +1,8 @@
 """Mail relay for the Node backend (Render free plan cannot send email itself).
 
-POST /mail/send   header  X-Relay-Key: <MAIL_RELAY_SECRET>
+POST /api/v1/mail/send   header  X-Relay-Key: <MAIL_RELAY_SECRET>
                   body    {"to": "...", "subject": "...", "html": "...", "fromName"?, "replyTo"?}
-GET  /mail/diag   header X-Relay-Key, or ?key=<MAIL_RELAY_SECRET> so it opens in a phone browser
+GET  /api/v1/mail/diag   header X-Relay-Key, or ?key=<MAIL_RELAY_SECRET> so it opens in a phone browser
                   (+ optional &to=you@gmail.com to send a test mail)
 
 Server-to-server only: any request that carries a browser Origin header is refused.
@@ -34,7 +34,7 @@ def _key_ok(given: str, secret: str) -> bool:
 def _guard(allow_query_key: bool = False):
     """Common checks. Returns (runtime, settings, client_ip, error_response_or_None).
 
-    ``allow_query_key`` is only for /mail/diag: a phone browser cannot send custom headers.
+    ``allow_query_key`` is only for /api/v1/mail/diag: a phone browser cannot send custom headers.
     (A key in a URL can end up in browser history, so use it only for the self-test.)
     """
     runtime = current_app.extensions["sync_media"]
@@ -45,7 +45,7 @@ def _guard(allow_query_key: bool = False):
         return runtime, settings, client_ip, error_response(403, "Forbidden")
 
     if not settings.mail_configured:
-        log.error("/mail called but the mail relay is not configured: %s", "; ".join(settings.mail_problems))
+        log.error("/api/v1/mail called but the mail relay is not configured: %s", "; ".join(settings.mail_problems))
         return runtime, settings, client_ip, error_response(503, "Mail relay is not configured")
 
     blocked, retry_after = runtime.mail_failure_limiter.is_blocked(client_ip)

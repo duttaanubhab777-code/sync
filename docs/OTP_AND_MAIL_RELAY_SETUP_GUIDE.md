@@ -16,7 +16,7 @@ Node.js backend (Render)
   |  - stores a temporary pending signup
   |  - protects the OTP and password data
   |
-  | POST /mail/send + X-Relay-Key
+  | POST /api/v1/mail/send + X-Relay-Key
   v
 PythonAnywhere Flask mail relay
   |  - validates the shared relay secret
@@ -137,12 +137,12 @@ Resolve any reported configuration problems, then reload the PythonAnywhere web 
 Open the health endpoint:
 
 ~~~text
-https://<YOUR_PYTHONANYWHERE_USERNAME>.pythonanywhere.com/health
+https://<YOUR_PYTHONANYWHERE_USERNAME>.pythonanywhere.com/api/v1/health
 ~~~
 
 The response should indicate that the service is healthy and that mail configuration is available. Health responses must not expose secret values.
 
-For an owner-only SMTP diagnostic, use the /mail/diag endpoint with the relay key as documented in [the Python service README](../python-service/README.md). Treat the relay key as a password. Prefer the X-Relay-Key request header where supported; avoid sharing diagnostic URLs because query strings can be retained in browser history and server logs.
+For an owner-only SMTP diagnostic, use the /api/v1/mail/diag endpoint with the relay key as documented in [the Python service README](../python-service/README.md). Treat the relay key as a password. Prefer the X-Relay-Key request header where supported; avoid sharing diagnostic URLs because query strings can be retained in browser history and server logs.
 
 Then check the Node health endpoint:
 
@@ -158,7 +158,7 @@ Finally, test the complete registration flow with an email address you control. 
 
 | Symptom | Likely cause | Recommended action |
 | --- | --- | --- |
-| Python /health reports mail is not configured | A Gmail setting or the relay secret is missing or invalid. | Run python verify_install.py, correct config.py, and reload the PythonAnywhere app. |
+| Python /api/v1/health reports mail is not configured | A Gmail setting or the relay secret is missing or invalid. | Run python verify_install.py, correct config.py, and reload the PythonAnywhere app. |
 | SMTP authentication fails | A normal Gmail password was used, or the App Password is incorrect. | Generate a valid Google App Password and update GMAIL_APP_PASSWORD. |
 | Registration reports that the verification email could not be sent | The Node service cannot reach the Python service, or the shared relay secret does not match. | Check PYTHON_SERVICE_URL, both MAIL_RELAY_SECRET values, Python health, and Render logs. |
 | The OTP interface does not appear | The deployed frontend is outdated or browser assets are cached. | Confirm the frontend changes are deployed and refresh the page. |

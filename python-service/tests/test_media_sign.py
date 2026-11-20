@@ -34,7 +34,7 @@ def sign(client, token=None, body="{}", headers=None):
     if body is not None:
         kwargs["data"] = body
         kwargs["content_type"] = "application/json"
-    return client.post("/media/sign", **kwargs)
+    return client.post("/api/v1/media/sign", **kwargs)
 
 
 class SignatureHappyPathTests(unittest.TestCase):
@@ -139,7 +139,7 @@ class InputValidationTests(unittest.TestCase):
         self.assertEqual(res.status_code, 413)
 
     def test_get_not_allowed(self):
-        self.assertEqual(self.client.get("/media/sign").status_code, 405)
+        self.assertEqual(self.client.get("/api/v1/media/sign").status_code, 405)
 
 
 class AuthenticationTests(unittest.TestCase):
@@ -161,7 +161,7 @@ class AuthenticationTests(unittest.TestCase):
 
     def test_wrong_scheme(self):
         res = self.client.post(
-            "/media/sign", headers={"Authorization": f"Basic {make_token()}"}, json={}
+            "/api/v1/media/sign", headers={"Authorization": f"Basic {make_token()}"}, json={}
         )
         self.assert_401(res)
 
@@ -257,7 +257,7 @@ class ConfigurationTests(unittest.TestCase):
 class CorsTests(unittest.TestCase):
     def test_preflight_from_allowed_origin(self):
         res = make_client().options(
-            "/media/sign",
+            "/api/v1/media/sign",
             headers={
                 "Origin": TEST_ORIGIN,
                 "Access-Control-Request-Method": "POST",
@@ -273,7 +273,7 @@ class CorsTests(unittest.TestCase):
 
     def test_preflight_from_other_origin_refused(self):
         res = make_client().options(
-            "/media/sign",
+            "/api/v1/media/sign",
             headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "POST"},
         )
         self.assertEqual(res.status_code, 403)
