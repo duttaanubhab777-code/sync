@@ -53,7 +53,7 @@ self.addEventListener("fetch", event => {
     const url = new URL(request.url);
     if (url.origin !== self.location.origin) return;
     if (
-        url.pathname.startsWith("/api/") ||
+        url.pathname.startsWith("/api/v1/") ||
         url.pathname.startsWith("/socket.io/") ||
         url.pathname === "/health" ||
         url.pathname === "/sw.js" ||
