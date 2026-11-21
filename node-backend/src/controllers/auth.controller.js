@@ -19,6 +19,7 @@ import {
     otpMaxSends
 } from "../utils/otp.js";
 import { MailRelayError, sendOtpEmail } from "../services/mail.service.js";
+import { getClientIp } from "../utils/clientIp.js";
 
 const MAX_DEVICES = 5; // একসাথে সর্বোচ্চ কয়টা ডিভাইসে লগইন থাকবে
 const MAX_LOGIN_HISTORY = 20;
@@ -88,7 +89,7 @@ const claimSend = async (email, fields, otp, req) => {
         otpExpiresAt: new Date(now.getTime() + otpExpiryMs()),
         attempts: 0,
         lastSentAt: now,
-        ipAddress: req.ip
+        ipAddress: getClientIp(req)
     };
 
     const updated = await PendingSignup.findOneAndUpdate(
@@ -395,8 +396,8 @@ export const verifyOtp = asyncHandler(async (req, res) => {
             phoneNumber: consumed.phoneNumber,
             password: consumed.passwordHash, // আগেই bcrypt hash করা
             avatar: consumed.avatar || "",
-            ipAddress: req.ip,
-            loginHistory: [{ ipAddress: req.ip }]
+            ipAddress: getClientIp(req),
+            loginHistory: [{ ipAddress: getClientIp(req) }]
         });
         user.$locals.skipHash = true; // user.model.js-এর pre-save যেন আবার hash না করে
         await user.save();
@@ -440,10 +441,10 @@ export const login = asyncHandler(async (req, res) => {
     await User.updateOne(
         { _id: user._id },
         {
-            $set: { ipAddress: req.ip },
+            $set: { ipAddress: getClientIp(req) },
             $push: {
                 loginHistory: {
-                    $each: [{ ipAddress: req.ip, loginTime: new Date() }],
+                    $each: [{ ipAddress: getClientIp(req), loginTime: new Date() }],
                     $slice: -MAX_LOGIN_HISTORY
                 }
             }
