@@ -110,7 +110,7 @@ export default function AppLayout() {
                 </div>
             )}
 
-            {!location.pathname.startsWith("/chats") && (
+            {!location.pathname.startsWith("/chats") && location.pathname !== "/stories" && (
                 <header className="sync-global-topbar" aria-label="Quick actions">
                     <div className="sync-global-topbar-spacer" />
                     <div className="sync-global-topbar-actions">
