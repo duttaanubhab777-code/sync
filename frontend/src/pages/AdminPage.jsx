@@ -1450,7 +1450,7 @@ export default function AdminPage() {
                                 ))}
                             </div>
 
-                            <div className="sync-filter-pills">
+                            <div className="sync-filter-pills sync-media-kind-pills">
                                 {[
                                     {
                                         id: "all",
