@@ -223,7 +223,7 @@ export default function AppLayout() {
                 </aside>
 
                 <main className="sync-workspace">
-                    <Outlet />
+                    <Outlet context={{ hasUpdate, onSignOut: () => setConfirmLogout(true) }} />
                 </main>
             </div>
 
