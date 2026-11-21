@@ -420,3 +420,17 @@
     .sync-fab-main::after,
     .sync-avatar-picker-ring:not(.has-file)::before { animation: none; }
 }
+
+/* Stories header actions: keep Add Story and More aligned as one group */
+.sync-stories-header-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    flex: 0 0 auto;
+}
+.sync-stories-header-actions .sync-stories-more-btn {
+    width: 42px;
+    height: 42px;
+    border-radius: 15px;
+}

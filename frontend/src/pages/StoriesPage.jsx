@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
     Plus,
@@ -15,6 +16,7 @@ import {
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncBrandBar from "../components/SyncBrandBar.jsx";
+import MoreMenu from "../components/MoreMenu.jsx";
 import {
     createNewStory,
     deleteMyStory,
@@ -68,6 +70,7 @@ const REACTION_GROUPS = [
 ];
 
 export default function StoriesPage() {
+    const { hasUpdate = false, onSignOut } = useOutletContext() || {};
     const dispatch = useDispatch();
     const { user } = useSelector(state => state.auth);
     const { storyGroups, loading, posting, viewersByStoryId } = useSelector(
@@ -359,14 +362,21 @@ export default function StoriesPage() {
                 <div className="sync-pane-header">
                     <SyncBrandBar className="sync-pane-brand" />
                     <h2>Stories</h2>
-                    <button
-                        type="button"
-                        className="sync-btn primary sm"
-                        onClick={openCreateModal}
-                    >
-                        <Plus size={16} />
-                        <span>Add Story</span>
-                    </button>
+                    <div className="sync-stories-header-actions">
+                        <button
+                            type="button"
+                            className="sync-btn primary sm"
+                            onClick={openCreateModal}
+                        >
+                            <Plus size={16} />
+                            <span>Add Story</span>
+                        </button>
+                        <MoreMenu
+                            hasUpdate={hasUpdate}
+                            onSignOut={onSignOut}
+                            className="sync-stories-more-btn"
+                        />
+                    </div>
                 </div>
 
                 <div className="sync-stories-list">
