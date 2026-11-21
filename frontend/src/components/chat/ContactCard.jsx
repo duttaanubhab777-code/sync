@@ -43,14 +43,14 @@ export default function ContactCard({ contact }) {
     };
 
     return (
-        <div className="sync-contact-card">
-            <div className="sync-contact-head">
+        <div className="sync-cmsg-card">
+            <div className="sync-cmsg-head">
                 <div className={`sync-contact-avatar tone-${tone}`} aria-hidden="true">
                     {initials}
                 </div>
                 <div className="sync-contact-meta">
                     <strong className="sync-contact-name">{contact.name}</strong>
-                    <span className="sync-contact-sub">
+                    <span className="sync-cmsg-sub">
                         {contact.phones.length === 1
                             ? "Contact card"
                             : `${contact.phones.length} phone numbers`}

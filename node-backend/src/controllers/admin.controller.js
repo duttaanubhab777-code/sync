@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { User } from "../models/user.model.js";
 import { Conversation } from "../models/conversation.model.js";
 import { Message } from "../models/message.model.js";
@@ -127,6 +128,58 @@ export const listUsers = asyncHandler(async (req, res) => {
             total,
             page,
             pages: Math.max(Math.ceil(total / limit), 1)
+        })
+    );
+});
+
+// GET /api/v1/admin/login-history            -> পুরো প্ল্যাটফর্মের শেষ ২০টা লগইন (নতুন থেকে পুরনো)
+// GET /api/v1/admin/login-history?userId=ID  -> শুধু ওই ইউজারের শেষ ২০টা লগইন
+// প্রতিটা লগইনে: কে, কোন IP থেকে, কখন (UTC-তে ISO সময়; ফ্রন্টএন্ড IST-তে দেখায়)
+const LOGIN_HISTORY_LIMIT = 20;
+
+// "::ffff:1.2.3.4" (IPv4-mapped IPv6) কে সহজ "1.2.3.4" বানানো
+const cleanIp = ip => String(ip || "").replace(/^::ffff:/i, "") || null;
+
+export const listLoginHistory = asyncHandler(async (req, res) => {
+    const match = { "loginHistory.0": { $exists: true } };
+    if (req.query.userId) {
+        const id = assertObjectId(req.query.userId, "user id");
+        match._id = new mongoose.Types.ObjectId(id);
+    }
+
+    // loginHistory-তে select:false আছে, কিন্তু aggregate সেটা মানে না, তাই এখানে পড়া যায়
+    const rows = await User.aggregate([
+        { $match: match },
+        {
+            $project: {
+                username: 1,
+                fullName: 1,
+                avatar: 1,
+                role: 1,
+                loginHistory: 1
+            }
+        },
+        { $unwind: "$loginHistory" },
+        { $sort: { "loginHistory.loginTime": -1 } },
+        { $limit: LOGIN_HISTORY_LIMIT },
+        {
+            $project: {
+                _id: 0,
+                userId: "$_id",
+                username: 1,
+                fullName: 1,
+                avatar: 1,
+                role: 1,
+                ipAddress: "$loginHistory.ipAddress",
+                loginTime: "$loginHistory.loginTime"
+            }
+        }
+    ]);
+
+    res.status(200).json(
+        new ApiResponse(200, {
+            logins: rows.map(r => ({ ...r, ipAddress: cleanIp(r.ipAddress) })),
+            limit: LOGIN_HISTORY_LIMIT
         })
     );
 });

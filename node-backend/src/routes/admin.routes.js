@@ -14,7 +14,8 @@ import {
     removeChatMedia,
     removeStoryMedia,
     listGroups,
-    deleteGroupByAdmin
+    deleteGroupByAdmin,
+    listLoginHistory
 } from "../controllers/admin.controller.js";
 import { createNotice, listNotices, deleteNotice } from "../controllers/notice.controller.js";
 import {
@@ -33,6 +34,8 @@ router.use(verifyJWT, verifyAdmin);
 router.get("/stats", getStats);
 
 router.get("/users", listUsers);
+// শেষ ২০টা লগইন (IP ও সময় সহ): Admin ও Super Admin দুজনেই দেখতে পারবে
+router.get("/login-history", listLoginHistory);
 router.post("/users/:id/block", blockUserByAdmin);
 router.delete("/users/:id/block", unblockUserByAdmin);
 router.delete("/users/:id", deleteUserByAdmin);

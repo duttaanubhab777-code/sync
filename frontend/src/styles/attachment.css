@@ -329,7 +329,7 @@
 }
 
 /* ---------- Contact Message Card ---------- */
-.sync-contact-card {
+.sync-cmsg-card {
     width: min(270px, 72vw);
     padding: 10px 12px;
     margin-bottom: 5px;
@@ -341,7 +341,7 @@
     gap: 9px;
 }
 
-.sync-contact-head {
+.sync-cmsg-head {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -382,7 +382,7 @@
     text-overflow: ellipsis;
 }
 
-.sync-contact-sub {
+.sync-cmsg-sub {
     font-size: 0.72rem;
     color: rgba(232, 247, 240, 0.65);
 }

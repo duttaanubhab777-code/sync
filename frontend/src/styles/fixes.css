@@ -226,3 +226,84 @@ body,
     .sync-contact-card { padding: 22px 15px 20px; }
     .sync-contact-head h1 { font-size: 1.75rem; }
 }
+
+
+/* --------------------------------------------------------------------------
+   Contact পেজ: কার্ড সরু (≈270px) হয়ে যাওয়ার সমাধান
+   আগে chat-এর "Contact message card"-এর স্টাইল একই class নামে (sync-contact-card/head/sub)
+   এই পেজেও ঢুকে পড়ত। ওটা এখন sync-cmsg-* নামে আলাদা; এখানে পেজের কার্ড পুরো প্রস্থ নেওয়ার নিশ্চয়তা।
+   -------------------------------------------------------------------------- */
+.sync-contact-main { width: 100%; max-width: 620px; }
+.sync-contact-card { width: 100%; max-width: none; display: block; }
+.sync-contact-head { display: block; }
+.sync-contact-body { width: 100%; }
+@media (max-width: 560px) {
+    .sync-contact-main { max-width: none; }
+}
+
+/* --------------------------------------------------------------------------
+   Admin → Login History (শেষ ২০টা লগইন: কে, কোন IP, IST সময়)
+   -------------------------------------------------------------------------- */
+.sync-loginlog-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.sync-loginlog-state { display: flex; align-items: center; gap: 8px; padding: 18px 4px; }
+.sync-loginlog-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.sync-loginlog-row {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1.1fr) minmax(0, 1.4fr);
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--bg-1);
+    animation: sync-rise 0.4s var(--ease) calc(var(--i, 0) * 28ms) both;
+}
+.sync-loginlog-rank {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 9px;
+    background: var(--grad-soft);
+    color: var(--mongo);
+    font-size: 0.74rem;
+    font-weight: 800;
+}
+.sync-loginlog-who {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.sync-loginlog-who:disabled { cursor: default; }
+.sync-loginlog-who:not(:disabled):hover .sync-loginlog-name strong { color: var(--mongo); }
+.sync-loginlog-name { display: flex; flex-direction: column; min-width: 0; }
+.sync-loginlog-name strong,
+.sync-loginlog-name small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sync-loginlog-name strong { font-size: 0.92rem; transition: color 0.18s; }
+.sync-loginlog-name small { color: var(--text-3); font-size: 0.76rem; }
+.sync-loginlog-meta { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.sync-loginlog-ip,
+.sync-loginlog-time { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 0.82rem; }
+.sync-loginlog-ip svg,
+.sync-loginlog-time svg { flex: none; color: var(--mongo); }
+.sync-loginlog-ip code {
+    overflow-wrap: anywhere;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+    color: var(--text);
+}
+.sync-loginlog-time { color: var(--text-2); font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) {
+    .sync-loginlog-row { grid-template-columns: 26px minmax(0, 1fr); padding: 12px; }
+    .sync-loginlog-meta { grid-column: 1 / -1; padding-left: 38px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .sync-loginlog-row { animation: none; }
+}

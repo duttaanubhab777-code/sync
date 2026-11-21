@@ -31,11 +31,13 @@ import {
     Camera,
     MessageSquare,
     TrendingUp,
-    Palette
+    Palette,
+    History
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncLogo from "../components/SyncLogo.jsx";
 import WallpaperAdmin from "../components/WallpaperAdmin.jsx";
+import LoginHistoryAdmin from "../components/LoginHistoryAdmin.jsx";
 import {
     formatCountdownHMS,
     formatNoticeDeadlineLine
@@ -722,6 +724,11 @@ export default function AdminPage() {
                             id: "wallpapers",
                             label: "Wallpapers",
                             icon: Palette
+                        },
+                        {
+                            id: "logins",
+                            label: "Login History",
+                            icon: History
                         }
                     ].map(t => {
                         const Icon = t.icon;
@@ -2005,6 +2012,13 @@ export default function AdminPage() {
                         flashSuccess={flashSuccess}
                         flashError={flashError}
                     />
+                )}
+
+                {/* =========================================================
+                    TAB 7: LOGIN HISTORY (শেষ ২০টা লগইন, IP ও IST সময়)
+                   ========================================================= */}
+                {activeTab === "logins" && (
+                    <LoginHistoryAdmin flashError={flashError} />
                 )}
 
                 {/* =========================================================
