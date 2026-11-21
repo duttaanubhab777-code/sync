@@ -25,6 +25,7 @@ import {
     replyToStory
 } from "../store/storySlice.js";
 import { uploadMediaToCloudinary } from "../services/media.js";
+import { pushBackHandler } from "../services/backNavigation.js";
 import {
     formatChatListTime,
     formatTime,
@@ -89,6 +90,17 @@ export default function StoriesPage() {
 
     const [viewerState, setViewerState] = useState(null);
     const [showViewersList, setShowViewersList] = useState(false);
+
+    // ফোনের Back: আগে viewers লিস্ট, তারপর story viewer বন্ধ হবে (অ্যাপ বন্ধ হবে না)
+    const viewerOpen = viewerState !== null;
+    useEffect(() => {
+        if (!viewerOpen) return undefined;
+        return pushBackHandler(() => {
+            if (showViewersList) setShowViewersList(false);
+            else setViewerState(null);
+            return true;
+        });
+    }, [viewerOpen, showViewersList]);
 
     const [replyText, setReplyText] = useState("");
     const [replying, setReplying] = useState(false);

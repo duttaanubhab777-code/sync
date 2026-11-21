@@ -64,6 +64,7 @@ import MoreMenu from "../components/MoreMenu.jsx";
 import ChatFab from "../components/ChatFab.jsx";
 import ChatWallpaperLayer from "../components/ChatWallpaperLayer.jsx";
 import { useAppUpdates, isAndroidApp } from "../services/appUpdate.js";
+import { pushBackHandler, goBackOr } from "../services/backNavigation.js";
 import {
     formatBytes,
     formatChatListTime,
@@ -251,6 +252,15 @@ export default function ChatPage() {
     const [showMicrophoneHelp, setShowMicrophoneHelp] = useState(false);
     const [showAttachSheet, setShowAttachSheet] = useState(false);
     const [lightboxUrl, setLightboxUrl] = useState(null);
+
+    // ফোনের Back চাপলে info drawer আগে বন্ধ হবে (পেজ ছেড়ে অ্যাপ বন্ধ হবে না)
+    useEffect(() => {
+        if (!showInfoDrawer) return undefined;
+        return pushBackHandler(() => {
+            setShowInfoDrawer(false);
+            return true;
+        });
+    }, [showInfoDrawer]);
 
     // recPhase: "idle" | "recording" | "paused" | "discarding"
     const [recPhase, setRecPhase] = useState("idle");
@@ -1207,7 +1217,7 @@ export default function ChatPage() {
                                     className="sync-icon-btn mobile-back"
                                     onClick={e => {
                                         e.stopPropagation();
-                                        navigate("/chats");
+                                        goBackOr(navigate, "/chats");
                                     }}
                                 >
                                     <ArrowLeft size={20} />

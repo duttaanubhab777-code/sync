@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { Loader2 } from "lucide-react";
 import SyncLogo from "./components/SyncLogo.jsx";
@@ -14,6 +14,7 @@ import AdminPage from "./pages/AdminPage.jsx";
 import ContactPage from "./pages/ContactPage.jsx";
 import UpdatesPage from "./pages/UpdatesPage.jsx";
 import UpdatePopup from "./components/UpdatePopup.jsx";
+import { createBackHandler } from "./services/backNavigation.js";
 
 export const isPlatformAdmin = user =>
     Boolean(
@@ -69,10 +70,23 @@ function HomeRedirect() {
 
 export default function App() {
     const dispatch = useDispatch();
+    const navigate = useNavigate();
 
     useEffect(() => {
         dispatch(initializeApp());
     }, [dispatch]);
+
+    // Android APK-র Back বাটন: MainActivity এই ফাংশন ডাকে।
+    // পপআপ খোলা থাকলে বন্ধ, নইলে আগের পেজে; একদম হোমে থাকলে false (APK তখন অ্যাপ মিনিমাইজ করে)
+    useEffect(() => {
+        const handler = createBackHandler(navigate);
+        window.__syncHandleBack = handler;
+        return () => {
+            if (window.__syncHandleBack === handler) {
+                delete window.__syncHandleBack;
+            }
+        };
+    }, [navigate]);
 
     return (
         <>

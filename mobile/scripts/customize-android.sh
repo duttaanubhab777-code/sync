@@ -178,6 +178,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
+import androidx.activity.OnBackPressedCallback;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
@@ -190,6 +191,7 @@ public class MainActivity extends BridgeActivity {
         SyncMessagingService.ensureChannels(this);
         captureNotificationIntent(getIntent());
         super.onCreate(savedInstanceState);
+        registerSyncBackHandler();
 
         try {
             if (this.bridge != null && this.bridge.getWebView() != null) {
@@ -198,6 +200,35 @@ public class MainActivity extends BridgeActivity {
             }
         } catch (Exception ignored) {
         }
+    }
+
+    // ফোনের Back বাটন: আগে ওয়েব অংশকে সামলাতে দেয় (পপআপ বন্ধ / আগের পেজে ফেরা)।
+    // একদম হোম পেজে থাকলে অ্যাপ বন্ধ না করে শুধু মিনিমাইজ করে (WhatsApp-এর মতো)।
+    // (@capacitor/app প্লাগিন নেই, তাই আগে Back চাপলেই পুরো অ্যাপ বন্ধ হয়ে যেত)
+    private void registerSyncBackHandler() {
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                final WebView webView = (MainActivity.this.bridge != null)
+                    ? MainActivity.this.bridge.getWebView()
+                    : null;
+                if (webView == null) {
+                    MainActivity.this.moveTaskToBack(true);
+                    return;
+                }
+                final String js = "(function(){try{return typeof window.__syncHandleBack==='function'"
+                    + "?(window.__syncHandleBack()?'handled':'root'):'none';}catch(e){return 'none';}})()";
+                webView.evaluateJavascript(js, value -> {
+                    String v = value == null ? "" : value.replace("\"", "");
+                    if ("handled".equals(v)) return;
+                    if ("none".equals(v) && webView.canGoBack()) {
+                        webView.goBack();
+                        return;
+                    }
+                    MainActivity.this.moveTaskToBack(true);
+                });
+            }
+        });
     }
 
     @Override

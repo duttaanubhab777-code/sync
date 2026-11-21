@@ -26,7 +26,7 @@
     .sync-auth-card { padding: 28px 22px; border-radius: 26px; }
 }
 
-@media (max-width: 820px) {
+@media (max-width: 820px), (max-height: 540px) {
     .sync-app-shell { padding: 0; gap: 0; padding-top: var(--safe-top); }
     .sync-top-banner { border-radius: 0; margin: 0; }
     .sync-main-frame { flex-direction: column-reverse; gap: 0; }
@@ -123,7 +123,7 @@
 
     .sync-modal-card {
         max-width: none;
-        max-height: 92dvh;
+        max-height: calc(var(--app-h) * 0.92);
         padding-bottom: var(--safe-bottom);
         border-radius: 28px 28px 0 0;
         border-bottom: 0;
@@ -154,7 +154,7 @@
 
 /* ক্যামেরা-নচ/হোম বারে সুরক্ষা */
 @supports (padding: max(0px)) {
-    @media (max-width: 820px) {
+    @media (max-width: 820px), (max-height: 540px) {
         .sync-chat-header { padding-top: 0; }
     }
 }

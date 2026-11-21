@@ -186,7 +186,7 @@
 }
 
 /* ---------- Desktop Popover Layout ---------- */
-@media (min-width: 821px) {
+@media (min-width: 821px) and (min-height: 541px) {
     .sync-attach-backdrop {
         background: transparent;
         pointer-events: auto;

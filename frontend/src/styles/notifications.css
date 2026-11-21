@@ -87,7 +87,7 @@
 .sync-notice-popup {
     width: 100%;
     max-width: 430px;
-    max-height: 92dvh;
+    max-height: calc(var(--app-h) * 0.92);
     overflow-y: auto;
     display: flex;
     flex-direction: column;
