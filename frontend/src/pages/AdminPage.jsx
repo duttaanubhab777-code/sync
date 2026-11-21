@@ -29,6 +29,7 @@ import {
     Activity,
     Bell,
     Camera,
+    Images,
     MessageSquare,
     TrendingUp,
     Palette,
@@ -1453,22 +1454,35 @@ export default function AdminPage() {
                                 {[
                                     {
                                         id: "all",
-                                        label: "All (Images + Videos)"
+                                        label: "All (Images + Videos)",
+                                        icon: Images
                                     },
-                                    { id: "image", label: "📷 Images Only" },
-                                    { id: "video", label: "🎥 Videos Only" }
-                                ].map(k => (
-                                    <button
-                                        key={k.id}
-                                        type="button"
-                                        className={`sync-filter-pill ${
-                                            mediaKind === k.id ? "active" : ""
-                                        }`}
-                                        onClick={() => setMediaKind(k.id)}
-                                    >
-                                        {k.label}
-                                    </button>
-                                ))}
+                                    {
+                                        id: "image",
+                                        label: "Images Only",
+                                        icon: ImageIcon
+                                    },
+                                    {
+                                        id: "video",
+                                        label: "Videos Only",
+                                        icon: Video
+                                    }
+                                ].map(k => {
+                                    const Icon = k.icon;
+                                    return (
+                                        <button
+                                            key={k.id}
+                                            type="button"
+                                            className={`sync-filter-pill ${
+                                                mediaKind === k.id ? "active" : ""
+                                            }`}
+                                            onClick={() => setMediaKind(k.id)}
+                                        >
+                                            <Icon size={16} strokeWidth={2.1} aria-hidden="true" />
+                                            <span>{k.label}</span>
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
 
