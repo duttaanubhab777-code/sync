@@ -6,7 +6,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { assertObjectId, escapeRegex } from "../utils/helpers.js";
 import { isValidCloudinaryUrl } from "../utils/cloudinary.js";
 
-const MAX_WALLPAPERS = 60;
+const MAX_WALLPAPERS = 200;
 
 const toClient = w => ({
     _id: String(w._id),
