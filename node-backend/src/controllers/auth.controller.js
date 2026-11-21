@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import { User } from "../models/user.model.js";
 import { PendingSignup } from "../models/pending-signup.model.js";
+import { PasswordReset } from "../models/password-reset.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -18,7 +19,11 @@ import {
     otpMaxAttempts,
     otpMaxSends
 } from "../utils/otp.js";
-import { MailRelayError, sendOtpEmail } from "../services/mail.service.js";
+import {
+    MailRelayError,
+    sendOtpEmail,
+    sendPasswordResetEmail
+} from "../services/mail.service.js";
 import { getClientIp } from "../utils/clientIp.js";
 
 const MAX_DEVICES = 5; // একসাথে সর্বোচ্চ কয়টা ডিভাইসে লগইন থাকবে
@@ -458,6 +463,210 @@ export const login = asyncHandler(async (req, res) => {
             200,
             { user: publicUser(user), ...tokens },
             "Logged in successfully"
+        )
+    );
+});
+
+// ---------- পাসওয়ার্ড ভুলে গেলে (OTP দিয়ে রিসেট) ----------
+// ধাপ ১: POST /api/v1/auth/forgot-password/send-otp  { email }
+// ধাপ ২: POST /api/v1/auth/forgot-password/reset     { email, otp, newPassword }
+// গোপনীয়তা: ইমেইলটা আছে কিনা বোঝা যায় না, উত্তর সবসময় একই। আসল অ্যাকাউন্ট থাকলে তবেই কোড যায়।
+
+const RESET_TTL_MS = 60 * 60_000;
+// signup OTP আর reset OTP-র hash যেন কখনো মিলে না যায়, তাই আলাদা "namespace"
+const resetKey = email => `reset:${email}`;
+const INVALID_RESET_CODE =
+    "This code is invalid or has expired. Please request a new one.";
+
+export const forgotPasswordSendOtp = asyncHandler(async (req, res) => {
+    const { email } = req.body;
+
+    const reply = () =>
+        res.status(200).json(
+            new ApiResponse(
+                200,
+                {
+                    email,
+                    expiresInSeconds: secondsLeft(otpExpiryMs()),
+                    resendAfterSeconds: secondsLeft(otpCooldownMs())
+                },
+                "If an account exists for this email, a reset code has been sent"
+            )
+        );
+
+    const user = await User.findOne({ email })
+        .select("fullName email isBlocked")
+        .lean();
+    if (!user || user.isBlocked) return reply();
+
+    const now = new Date();
+    const otp = generateOtp();
+    const set = {
+        userId: user._id,
+        otpHash: hashOtp(resetKey(email), otp),
+        otpExpiresAt: new Date(now.getTime() + otpExpiryMs()),
+        attempts: 0,
+        lastSentAt: now,
+        ipAddress: getClientIp(req)
+    };
+
+    // cooldown ও সর্বোচ্চ-সংখ্যা atomic ভাবে যাচাই (একসাথে অনেক রিকোয়েস্ট এলেও একটাই ইমেইল যায়)
+    let doc = await PasswordReset.findOneAndUpdate(
+        {
+            email,
+            lastSentAt: { $lte: new Date(now.getTime() - otpCooldownMs()) },
+            sendCount: { $lt: otpMaxSends() }
+        },
+        { $set: set, $inc: { sendCount: 1 } },
+        { returnDocument: "after" }
+    );
+    if (!doc) {
+        try {
+            doc = await PasswordReset.create({
+                email,
+                ...set,
+                sendCount: 1,
+                expiresAt: new Date(now.getTime() + RESET_TTL_MS)
+            });
+        } catch (err) {
+            if (err?.code !== 11000) throw err;
+            // এখন কুলডাউনে বা সীমায় আটকে আছে: ইমেইল না পাঠিয়ে একই উত্তর
+            return reply();
+        }
+    }
+
+    try {
+        await sendPasswordResetEmail({
+            to: email,
+            fullName: user.fullName,
+            otp,
+            minutes: Math.round(otpExpiryMs() / 60_000)
+        });
+    } catch (err) {
+        await PasswordReset.updateOne(
+            { _id: doc._id },
+            { $set: { lastSentAt: new Date(0) }, $inc: { sendCount: -1 } }
+        ).catch(() => {});
+        if (err instanceof MailRelayError) {
+            console.error(`[RESET] mail failed (${err.code}): ${err.message}`);
+            throw new ApiError(
+                err.status === 429 ? 429 : 503,
+                err.status === 429
+                    ? "Too many emails sent to this address. Please wait a few minutes."
+                    : "We could not send the reset email right now. Please try again in a moment."
+            );
+        }
+        throw err;
+    }
+
+    reply();
+});
+
+export const forgotPasswordReset = asyncHandler(async (req, res) => {
+    const { email, otp, newPassword } = req.body;
+    const now = new Date();
+    const maxAttempts = otpMaxAttempts();
+
+    // ভুল অনুমান ঠেকাতে চেষ্টা আগে বাড়ানো হয় (atomic)
+    const pending = await PasswordReset.findOneAndUpdate(
+        { email, otpExpiresAt: { $gt: now }, attempts: { $lt: maxAttempts } },
+        { $inc: { attempts: 1 } },
+        { returnDocument: "after" }
+    );
+
+    if (!pending) {
+        const current = await PasswordReset.findOne({ email })
+            .select("otpExpiresAt attempts")
+            .lean();
+        if (current && current.otpExpiresAt > now) {
+            throw new ApiError(
+                429,
+                "Too many wrong attempts. Please request a new code."
+            );
+        }
+        // ডকুমেন্ট নেই বা মেয়াদ শেষ: কোনটা, সেটা আলাদা করে বলা হয় না
+        throw new ApiError(400, INVALID_RESET_CODE);
+    }
+
+    if (!isOtpMatch(resetKey(email), otp, pending.otpHash)) {
+        const left = maxAttempts - pending.attempts;
+        throw new ApiError(
+            400,
+            left > 0
+                ? `Incorrect code. ${left} attempt${left === 1 ? "" : "s"} left.`
+                : "Incorrect code. Too many wrong attempts, please request a new code."
+        );
+    }
+
+    // কোড একবারই চলে: যে রিকোয়েস্ট ডকুমেন্ট মুছতে পারে, শুধু সে-ই পাসওয়ার্ড বদলায়
+    const consumed = await PasswordReset.findOneAndDelete({
+        _id: pending._id,
+        otpHash: pending.otpHash
+    });
+    if (!consumed) throw new ApiError(400, "This code was already used.");
+
+    const user = await User.findById(consumed.userId).select("isBlocked");
+    if (!user || user.isBlocked) throw new ApiError(400, INVALID_RESET_CODE);
+
+    // নতুন পাসওয়ার্ড বসানো + সব ডিভাইস লগআউট (refresh token মুছে, পুরনো access token-ও অকেজো)
+    await User.updateOne(
+        { _id: user._id },
+        {
+            $set: {
+                password: await bcrypt.hash(newPassword, 10),
+                passwordChangedAt: new Date(),
+                refreshTokens: []
+            }
+        }
+    );
+
+    clearAuthCookies(res);
+    res.status(200).json(
+        new ApiResponse(
+            200,
+            null,
+            "Password reset successfully. Please sign in with your new password."
+        )
+    );
+});
+
+// ---------- প্রোফাইল থেকে পাসওয়ার্ড বদলানো ----------
+// POST /api/v1/auth/change-password  { currentPassword, newPassword }   (লগইন লাগে)
+// বর্তমান ডিভাইস লগইন থাকে (নতুন token পায়); বাকি সব ডিভাইস লগআউট হয়।
+export const changePassword = asyncHandler(async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+
+    const user = await User.findById(req.user._id).select("+refreshTokens");
+    if (!user) throw new ApiError(401, "Unauthorised request");
+
+    // 401 নয়, 400: নইলে ফ্রন্টএন্ড "session শেষ" ভেবে লগআউট করে দিত
+    if (!(await user.isPasswordCorrect(currentPassword))) {
+        throw new ApiError(400, "Current password is incorrect");
+    }
+
+    const changedAt = new Date();
+    const password = await bcrypt.hash(newPassword, 10);
+    // changedAt-এর পরে ইস্যু হওয়ায় এই token বৈধ; পুরনো সব token (অন্য ডিভাইসের) অকেজো হয়
+    const accessToken = user.generateAccessToken();
+    const refreshToken = user.generateRefreshToken();
+
+    await User.updateOne(
+        { _id: user._id },
+        {
+            $set: {
+                password,
+                passwordChangedAt: changedAt,
+                refreshTokens: [hashToken(refreshToken)]
+            }
+        }
+    );
+
+    setAuthCookies(res, { accessToken, refreshToken });
+    res.status(200).json(
+        new ApiResponse(
+            200,
+            { accessToken, refreshToken },
+            "Password changed. Other devices have been signed out."
         )
     );
 });

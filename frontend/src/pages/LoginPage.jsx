@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { Lock, UserRound, Loader2, Eye, EyeOff, LogIn } from "lucide-react";
 import AuthShell from "../components/AuthShell.jsx";
@@ -9,6 +9,7 @@ import { isPlatformAdmin } from "../App.jsx";
 export default function LoginPage() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
+    const location = useLocation();
     const { loading, error, isAuthenticated, user, serverWaking } = useSelector(
         state => state.auth
     );
@@ -57,6 +58,12 @@ export default function LoginPage() {
                 </p>
             </div>
 
+            {location.state?.passwordReset && !error && (
+                <div className="sync-alert success">
+                    Password updated. Sign in with your new password.
+                </div>
+            )}
+
             {error && <div className="sync-alert error">{error}</div>}
 
             <form className="sync-auth-form" onSubmit={handleSubmit}>
@@ -98,6 +105,10 @@ export default function LoginPage() {
                             {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
                         </button>
                     </div>
+                </div>
+
+                <div className="sync-forgot-row">
+                    <Link to="/forgot-password">Forgot password?</Link>
                 </div>
 
                 <button

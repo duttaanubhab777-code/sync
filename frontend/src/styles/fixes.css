@@ -307,3 +307,47 @@ body,
 @media (prefers-reduced-motion: reduce) {
     .sync-loginlog-row { animation: none; }
 }
+
+
+/* --------------------------------------------------------------------------
+   Forgot password / Change password
+   -------------------------------------------------------------------------- */
+.sync-forgot-row { display: flex; justify-content: flex-end; margin-top: -6px; }
+.sync-forgot-row a {
+    color: var(--mongo);
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-underline-offset: 4px;
+}
+.sync-forgot-row a:hover { text-decoration: underline; }
+
+.sync-pass-meter { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
+.sync-pass-bars { display: flex; flex: 1; gap: 5px; }
+.sync-pass-bars i {
+    flex: 1;
+    height: 5px;
+    border-radius: 99px;
+    background: var(--line-strong);
+    transition: background-color 0.25s, transform 0.25s var(--ease);
+    transform-origin: left center;
+}
+.sync-pass-bars i.on { transform: scaleY(1.15); }
+.sync-pass-meter[data-level="0"] .sync-pass-bars i.on,
+.sync-pass-meter[data-level="1"] .sync-pass-bars i.on { background: #ff5d6c; }
+.sync-pass-meter[data-level="2"] .sync-pass-bars i.on { background: #ff9b43; }
+.sync-pass-meter[data-level="3"] .sync-pass-bars i.on { background: #b6f34d; }
+.sync-pass-meter[data-level="4"] .sync-pass-bars i.on { background: var(--mongo); }
+.sync-pass-meter small { min-width: 58px; text-align: right; color: var(--text-2); font-size: 0.74rem; font-weight: 700; }
+
+.sync-changepass-form { display: flex; flex-direction: column; gap: 14px; max-width: 520px; }
+.sync-changepass-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin-top: 2px; }
+.sync-changepass-forgot {
+    color: var(--mongo);
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-underline-offset: 4px;
+}
+.sync-changepass-forgot:hover { text-decoration: underline; }
+@media (prefers-reduced-motion: reduce) {
+    .sync-pass-bars i { transition: none; }
+}

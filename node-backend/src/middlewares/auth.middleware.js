@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { getAccessSecret } from "../utils/token.js";
+import { isTokenStale } from "../utils/tokenFreshness.js";
 import { User } from "../models/user.model.js";
 
 // ---------- সাধারণ REST API-এর জন্য ----------
@@ -39,6 +40,11 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
         throw new ApiError(403, "Your account has been blocked");
     }
 
+    // পাসওয়ার্ড বদলানোর আগের token দিয়ে আর ঢোকা যাবে না (401 হলে ফ্রন্টএন্ড refresh চেষ্টা করে, সেটাও বাতিল)
+    if (isTokenStale(decoded, user.passwordChangedAt)) {
+        throw new ApiError(401, "Password was changed, please sign in again");
+    }
+
     req.user = user;
     next();
 });
@@ -60,9 +66,12 @@ export const verifySocketToken = async (socket, next) => {
         const userId = String(decoded.id || decoded._id);
 
         const user = await User.findById(userId)
-            .select("username fullName isBlocked")
+            .select("username fullName isBlocked passwordChangedAt")
             .lean();
         if (!user || user.isBlocked) return next(new Error("UNAUTHORIZED"));
+        if (isTokenStale(decoded, user.passwordChangedAt)) {
+            return next(new Error("UNAUTHORIZED"));
+        }
 
         socket.user = {
             id: userId,

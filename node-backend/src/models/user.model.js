@@ -103,6 +103,9 @@ const userSchema = new mongoose.Schema(
             maxlength: 140
         },
 
+        // পাসওয়ার্ড শেষ কখন বদলেছে: এর আগে ইস্যু হওয়া সব access token অকেজো হয়ে যায়
+        passwordChangedAt: { type: Date, default: null },
+
         // প্রতিটা ডিভাইসের refresh token-এর SHA-256 hash (সর্বোচ্চ ৫টা), যাতে এক ডিভাইসে লগইন করলে আরেকটা লগআউট না হয়
         refreshTokens: {
             type: [String],

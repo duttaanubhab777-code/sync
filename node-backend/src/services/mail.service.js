@@ -55,6 +55,22 @@ export const buildOtpEmail = ({ fullName, otp, minutes }) => {
     return { subject: `${otp} is your Sync verification code`, html };
 };
 
+// পাসওয়ার্ড রিসেটের ইমেইল (relay-র ৮ KB সীমার ভেতরে ছোট HTML)
+export const buildPasswordResetEmail = ({ fullName, otp, minutes }) => {
+    const name = escapeHtml(String(fullName || "there").split(" ")[0]);
+    const code = escapeHtml(otp);
+    const html =
+        `<div style="font-family:Arial,Helvetica,sans-serif;background:#f4f6f8;padding:24px">` +
+        `<div style="max-width:420px;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px;color:#1f2933">` +
+        `<h2 style="margin:0 0 12px;color:#0f766e">Sync</h2>` +
+        `<p style="margin:0 0 16px">Hi ${name}, use this code to reset your Sync password:</p>` +
+        `<div style="font-size:32px;letter-spacing:8px;font-weight:bold;text-align:center;background:#ecfdf5;border-radius:8px;padding:14px 0;margin:0 0 16px">${code}</div>` +
+        `<p style="margin:0 0 8px;font-size:14px">This code expires in ${minutes} minutes.</p>` +
+        `<p style="margin:0;font-size:12px;color:#6b7280">If you did not ask to reset your password, ignore this email; your password will not change. Never share this code with anyone.</p>` +
+        `</div></div>`;
+    return { subject: `${otp} is your Sync password reset code`, html };
+};
+
 // relay-এর JSON error-কে MailRelayError বানানো (secret বা পুরো body কখনো log হয় না)
 const relayFailure = (status, body) => {
     const message = String(body?.message || "").slice(0, 200);
@@ -131,5 +147,15 @@ export const sendOtpEmail = async ({ to, fullName, otp, minutes }) => {
         return { dev: true };
     }
     const { subject, html } = buildOtpEmail({ fullName, otp, minutes });
+    return sendMail({ to, subject, html, fromName: "Sync" });
+};
+
+// পাসওয়ার্ড রিসেট OTP। লোকাল ডেভেলপমেন্টে relay না থাকলে কনসোলে ছাপা হয়।
+export const sendPasswordResetEmail = async ({ to, fullName, otp, minutes }) => {
+    if (!isMailRelayConfigured() && !isProd()) {
+        console.log(`[DEV][RESET OTP] ${to} -> ${otp}  (mail relay not configured)`);
+        return { dev: true };
+    }
+    const { subject, html } = buildPasswordResetEmail({ fullName, otp, minutes });
     return sendMail({ to, subject, html, fromName: "Sync" });
 };

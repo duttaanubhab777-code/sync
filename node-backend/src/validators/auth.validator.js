@@ -80,3 +80,33 @@ export const verifyOtpSchema = z.object({
 
 // POST /api/v1/auth/register/resend-otp
 export const resendOtpSchema = z.object({ email: emailField });
+
+// ---------- পাসওয়ার্ড ভুলে গেলে / বদলাতে ----------
+const newPasswordField = z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .max(64, "Password must be at most 64 characters");
+
+// POST /api/v1/auth/forgot-password/send-otp
+export const forgotPasswordSendSchema = z.object({ email: emailField });
+
+// POST /api/v1/auth/forgot-password/reset
+export const forgotPasswordResetSchema = z.object({
+    email: emailField,
+    otp: z
+        .string()
+        .trim()
+        .regex(/^\d{6}$/, "Enter the 6-digit code"),
+    newPassword: newPasswordField
+});
+
+// POST /api/v1/auth/change-password   (লগইন করা অবস্থায়)
+export const changePasswordSchema = z
+    .object({
+        currentPassword: z.string().min(1, "Current password is required"),
+        newPassword: newPasswordField
+    })
+    .refine(v => v.currentPassword !== v.newPassword, {
+        message: "New password must be different from the current one",
+        path: ["newPassword"]
+    });

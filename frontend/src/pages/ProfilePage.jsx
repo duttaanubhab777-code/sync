@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncLogo from "../components/SyncLogo.jsx";
+import ChangePasswordCard from "../components/ChangePasswordCard.jsx";
 import EnableNotifications from "../components/notifications/EnableNotifications.jsx";
 import useSignOut from "../hooks/useSignOut.js";
 import {
@@ -301,6 +302,8 @@ export default function ProfilePage() {
                         </form>
                     </div>
                 </div>
+
+                <ChangePasswordCard email={user?.email || ""} />
 
                 <div className="sync-profile-card sync-signout-card">
                     <div>
