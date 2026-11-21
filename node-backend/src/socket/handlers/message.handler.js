@@ -8,6 +8,7 @@ import {
     pickLocation
 } from "../../utils/attachments.js";
 import { isObjectId } from "../../utils/helpers.js";
+import { cleanupInBackground } from "../services/cloudinaryCleanup.service.js";
 import { Notification } from "../../models/notification.model.js";
 import { sendPushToUser } from "../../services/push.service.js";
 import { getTotalUnread } from "../../services/conversation.service.js";
@@ -372,12 +373,15 @@ export const registerMessageHandlers = (io, socket) => {
             }
             if (msg.deletedForEveryone) return ack?.({ ok: true });
 
+            const oldMediaUrl = msg.media?.url;
             msg.deletedForEveryone = true;
             msg.text = "This message was deleted";
             msg.media = undefined;
             msg.location = undefined;
             msg.contact = undefined;
             await msg.save();
+            // DB থেকে লিংক সরার পর Cloudinary থেকেও ফাইলটা মুছে ফেলা
+            cleanupInBackground([oldMediaUrl]);
 
             // এটা যদি চ্যাটের শেষ মেসেজ হয়, চ্যাট লিস্টের প্রিভিউও বদলে দেওয়া
             await Conversation.updateOne(

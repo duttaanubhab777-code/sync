@@ -33,8 +33,8 @@ services:
         value: "false"
       # Set the sync:false values in the Render Dashboard Environment tab.
       # JWT_SECRET must exactly match python-service/config.py on PythonAnywhere.
-      # Cloudinary API credentials (API_KEY and API_SECRET) belong ONLY on PythonAnywhere,
-      # never in this Render service or the frontend. Only CLOUDINARY_CLOUD_NAME is needed here.
+      # CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET here are used only to delete files from Cloudinary
+      # when they are deleted in the app. Never put them in the frontend.
       - key: MONGODB_URI
         sync: false
       - key: JWT_SECRET
@@ -42,6 +42,10 @@ services:
       - key: REFRESH_TOKEN_SECRET
         generateValue: true
       - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
         sync: false
       - key: PYTHON_SERVICE_URL
         sync: false

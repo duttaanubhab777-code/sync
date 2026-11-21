@@ -14,6 +14,7 @@ import {
     emitToUsers
 } from "../services/conversation.service.js";
 import { markSeen } from "../services/message.service.js";
+import { cleanupInBackground } from "../services/cloudinaryCleanup.service.js";
 
 const MAX_GROUP_MEMBERS = 256;
 
@@ -180,11 +181,13 @@ export const updateGroup = asyncHandler(async (req, res) => {
 
     if (groupName !== undefined) conv.groupName = groupName;
     if (groupDescription !== undefined) conv.groupDescription = groupDescription;
+    const oldGroupIcon = conv.groupIcon;
     if (groupIcon !== undefined) conv.groupIcon = groupIcon;
     if (onlyAdminCanMessage !== undefined) {
         conv.onlyAdminCanMessage = onlyAdminCanMessage;
     }
     await conv.save();
+    if (oldGroupIcon && oldGroupIcon !== conv.groupIcon) cleanupInBackground([oldGroupIcon]);
     await conv.populate(POPULATE_MEMBERS);
 
     emitToUsers(io, conv.members.map(idOf), "conversation:updated", {
@@ -297,8 +300,15 @@ export const leaveGroup = asyncHandler(async (req, res) => {
     emitToUsers(io, [me], "conversation:removed", { conversationId });
 
     if (conv.members.length === 0) {
+        const groupMedia = await Message.find({
+            conversationId,
+            "media.url": { $exists: true }
+        })
+            .select("media.url")
+            .lean();
         await Message.deleteMany({ conversationId });
         await Conversation.deleteOne({ _id: conversationId });
+        cleanupInBackground([conv.groupIcon, ...groupMedia.map(m => m.media?.url)]);
         return send(res, 200, null, "Left the group");
     }
     if (conv.admins.length === 0) conv.admins = [conv.members[0]];

@@ -12,6 +12,7 @@ import { assertObjectId, escapeRegex, isObjectId } from "../utils/helpers.js";
 import { getOnlineUserIds, isUserOnline } from "../socket/store.js";
 import { isSuperAdminEmail } from "../utils/superAdmin.js";
 import { emitToUsers, getContactIds } from "../services/conversation.service.js";
+import { cleanupInBackground } from "../services/cloudinaryCleanup.service.js";
 
 /*
  * নামের গোলমাল এড়াতে:
@@ -314,6 +315,10 @@ export const deleteUserByAdmin = asyncHandler(async (req, res) => {
     io?.to(`user:${id}`).emit("user:blocked");
     io?.in(`user:${id}`).disconnectSockets(true);
 
+    // অ্যাকাউন্টের avatar ও সব story-র ফাইল Cloudinary থেকেও মোছা হবে
+    const userStories = await Story.find({ author: id }).select("media.url").lean();
+    const urlsToDelete = [target.avatar, ...userStories.map(s => s.media?.url)];
+
     await Promise.all([
         PushSubscription.deleteMany({ user: id }),
         Story.deleteMany({ author: id }),
@@ -321,6 +326,7 @@ export const deleteUserByAdmin = asyncHandler(async (req, res) => {
         User.deleteOne({ _id: id })
     ]);
 
+    cleanupInBackground(urlsToDelete);
     res.status(200).json(new ApiResponse(200, { deletedId: id }, "User deleted"));
 });
 
@@ -426,10 +432,12 @@ export const removeChatMedia = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Media not found");
     }
     if (!msg.deletedForEveryone) {
+        const oldMediaUrl = msg.media?.url;
         msg.deletedForEveryone = true;
         msg.text = "This message was deleted";
         msg.media = undefined;
         await msg.save();
+        cleanupInBackground([oldMediaUrl]);
 
         await Conversation.updateOne(
             { _id: msg.conversationId, "lastMessage.messageId": msg._id },
@@ -455,8 +463,9 @@ export const removeChatMedia = asyncHandler(async (req, res) => {
 // DELETE /api/v1/admin/media/story/:id
 export const removeStoryMedia = asyncHandler(async (req, res) => {
     const id = assertObjectId(req.params.id, "story id");
-    const story = await Story.findByIdAndDelete(id).select("author").lean();
+    const story = await Story.findByIdAndDelete(id).select("author media.url").lean();
     if (!story) throw new ApiError(404, "Story not found");
+    cleanupInBackground([story.media?.url]);
 
     const authorId = String(story.author);
     const contacts = await getContactIds(authorId);
@@ -515,7 +524,12 @@ export const deleteGroupByAdmin = asyncHandler(async (req, res) => {
     }).lean();
     if (!conv) throw new ApiError(404, "Group not found");
 
+    // গ্রুপের সব মিডিয়া মেসেজ ও গ্রুপ আইকন Cloudinary থেকেও মোছা
+    const groupMedia = await Message.find({ conversationId: id, "media.url": { $exists: true } })
+        .select("media.url")
+        .lean();
     await Message.deleteMany({ conversationId: id });
+    cleanupInBackground([conv.groupIcon, ...groupMedia.map(m => m.media?.url)]);
     emitToUsers(req.app.get("io"), conv.members || [], "conversation:removed", {
         conversationId: id
     });

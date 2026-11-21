@@ -14,6 +14,10 @@ import "./models/push-subscription.model.js";
 import "./models/notice.model.js";
 import "./models/pending-signup.model.js";
 import "./models/app-update-state.model.js";
+import {
+    migrateTtlIndexes,
+    startMediaSweeper
+} from "./services/cloudinaryCleanup.service.js";
 import { startAppUpdateWatcher } from "./services/appUpdateNotify.service.js";
 import { User } from "./models/user.model.js";
 import { getSuperAdminEmails } from "./utils/superAdmin.js";
@@ -39,9 +43,11 @@ server.listen(port, "0.0.0.0", () => {
 // ব্যাকগ্রাউন্ডে MongoDB কানেকশন ও ইনডেক্স প্রস্তুত করা
 (async () => {
     await connectDB();
+    await migrateTtlIndexes();
     await prepareDatabase();
     await ensureSuperAdmins();
     startAppUpdateWatcher();
+    startMediaSweeper();
 })();
 
 // .env-এর SUPER_ADMIN_EMAILS তালিকার সাথে ডাটাবেস মিলিয়ে নেওয়া:

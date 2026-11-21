@@ -397,6 +397,7 @@ Use `node-backend/.env.example` as the source of truth for Node environment vari
 | `JWT_SECRET` | Yes | Access-token signing secret; must exactly match Python service `JWT_SECRET` |
 | `REFRESH_TOKEN_SECRET` | Recommended | Separate refresh-token signing secret |
 | `CLOUDINARY_CLOUD_NAME` | Yes for media | Cloudinary cloud name used to validate media URLs |
+| `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | Recommended | Used only to delete files from Cloudinary when they are deleted in the app (messages, stories, notices, wallpapers, avatars, group icons, expired stories). Without them, deletes only remove the DB link |
 | `PYTHON_SERVICE_URL` | Yes for uploads/OTP relay | Base URL of the Flask service |
 | `MAIL_RELAY_SECRET` | Yes for OTP email | Shared secret; must match Python `MAIL_RELAY_SECRET` |
 | `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_EMAILS` | Yes to configure Super Admins | Email address(es) granted Super Admin status |
@@ -433,7 +434,7 @@ Copy `config.example.py` to `config.py`.
 | `SMTP_MODE` | Optional | `auto`, `465` or `587` |
 | `RATE_LIMIT_PER_MINUTE` | Optional | Per-user upload-signing rate limit |
 
-**Credential boundary:** Cloudinary API key/secret and Gmail App Password belong only in the Python service. The Node service needs the Cloudinary cloud name, not the Cloudinary API secret.
+**Credential boundary:** the Gmail App Password belongs only in the Python service. The Cloudinary API key/secret are also set on the Node service, solely so it can delete files from Cloudinary; they are never sent to the browser.
 
 <a id="deployment"></a>
 <img src="docs/assets/headers/deployment.svg" alt="Deployment" height="64"/>

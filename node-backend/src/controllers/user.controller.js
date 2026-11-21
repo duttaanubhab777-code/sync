@@ -6,6 +6,7 @@ import { assertObjectId, escapeRegex, PUBLIC_USER_FIELDS } from "../utils/helper
 import { isValidCloudinaryUrl } from "../utils/cloudinary.js";
 import { normalizePhone } from "../validators/auth.validator.js";
 import { isUserOnline } from "../socket/store.js";
+import { cleanupInBackground } from "../services/cloudinaryCleanup.service.js";
 import { publicUser } from "./auth.controller.js";
 
 const withOnline = u => ({ ...u, online: isUserOnline(u._id) });
@@ -96,11 +97,14 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
         update.avatar = avatar;
     }
 
+    const oldAvatar = avatar !== undefined ? req.user.avatar : "";
     const user = await User.findByIdAndUpdate(
         req.user._id,
         { $set: update },
         { new: true, runValidators: true }
     );
+    // ছবি বদলালে বা সরালে পুরনোটা Cloudinary থেকে মোছা
+    if (oldAvatar && oldAvatar !== user?.avatar) cleanupInBackground([oldAvatar]);
     res
         .status(200)
         .json(new ApiResponse(200, publicUser(user), "Profile updated"));

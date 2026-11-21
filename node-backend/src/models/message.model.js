@@ -134,6 +134,12 @@ messageSchema.pre("validate", function () {
 // চ্যাটের পুরনো মেসেজ লোড (pagination) করার ইনডেক্স
 messageSchema.index({ conversationId: 1, _id: -1 });
 
+// মিডিয়া মুছার আগে "অন্য মেসেজ একই ফাইল ব্যবহার করছে কিনা" দেখার জন্য
+messageSchema.index(
+    { "media.url": 1 },
+    { partialFilterExpression: { "media.url": { $type: "string" } } }
+);
+
 // একই মেসেজ দুবার সেভ না হওয়ার (idempotency) ইউনিক ইনডেক্স
 messageSchema.index({ sender: 1, clientMsgId: 1 }, { unique: true });
 

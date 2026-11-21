@@ -5,6 +5,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { assertObjectId, escapeRegex } from "../utils/helpers.js";
 import { isValidCloudinaryUrl } from "../utils/cloudinary.js";
+import { cleanupInBackground } from "../services/cloudinaryCleanup.service.js";
 
 const MAX_WALLPAPERS = 200;
 
@@ -209,6 +210,7 @@ export const deleteWallpaper = asyncHandler(async (req, res) => {
     const id = assertObjectId(req.params.id, "wallpaper id");
     const wallpaper = await Wallpaper.findByIdAndDelete(id);
     if (!wallpaper) throw new ApiError(404, "Wallpaper not found");
+    cleanupInBackground([wallpaper.image?.url]);
 
     // এটা যারা বেছে রেখেছিল তারা "Default"-এ ফিরে যাবে
     await User.updateMany({ wallpaperChoice: id }, { $set: { wallpaperChoice: null } });

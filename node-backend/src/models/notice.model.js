@@ -20,7 +20,7 @@ const noticeSchema = new Schema(
     { timestamps: true }
 );
 
-noticeSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+noticeSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 3600 }); // sweeper আগে ছবি মোছে
 noticeSchema.index({ createdAt: -1 });
 
 export const Notice = mongoose.model("Notice", noticeSchema);

@@ -6,6 +6,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { assertObjectId } from "../utils/helpers.js";
 import { isValidCloudinaryUrl } from "../utils/cloudinary.js";
 import { sendPushToAll } from "../services/push.service.js";
+import { cleanupInBackground } from "../services/cloudinaryCleanup.service.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -178,6 +179,7 @@ export const deleteNotice = asyncHandler(async (req, res) => {
     const id = assertObjectId(req.params.id, "notice id");
     const notice = await Notice.findByIdAndDelete(id);
     if (!notice) throw new ApiError(404, "Notice not found");
+    cleanupInBackground([notice.image?.url]);
     await NoticeAck.deleteMany({ notice: id });
     req.app.get("io")?.emit("notice:removed", { noticeId: id });
     res.status(200).json(new ApiResponse(200, null, "Notice deleted"));

@@ -11,6 +11,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { assertObjectId, PUBLIC_USER_FIELDS } from "../utils/helpers.js";
 import { isValidCloudinaryUrl, pickMedia } from "../utils/cloudinary.js";
 import { emitToUsers, getContactIds } from "../services/conversation.service.js";
+import { cleanupInBackground } from "../services/cloudinaryCleanup.service.js";
 
 const send = (res, status, data, message) =>
     res.status(status).json(new ApiResponse(status, data, message));
@@ -264,8 +265,11 @@ export const deleteStory = asyncHandler(async (req, res) => {
     const me = String(req.user._id);
     const id = assertObjectId(req.params.id, "story id");
 
-    const result = await Story.deleteOne({ _id: id, author: me });
-    if (result.deletedCount === 0) throw new ApiError(404, "Story not found");
+    const deletedStory = await Story.findOneAndDelete({ _id: id, author: me })
+        .select("media.url")
+        .lean();
+    if (!deletedStory) throw new ApiError(404, "Story not found");
+    cleanupInBackground([deletedStory.media?.url]);
 
     const contacts = await visibleAuthorIds(me);
     emitToUsers(req.app.get("io"), contacts, "story:deleted", {

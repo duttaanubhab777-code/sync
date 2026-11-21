@@ -69,7 +69,8 @@ storySchema.pre("validate", function () {
 });
 
 // MongoDB TTL Index: expiresAt সময়ে পৌঁ ছা লে ই ডকুমে ন্টটি স্বয়ং ক্রি য়ভা বে মুছেমুছে যা বে !
-storySchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+// TTL ১ ঘণ্টা পিছিয়ে রাখা: মেয়াদ শেষে আগে cloudinaryCleanup.service-এর sweeper মিডিয়া মোছে, তারপর ডকুমেন্ট
+storySchema.index({ expiresAt: 1 }, { expireAfterSeconds: 3600 });
 // একই লেখকের একই clientStoryId দুবার সেভ হবে না (পুরনো story-তে এই ফিল্ড নেই, তাই partial)
 storySchema.index(
     { author: 1, clientStoryId: 1 },
