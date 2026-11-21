@@ -108,7 +108,7 @@ export default function App() {
                 <Route index element={<HomeRedirect />} />
                 <Route path="chats" element={<ChatPage />} />
                 <Route path="chats/:conversationId" element={<ChatPage />} />
-                <Route path="stories" element={<StoriesPage />} />
+                <Route path="stories" element={<StoriesPage hasUpdate={hasUpdate} onSignOut={() => setConfirmLogout(true)} />} />
                 <Route path="profile" element={<ProfilePage />} />
                 <Route path="updates" element={<UpdatesPage />} />
                 <Route
