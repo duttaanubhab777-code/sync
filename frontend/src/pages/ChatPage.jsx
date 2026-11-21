@@ -1248,10 +1248,16 @@ export default function ChatPage() {
                                         showInfoDrawer ? "active" : ""
                                     }`}
                                     title="Conversation Info"
+                                    aria-label="Conversation Info"
                                     onClick={() => setShowInfoDrawer(v => !v)}
                                 >
                                     <Info size={20} />
                                 </button>
+                                <MoreMenu
+                                    hasUpdate={hasUpdate}
+                                    onSignOut={() => setConfirmLogout(true)}
+                                    className="sync-chat-more-btn"
+                                />
                             </div>
                         </header>
 
