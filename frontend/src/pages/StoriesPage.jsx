@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
     Plus,
@@ -68,7 +69,8 @@ const REACTION_GROUPS = [
     }
 ];
 
-export default function StoriesPage({ hasUpdate = false, onSignOut }) {
+export default function StoriesPage() {
+    const { hasUpdate = false, onSignOut } = useOutletContext() || {};
     const dispatch = useDispatch();
     const { user } = useSelector(state => state.auth);
     const { storyGroups, loading, posting, viewersByStoryId } = useSelector(
