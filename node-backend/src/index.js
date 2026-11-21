@@ -13,6 +13,8 @@ import "./models/notification.model.js";
 import "./models/push-subscription.model.js";
 import "./models/notice.model.js";
 import "./models/pending-signup.model.js";
+import "./models/app-update-state.model.js";
+import { startAppUpdateWatcher } from "./services/appUpdateNotify.service.js";
 import { User } from "./models/user.model.js";
 import { getSuperAdminEmails } from "./utils/superAdmin.js";
 
@@ -39,6 +41,7 @@ server.listen(port, "0.0.0.0", () => {
     await connectDB();
     await prepareDatabase();
     await ensureSuperAdmins();
+    startAppUpdateWatcher();
 })();
 
 // .env-এর SUPER_ADMIN_EMAILS তালিকার সাথে ডাটাবেস মিলিয়ে নেওয়া:

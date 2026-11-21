@@ -171,3 +171,23 @@ jobs:
                   body_path: RELEASE_NOTES.md
                   files: mobile/Sync.apk
                   make_latest: true
+
+            # নতুন APK release হলে Android অ্যাপের ব্যবহারকারীদের "Update Now" বাটনসহ নোটিফিকেশন পাঠাতে সার্ভারকে জানায়।
+            # GitHub repo → Settings → Secrets-এ APP_UPDATE_NOTIFY_SECRET দিলে এটা কাজ করে (সার্ভারের .env-এর মানের সাথে এক)।
+            # না দিলে বাদ যায়; তখনও সার্ভার নিজে প্রতি ৫ মিনিটে নতুন release খুঁজে নোটিফিকেশন পাঠায়।
+            - name: Notify Android users about the update
+              continue-on-error: true
+              env:
+                  SYNC_API_URL: ${{ secrets.SYNC_API_URL }}
+                  APP_UPDATE_NOTIFY_SECRET: ${{ secrets.APP_UPDATE_NOTIFY_SECRET }}
+              run: |
+                  if [ -z "$APP_UPDATE_NOTIFY_SECRET" ]; then
+                      echo "APP_UPDATE_NOTIFY_SECRET নেই, তাই এই ধাপ বাদ (সার্ভার নিজেই খুঁজে নেবে)"
+                      exit 0
+                  fi
+                  API="${SYNC_API_URL:-https://sync-5lfm.onrender.com}"
+                  sleep 20
+                  curl -sS --fail-with-body --max-time 100 --retry 3 --retry-delay 15 --retry-all-errors \
+                      -X POST "${API%/}/api/v1/app/updates/notify" \
+                      -H "x-update-secret: $APP_UPDATE_NOTIFY_SECRET"
+                  echo

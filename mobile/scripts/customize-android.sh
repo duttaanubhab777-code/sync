@@ -57,6 +57,8 @@ perms = [
     "android.permission.VIBRATE",
     "android.permission.WAKE_LOCK",
     "android.permission.RECEIVE_BOOT_COMPLETED",
+    # নোটিফিকেশনের "Update Now" দিয়ে নামানো APK ইনস্টল করার জন্য
+    "android.permission.REQUEST_INSTALL_PACKAGES",
     # অ্যাপ আইকনের unread badge সংখ্যা (বিভিন্ন কোম্পানির লঞ্চারের জন্য)
     "com.sec.android.provider.badge.permission.READ",
     "com.sec.android.provider.badge.permission.WRITE",
@@ -107,6 +109,37 @@ app_extras = """
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- অ্যাপ আপডেট: নোটিফিকেশনের "Update Now" বাটন -> ডাউনলোড -> ইনস্টল -->
+        <receiver
+            android:name=".UpdateActionReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".UpdateDownloadReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.DOWNLOAD_COMPLETE" />
+            </intent-filter>
+        </receiver>
+
+        <activity
+            android:name=".InstallActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <provider
+            android:name=".SyncUpdateFileProvider"
+            android:authorities="${applicationId}.updateprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/sync_update_paths" />
+        </provider>
 """
 if "SyncMessagingService" not in s:
     s = s.replace("</application>", app_extras + "    </application>", 1)
@@ -470,6 +503,8 @@ public class SyncMessagingService extends MessagingService {
         noticeChannel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
         noticeChannel.setSound(noticeSoundUri, audioAttr);
         nm.createNotificationChannel(noticeChannel);
+
+        AppUpdateHelper.ensureChannel(context);
     }
 
     public static void clearConversationNotifications(Context context, String conversationId) {
@@ -531,6 +566,12 @@ public class SyncMessagingService extends MessagingService {
             ActivityCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED
         ) {
+            return;
+        }
+
+        // নতুন অ্যাপ ভার্সন: "Update Now" বাটনসহ আলাদা নোটিফিকেশন (চ্যাট/নোটিশের সাথে মেশে না)
+        if ("app_update".equals(type)) {
+            AppUpdateHelper.showUpdateNotification(this, data);
             return;
         }
 
@@ -970,6 +1011,496 @@ public class SyncMessagingService extends MessagingService {
         if (map == null) return fallback;
         String val = map.get(key);
         return (val != null && !val.isEmpty()) ? val : fallback;
+    }
+}
+JAVA
+
+# ---------- 2c. অ্যাপ আপডেট: নোটিফিকেশন "Update Now" -> ডাউনলোড -> ইনস্টল ----------
+mkdir -p "$RES/xml"
+cat > "$RES/xml/sync_update_paths.xml" <<'XML'
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <external-files-path name="updates" path="updates/" />
+</paths>
+XML
+
+cat > "$JAVA_DIR/SyncUpdateFileProvider.java" <<'JAVA'
+package com.sync.chat;
+
+import androidx.core.content.FileProvider;
+
+// Capacitor-এর নিজের FileProvider-এর সাথে যেন সংঘাত না হয়, তাই আলাদা সাবক্লাস
+public class SyncUpdateFileProvider extends FileProvider {
+}
+JAVA
+
+cat > "$JAVA_DIR/AppUpdateHelper.java" <<'JAVA'
+package com.sync.chat;
+
+import android.app.DownloadManager;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.net.Uri;
+import android.os.Build;
+import android.widget.Toast;
+import androidx.core.app.ActivityCompat;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
+import androidx.core.content.pm.PackageInfoCompat;
+import java.io.File;
+import java.util.Map;
+
+/**
+ * Android অ্যাপের নিজস্ব আপডেট: নতুন ভার্সনের নোটিফিকেশনে "Update Now" চাপলে
+ * APK ডাউনলোড হয়, শেষ হলে ইনস্টলার খোলে (ফোনের নিয়মে শেষে একবার "Install" চাপতে হয়)।
+ */
+public class AppUpdateHelper {
+    public static final String CHANNEL_UPDATES = "sync_updates_v1";
+    public static final String ACTION_UPDATE_NOW = "com.sync.chat.ACTION_UPDATE_NOW";
+    public static final String ACTION_UPDATE_LATER = "com.sync.chat.ACTION_UPDATE_LATER";
+    public static final int NOTIFICATION_ID = 777100;
+
+    private static final String PREFS = "sync_app_update";
+    private static final int SYNC_GREEN = 0xFF00ED64;
+
+    public static void ensureChannel(Context context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+        NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm == null) return;
+        NotificationChannel ch = new NotificationChannel(
+            CHANNEL_UPDATES,
+            "App Updates",
+            NotificationManager.IMPORTANCE_HIGH
+        );
+        ch.setDescription("New Sync versions with a one-tap Update Now button");
+        ch.enableLights(true);
+        ch.setLightColor(SYNC_GREEN);
+        ch.setShowBadge(false);
+        ch.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
+        nm.createNotificationChannel(ch);
+    }
+
+    public static int installedBuild(Context context) {
+        try {
+            PackageInfo pi = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+            return (int) PackageInfoCompat.getLongVersionCode(pi);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private static int parseInt(String raw) {
+        try {
+            return Integer.parseInt(raw == null ? "" : raw.trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private static int piFlags() {
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags |= PendingIntent.FLAG_IMMUTABLE;
+        return flags;
+    }
+
+    private static boolean canNotify(Context context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return ActivityCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS)
+                == PackageManager.PERMISSION_GRANTED;
+        }
+        return true;
+    }
+
+    private static void notifySafe(Context context, android.app.Notification n) {
+        if (!canNotify(context)) return;
+        try {
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, n);
+        } catch (SecurityException ignored) {
+        }
+    }
+
+    private static PendingIntent openAppPendingIntent(Context context) {
+        Intent intent = new Intent(context, MainActivity.class);
+        intent.setAction(Intent.ACTION_MAIN);
+        intent.addCategory(Intent.CATEGORY_LAUNCHER);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        intent.putExtra("sync_target_url", "/updates");
+        return PendingIntent.getActivity(context, 7000, intent, piFlags());
+    }
+
+    private static PendingIntent actionPendingIntent(Context context, String action, int req, String url, int build, String version) {
+        Intent intent = new Intent(context, UpdateActionReceiver.class);
+        intent.setAction(action);
+        intent.putExtra("url", url);
+        intent.putExtra("build", build);
+        intent.putExtra("version", version);
+        return PendingIntent.getBroadcast(context, req, intent, piFlags());
+    }
+
+    /** FCM "app_update" ডাটা থেকে "Update Now" বাটনসহ নোটিফিকেশন */
+    public static void showUpdateNotification(Context context, Map<String, String> data) {
+        int build = parseInt(data.get("build"));
+        String version = data.get("version") != null ? data.get("version") : "";
+        String url = data.get("downloadUrl") != null ? data.get("downloadUrl") : "";
+        String title = data.get("title") != null && !data.get("title").isEmpty()
+            ? data.get("title")
+            : "A new version of Sync is available";
+        String body = data.get("body") != null && !data.get("body").isEmpty()
+            ? data.get("body")
+            : "Improvements and bug fixes.";
+
+        // ইতিমধ্যে এই (বা নতুন) ভার্সন থাকলে কিছু দেখানো হবে না
+        if (build > 0 && installedBuild(context) >= build) return;
+
+        ensureChannel(context);
+
+        NotificationCompat.Builder b = new NotificationCompat.Builder(context, CHANNEL_UPDATES)
+            .setSmallIcon(R.drawable.ic_stat_sync)
+            .setColor(SYNC_GREEN)
+            .setContentTitle(title)
+            .setContentText(firstLine(body))
+            .setStyle(new NotificationCompat.BigTextStyle().bigText(body).setBigContentTitle(title))
+            .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setDefaults(NotificationCompat.DEFAULT_VIBRATE | NotificationCompat.DEFAULT_LIGHTS)
+            .setSound(SyncMessagingService.soundUri(context, "sync_notice"))
+            .setAutoCancel(true)
+            .setWhen(System.currentTimeMillis())
+            .setShowWhen(true)
+            .setContentIntent(openAppPendingIntent(context));
+
+        if (!url.isEmpty()) {
+            b.addAction(
+                R.drawable.ic_stat_sync,
+                "Update Now",
+                actionPendingIntent(context, ACTION_UPDATE_NOW, 7001, url, build, version)
+            );
+        }
+        b.addAction(
+            R.drawable.ic_stat_sync,
+            "Later",
+            actionPendingIntent(context, ACTION_UPDATE_LATER, 7002, url, build, version)
+        );
+
+        notifySafe(context, b.build());
+    }
+
+    private static String firstLine(String text) {
+        if (text == null) return "";
+        int i = text.indexOf('\n');
+        return i > 0 ? text.substring(0, i) : text;
+    }
+
+    public static void cancelNotification(Context context) {
+        try {
+            NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID);
+        } catch (Exception ignored) {
+        }
+    }
+
+    public static File updatesDir(Context context) {
+        return context.getExternalFilesDir("updates");
+    }
+
+    public static File apkFile(Context context, int build) {
+        File dir = updatesDir(context);
+        return dir == null ? null : new File(dir, "Sync-" + build + ".apk");
+    }
+
+    /** সর্বশেষ নামানো APK (যদি ঠিকমতো নামা শেষ হয়) */
+    public static File readyApk(Context context) {
+        SharedPreferences sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        int build = sp.getInt("done_build", 0);
+        if (build <= 0 || installedBuild(context) >= build) return null;
+        File f = apkFile(context, build);
+        return (f != null && f.exists() && f.length() > 0) ? f : null;
+    }
+
+    private static void clearOldApks(Context context) {
+        try {
+            File dir = updatesDir(context);
+            if (dir == null || !dir.isDirectory()) return;
+            File[] files = dir.listFiles();
+            if (files == null) return;
+            for (File f : files) {
+                if (f.getName().endsWith(".apk")) f.delete();
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** "Update Now": APK নামানো শুরু (ফোনের Download Manager নিজেই progress নোটিফিকেশন দেখায়) */
+    public static void startDownload(Context context, String url, int build, String version) {
+        SharedPreferences sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+
+        // এই build আগেই নামানো থাকলে আবার না নামিয়ে সরাসরি ইনস্টল
+        File existing = apkFile(context, build);
+        if (build > 0 && sp.getInt("done_build", 0) == build && existing != null && existing.exists() && existing.length() > 0) {
+            showReadyNotification(context, build, version);
+            launchInstaller(context);
+            return;
+        }
+
+        try {
+            DownloadManager dm = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
+            if (dm == null) throw new IllegalStateException("no download manager");
+            clearOldApks(context);
+
+            DownloadManager.Request req = new DownloadManager.Request(Uri.parse(url));
+            req.setTitle("Sync " + (version.isEmpty() ? "update" : version));
+            req.setDescription("Downloading update…");
+            req.setMimeType("application/vnd.android.package-archive");
+            req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE);
+            req.setAllowedOverMetered(true);
+            req.setAllowedOverRoaming(true);
+            req.setDestinationInExternalFilesDir(context, "updates", "Sync-" + build + ".apk");
+
+            long id = dm.enqueue(req);
+            sp.edit()
+                .putLong("download_id", id)
+                .putInt("pending_build", build)
+                .putString("pending_version", version)
+                .putString("pending_url", url)
+                .remove("done_build")
+                .apply();
+            Toast.makeText(context, "Downloading update…", Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            showFailedNotification(context, url, build, version);
+        }
+    }
+
+    public static boolean isOurDownload(Context context, long id) {
+        SharedPreferences sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        return id != -1 && sp.getLong("download_id", -1) == id;
+    }
+
+    /** ডাউনলোড শেষ হলে DownloadManager-এর broadcast থেকে ডাকা হয় */
+    public static void onDownloadFinished(Context context, long id) {
+        SharedPreferences sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        int build = sp.getInt("pending_build", 0);
+        String version = sp.getString("pending_version", "");
+        String url = sp.getString("pending_url", "");
+
+        boolean ok = false;
+        try {
+            DownloadManager dm = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
+            android.database.Cursor c = dm.query(new DownloadManager.Query().setFilterById(id));
+            if (c != null) {
+                try {
+                    if (c.moveToFirst()) {
+                        int status = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
+                        ok = status == DownloadManager.STATUS_SUCCESSFUL;
+                    }
+                } finally {
+                    c.close();
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        File f = apkFile(context, build);
+        if (ok && f != null && f.exists() && f.length() > 0) {
+            sp.edit().putInt("done_build", build).apply();
+            showReadyNotification(context, build, version);
+            // অ্যাপ খোলা থাকলে সাথে সাথে ইনস্টলার, নইলে নোটিফিকেশনে চাপলে
+            if (MainActivity.isAppInForeground) launchInstaller(context);
+        } else {
+            showFailedNotification(context, url, build, version);
+        }
+    }
+
+    private static Intent installActivityIntent(Context context) {
+        Intent i = new Intent(context, InstallActivity.class);
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        return i;
+    }
+
+    public static void launchInstaller(Context context) {
+        try {
+            context.startActivity(installActivityIntent(context));
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static void showReadyNotification(Context context, int build, String version) {
+        ensureChannel(context);
+        PendingIntent install = PendingIntent.getActivity(context, 7003, installActivityIntent(context), piFlags());
+        String label = version == null || version.isEmpty() ? "the new version" : "Sync " + version;
+        NotificationCompat.Builder b = new NotificationCompat.Builder(context, CHANNEL_UPDATES)
+            .setSmallIcon(R.drawable.ic_stat_sync)
+            .setColor(SYNC_GREEN)
+            .setContentTitle("Update ready to install")
+            .setContentText("Tap to install " + label)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(install)
+            .addAction(R.drawable.ic_stat_sync, "Install", install);
+        notifySafe(context, b.build());
+    }
+
+    private static void showFailedNotification(Context context, String url, int build, String version) {
+        ensureChannel(context);
+        NotificationCompat.Builder b = new NotificationCompat.Builder(context, CHANNEL_UPDATES)
+            .setSmallIcon(R.drawable.ic_stat_sync)
+            .setColor(SYNC_GREEN)
+            .setContentTitle("Update download failed")
+            .setContentText("Check your connection and try again")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(openAppPendingIntent(context));
+        if (url != null && !url.isEmpty()) {
+            b.addAction(
+                R.drawable.ic_stat_sync,
+                "Retry",
+                actionPendingIntent(context, ACTION_UPDATE_NOW, 7001, url, build, version)
+            );
+        }
+        notifySafe(context, b.build());
+    }
+}
+JAVA
+
+cat > "$JAVA_DIR/UpdateActionReceiver.java" <<'JAVA'
+package com.sync.chat;
+
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+
+// নোটিফিকেশনের "Update Now" / "Later" বাটন
+public class UpdateActionReceiver extends BroadcastReceiver {
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        if (intent == null || intent.getAction() == null) return;
+        String action = intent.getAction();
+
+        if (AppUpdateHelper.ACTION_UPDATE_LATER.equals(action)) {
+            AppUpdateHelper.cancelNotification(context);
+            return;
+        }
+
+        if (AppUpdateHelper.ACTION_UPDATE_NOW.equals(action)) {
+            String url = intent.getStringExtra("url");
+            int build = intent.getIntExtra("build", 0);
+            String version = intent.getStringExtra("version");
+            if (url == null || url.isEmpty()) return;
+            AppUpdateHelper.cancelNotification(context);
+            AppUpdateHelper.startDownload(context, url, build, version == null ? "" : version);
+        }
+    }
+}
+JAVA
+
+cat > "$JAVA_DIR/UpdateDownloadReceiver.java" <<'JAVA'
+package com.sync.chat;
+
+import android.app.DownloadManager;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+
+// APK ডাউনলোড শেষ হলে (শুধু আমাদের নামানোটাই ধরে)
+public class UpdateDownloadReceiver extends BroadcastReceiver {
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        if (intent == null || !DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(intent.getAction())) return;
+        long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
+        if (!AppUpdateHelper.isOurDownload(context, id)) return;
+        AppUpdateHelper.onDownloadFinished(context, id);
+    }
+}
+JAVA
+
+cat > "$JAVA_DIR/InstallActivity.java" <<'JAVA'
+package com.sync.chat;
+
+import android.app.Activity;
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.provider.Settings;
+import android.widget.Toast;
+import androidx.core.content.FileProvider;
+import java.io.File;
+
+// স্বচ্ছ, ইউআই-হীন Activity: "Install unknown apps" অনুমতি না থাকলে সেটিংস খুলে দেয়, তারপর সিস্টেম ইনস্টলার চালায়
+public class InstallActivity extends Activity {
+    private boolean waitingForPermission = false;
+    private boolean leftForSettings = false;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        proceed();
+    }
+
+    @Override
+    protected void onPause() {
+        if (waitingForPermission) leftForSettings = true;
+        super.onPause();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (waitingForPermission && leftForSettings) {
+            waitingForPermission = false;
+            leftForSettings = false;
+            if (canInstall()) {
+                proceed();
+            } else {
+                Toast.makeText(this, "Permission not granted. Tap the update notification to try again.", Toast.LENGTH_LONG).show();
+                finish();
+            }
+        }
+    }
+
+    private boolean canInstall() {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.O || getPackageManager().canRequestPackageInstalls();
+    }
+
+    private void proceed() {
+        File apk = AppUpdateHelper.readyApk(this);
+        if (apk == null) {
+            Toast.makeText(this, "Update file not found. Please tap Update Now again.", Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
+
+        if (!canInstall()) {
+            waitingForPermission = true;
+            Toast.makeText(this, "Allow Sync to install updates, then come back", Toast.LENGTH_LONG).show();
+            try {
+                startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName())));
+            } catch (ActivityNotFoundException e) {
+                waitingForPermission = false;
+                finish();
+            }
+            return;
+        }
+
+        try {
+            Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".updateprovider", apk);
+            Intent install = new Intent(Intent.ACTION_VIEW);
+            install.setDataAndType(uri, "application/vnd.android.package-archive");
+            install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            install.putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true);
+            startActivity(install);
+            AppUpdateHelper.cancelNotification(this);
+        } catch (Exception e) {
+            Toast.makeText(this, "Could not start the installer", Toast.LENGTH_LONG).show();
+        }
+        finish();
     }
 }
 JAVA

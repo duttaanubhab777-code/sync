@@ -1,7 +1,12 @@
 import { Router } from "express";
-import { getAppUpdates } from "../controllers/appUpdate.controller.js";
+import {
+    getAppUpdates,
+    notifyAppUpdate
+} from "../controllers/appUpdate.controller.js";
 
 const router = Router();
 // লগইন ছাড়াই চলে: আপডেট পপআপ লগইন পেজেও দেখানো যায়
 router.get("/updates", getAppUpdates);
+// শুধু GitHub Actions ডাকে (গোপন secret লাগে)
+router.post("/updates/notify", notifyAppUpdate);
 export default router;

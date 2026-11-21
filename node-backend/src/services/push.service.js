@@ -171,6 +171,11 @@ export const buildFcmDataMap = (payload = {}) => {
         messageId: nested.messageId || payload.messageId || "",
         noticeId: nested.noticeId || payload.noticeId || "",
         storyId: nested.storyId || payload.storyId || "",
+        // Android অ্যাপ আপডেট নোটিফিকেশন (type = "app_update") এর তথ্য
+        build: payload.build || nested.build || "",
+        version: payload.version || nested.version || "",
+        downloadUrl: payload.downloadUrl || nested.downloadUrl || "",
+        changes: payload.changes || nested.changes || "",
         url:
             nested.url ||
             payload.url ||
@@ -421,15 +426,17 @@ export const sendPushToUser = async (userId, payload, options = {}) => {
 
 // সব ইউজারের সব ডিভাইসে (block করা ইউজার ও excludeUserId বাদে) পাঠানো, ৫০টা করে একসাথে
 export const sendPushToAll = async (payload, options = {}) => {
-    const canWeb = configureWebPush();
+    const canWeb = options.fcmOnly ? false : configureWebPush();
     const canFcm = isFcmConfigured();
     if (!canWeb && !canFcm) return { sent: 0, total: 0, skipped: true };
 
-    const { excludeUserId, ...pushOptions } = options;
+    // fcmOnly = true হলে শুধু Android অ্যাপের (FCM) ডিভাইসে যায়, ব্রাউজার/PWA-তে যায় না
+    const { excludeUserId, fcmOnly, ...pushOptions } = options;
     const blocked = await User.find({ isBlocked: true }, { _id: 1 }).lean();
     const excludedIds = blocked.map(u => u._id);
     if (excludeUserId) excludedIds.push(excludeUserId);
     const filter = excludedIds.length ? { user: { $nin: excludedIds } } : {};
+    if (fcmOnly) filter.provider = "fcm";
 
     const body = JSON.stringify(payload);
     const opts = { TTL: 60 * 60 * 24, urgency: "high", ...pushOptions };

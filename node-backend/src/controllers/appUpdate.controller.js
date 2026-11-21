@@ -1,6 +1,7 @@
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { checkAndNotifyAndroidUpdate } from "../services/appUpdateNotify.service.js";
 
 // Android APK-র release গুলো GitHub Releases-এ থাকে (GitHub Actions বানায়)।
 // অ্যাপ ও ওয়েব এই endpoint থেকে নতুন ভার্সন, "কী বদলেছে" ও পুরনো ভার্সনের ইতিহাস পায়।
@@ -264,4 +265,27 @@ export const getAppUpdates = asyncHandler(async (req, res) => {
     // ব্রাউজার/প্রক্সি যেন এই জবাব আটকে না রাখে, নইলে নতুন ভার্সন দেরিতে দেখা যায়
     res.set("Cache-Control", "no-store");
     res.status(200).json(new ApiResponse(200, cache.data, "success"));
+});
+
+// সর্বশেষ Android release (ক্যাশ থেকে; fresh = true হলে সরাসরি GitHub থেকে)।
+// আপডেট নোটিফিকেশন সার্ভিস এটা ব্যবহার করে।
+export const getLatestRelease = async ({ fresh = false } = {}) => {
+    const age = Date.now() - cache.at;
+    if (!cache.data || age >= CACHE_MS || (fresh && age > FRESH_MIN_GAP_MS)) {
+        await refreshCache();
+    }
+    return cache.data?.latest || null;
+};
+
+// POST /api/v1/app/updates/notify
+// GitHub Actions নতুন APK release দেওয়ার পর এটা ডাকে (header: x-update-secret)।
+// সার্ভার নিজেই GitHub থেকে সর্বশেষ release দেখে নেয়, তাই বডির ওপর ভরসা করে না।
+export const notifyAppUpdate = asyncHandler(async (req, res) => {
+    const secret = String(process.env.APP_UPDATE_NOTIFY_SECRET || "").trim();
+    const given = String(req.get("x-update-secret") || "").trim();
+    if (!secret || given !== secret) {
+        throw new ApiError(401, "Invalid update secret");
+    }
+    const result = await checkAndNotifyAndroidUpdate({ fresh: true });
+    res.status(200).json(new ApiResponse(200, result, "success"));
 });
