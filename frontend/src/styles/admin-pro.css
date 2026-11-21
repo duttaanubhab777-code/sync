@@ -542,6 +542,8 @@
 
 .sync-admin-page .sync-filter-pills { gap: 6px; padding: 4px; border-radius: 999px; background: rgba(0, 0, 0, 0.26); border: 1px solid var(--adm-border); }
 .sync-admin-page .sync-filter-pill { border-color: transparent; padding: 8px 15px; }
+.sync-admin-page .sync-media-kind-pills .sync-filter-pill { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.sync-admin-page .sync-media-kind-pills .sync-filter-pill svg { flex: 0 0 auto; }
 
 .sync-admin-user-list { gap: 10px; }
 
