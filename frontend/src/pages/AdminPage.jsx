@@ -600,6 +600,13 @@ export default function AdminPage() {
             <div className="sync-admin-container">
                 {/* ---------- Header ---------- */}
                 <header className="sync-admin-hero">
+                    <div className="sync-admin-hero-avatar">
+                        <Avatar
+                            src={currentUser?.avatar}
+                            name={currentUser?.fullName || currentUser?.username}
+                            size={64}
+                        />
+                    </div>
                     <div className="sync-admin-hero-left">
                         <div
                             className={`sync-admin-role-badge ${
@@ -737,6 +744,7 @@ export default function AdminPage() {
                                 key={t.id}
                                 type="button"
                                 role="tab"
+                                data-tab={t.id}
                                 aria-selected={activeTab === t.id}
                                 className={`sync-admin-tab ${
                                     activeTab === t.id ? "active" : ""
@@ -773,9 +781,10 @@ export default function AdminPage() {
 
                         <div className="sync-admin-stats-grid">
                             <div
-                                className="sync-stat-card clickable"
+                                className="sync-stat-card clickable" data-tone="users"
                                 onClick={() => setActiveTab("users")}
                             >
+                                <span className="sync-stat-icon"><Users size={18} /></span>
                                 <span className="sync-stat-label">
                                     Total Users
                                 </span>
@@ -789,12 +798,13 @@ export default function AdminPage() {
                             </div>
 
                             <div
-                                className="sync-stat-card clickable"
+                                className="sync-stat-card clickable" data-tone="admins"
                                 onClick={() => {
                                     setUserFilter("admins");
                                     setActiveTab("users");
                                 }}
                             >
+                                <span className="sync-stat-icon"><ShieldCheck size={18} /></span>
                                 <span className="sync-stat-label">
                                     Platform Admins
                                 </span>
@@ -808,9 +818,10 @@ export default function AdminPage() {
                             </div>
 
                             <div
-                                className="sync-stat-card clickable"
+                                className="sync-stat-card clickable" data-tone="media"
                                 onClick={() => setActiveTab("media")}
                             >
+                                <span className="sync-stat-icon"><ImageIcon size={18} /></span>
                                 <span className="sync-stat-label">
                                     Images & Videos
                                 </span>
@@ -827,9 +838,10 @@ export default function AdminPage() {
                             </div>
 
                             <div
-                                className="sync-stat-card clickable"
+                                className="sync-stat-card clickable" data-tone="notices"
                                 onClick={() => setActiveTab("notices")}
                             >
+                                <span className="sync-stat-icon"><Bell size={18} /></span>
                                 <span className="sync-stat-label">
                                     Active Notices & Push
                                 </span>
@@ -843,9 +855,10 @@ export default function AdminPage() {
                             </div>
 
                             <div
-                                className="sync-stat-card clickable"
+                                className="sync-stat-card clickable" data-tone="groups"
                                 onClick={() => setActiveTab("groups")}
                             >
+                                <span className="sync-stat-icon"><MessageSquare size={18} /></span>
                                 <span className="sync-stat-label">
                                     Groups & Direct Chats
                                 </span>
@@ -912,7 +925,7 @@ export default function AdminPage() {
                         </div>
 
                         <div className="sync-admin-quick-cards">
-                            <div className="sync-profile-card">
+                            <div className="sync-profile-card sync-admin-quick-card" data-tone="notices">
                                 <h3>
                                     <Megaphone size={18} /> Broadcast Popup &
                                     Push Notice
@@ -935,7 +948,7 @@ export default function AdminPage() {
                                 </div>
                             </div>
 
-                            <div className="sync-profile-card">
+                            <div className="sync-profile-card sync-admin-quick-card" data-tone="media">
                                 <h3>
                                     <ImageIcon size={18} /> Moderate Images &
                                     Videos
