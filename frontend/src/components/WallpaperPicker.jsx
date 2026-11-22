@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, Image as ImageIcon, Loader2, Star, X } from "lucide-react";
 import {
@@ -58,6 +58,18 @@ export default function WallpaperPicker({ onClose }) {
     useEffect(() => {
         if (!touched) setSelected(myChoice || "default");
     }, [myChoice, touched]);
+
+    // অনেক নিচের wallpaper বর্তমান পছন্দ হলেও খুলতেই সেটা চোখের সামনে আনা
+    const gridRef = useRef(null);
+    const scrolledRef = useRef(false);
+    useEffect(() => {
+        if (!loaded || scrolledRef.current) return;
+        const el = gridRef.current?.querySelector(".sync-wp-card.is-selected");
+        if (el) {
+            scrolledRef.current = true;
+            el.scrollIntoView({ block: "center" });
+        }
+    }, [loaded, wallpapers.length]);
 
     useEffect(() => {
         const onKey = e => e.key === "Escape" && onClose?.();
@@ -122,22 +134,35 @@ export default function WallpaperPicker({ onClose }) {
                     </button>
                 </div>
 
-                <div className="sync-modal-body">
+                {/* প্রিভিউ সবসময় ওপরে স্থির, তাই যত নিচের wallpaper-ই বাছো না কেন দেখা যাবে */}
+                <div className="sync-wp-stage">
                     <WallpaperPreview
+                        className="compact"
                         url={
                             previewWallpaper
                                 ? wallpaperFullUrl(previewWallpaper.url)
                                 : ""
                         }
                     />
+                    <div className="sync-wp-stage-name">
+                        {selected === "default"
+                            ? `Default${
+                                  defaultWallpaper
+                                      ? ` · ${defaultWallpaper.name}`
+                                      : ""
+                              }`
+                            : previewWallpaper?.name || ""}
+                    </div>
+                </div>
 
+                <div className="sync-wp-scroll">
                     {!loaded && wallpapers.length === 0 ? (
                         <div className="sync-wp-empty">
                             <Loader2 size={18} className="spin" /> Loading
                             wallpapers...
                         </div>
                     ) : (
-                        <div className="sync-wp-grid" role="listbox">
+                        <div className="sync-wp-grid" role="listbox" ref={gridRef}>
                             <button
                                 type="button"
                                 role="option"
@@ -234,8 +259,9 @@ export default function WallpaperPicker({ onClose }) {
                     )}
 
                     {error && <div className="sync-alert error">{error}</div>}
+                </div>
 
-                    <div className="sync-modal-footer">
+                    <div className="sync-modal-footer sync-wp-footer">
                         <button
                             type="button"
                             className="sync-btn ghost"
@@ -252,7 +278,6 @@ export default function WallpaperPicker({ onClose }) {
                             {saving ? "Saving..." : "Set wallpaper"}
                         </button>
                     </div>
-                </div>
             </div>
         </div>,
         document.body

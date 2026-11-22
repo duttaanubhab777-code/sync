@@ -1,4 +1,5 @@
 import { User } from "../models/user.model.js";
+import { Conversation } from "../models/conversation.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -52,6 +53,52 @@ export const searchUsers = asyncHandler(async (req, res) => {
     res.status(200).json(new ApiResponse(200, users.map(withOnline)));
 });
 
+// POST /api/v1/users/match-contacts   body: { phones: ["98xxxxxxxx", "+91 98xxx xxxxx", ...] }
+// ফোনের contact নম্বরের সাথে মিলে যাওয়া Sync ইউজারদের ফেরত দেয় (WhatsApp-এর মতো)।
+// ফেরত দেওয়া phoneNumber আসলে ক্লায়েন্টেরই পাঠানো নম্বর, তাই নতুন কোনো তথ্য ফাঁস হয় না;
+// ইমেইল কখনো ফেরত দেওয়া হয় না।
+const MAX_CONTACT_PHONES = 1500;
+export const matchContacts = asyncHandler(async (req, res) => {
+    const raw = Array.isArray(req.body?.phones) ? req.body.phones : [];
+    if (raw.length > MAX_CONTACT_PHONES) {
+        throw new ApiError(
+            400,
+            `Too many numbers (max ${MAX_CONTACT_PHONES} per request)`
+        );
+    }
+
+    const phones = [
+        ...new Set(
+            raw
+                .map(p => normalizePhone(String(p ?? "").trim()))
+                .filter(p => /^[6-9]\d{9}$/.test(p))
+        )
+    ];
+    if (phones.length === 0) {
+        return res.status(200).json(new ApiResponse(200, []));
+    }
+
+    const blockedMe = await User.find(
+        { blockedUser: req.user._id },
+        { _id: 1 }
+    ).lean();
+    const exclude = [
+        req.user._id,
+        ...req.user.blockedUser,
+        ...blockedMe.map(u => u._id)
+    ];
+
+    const users = await User.find({
+        _id: { $nin: exclude },
+        isBlocked: false,
+        phoneNumber: { $in: phones }
+    })
+        .select(`${PUBLIC_USER_FIELDS} phoneNumber`)
+        .lean();
+
+    res.status(200).json(new ApiResponse(200, users.map(withOnline)));
+});
+
 // GET /api/v1/users/blocked
 export const getBlockedUsers = asyncHandler(async (req, res) => {
     const me = await User.findById(req.user._id)
@@ -78,10 +125,32 @@ export const getUserProfile = asyncHandler(async (req, res) => {
     delete user.blockedUser;
     delete user.isBlocked;
 
+    // ইমেইল ও ফোন নম্বর শুধু তাকেই দেখানো হয় যার সাথে আমার direct চ্যাট আছে (Info বাটনের জন্য)
+    let contactDetails = {};
+    const pairKey = [String(req.user._id), id].sort().join("_");
+    const hasDirectChat = await Conversation.exists({
+        type: "direct",
+        pairKey,
+        members: req.user._id
+    });
+    if (hasDirectChat || id === String(req.user._id)) {
+        const full = await User.findById(id)
+            .select("email phoneNumber")
+            .lean();
+        contactDetails = {
+            email: full?.email || "",
+            phoneNumber: full?.phoneNumber || ""
+        };
+    }
+
     const blockedByMe = req.user.blockedUser.some(b => String(b) === id);
-    res
-        .status(200)
-        .json(new ApiResponse(200, { ...withOnline(user), blockedByMe }));
+    res.status(200).json(
+        new ApiResponse(200, {
+            ...withOnline(user),
+            ...contactDetails,
+            blockedByMe
+        })
+    );
 });
 
 // PATCH /api/v1/users/me   body: { fullName?, about?, avatar? }  (avatar: "" দিলে ছবি মুছে যাবে)

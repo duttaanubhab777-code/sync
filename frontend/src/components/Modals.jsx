@@ -13,10 +13,16 @@ import {
     CheckCircle2,
     Camera,
     Loader2,
-    Lock
+    Lock,
+    Mail,
+    Phone,
+    AtSign,
+    UserRound
 } from "lucide-react";
 import Avatar from "./Avatar.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
+import ContactMatches from "./ContactMatches.jsx";
+import useContactMatches from "../hooks/useContactMatches.js";
 import { api, extractErrorMessage } from "../services/api.js";
 import {
     createGroupChat,
@@ -36,6 +42,7 @@ export function NewDirectChatModal({ onClose, onChatReady }) {
     const [searching, setSearching] = useState(false);
     const [error, setError] = useState("");
     const [startingId, setStartingId] = useState(null);
+    const contacts = useContactMatches();
 
     useEffect(() => {
         const trimmed = query.trim();
@@ -121,9 +128,17 @@ export function NewDirectChatModal({ onClose, onChatReady }) {
                                 </div>
                             )}
                         {!searching && query.trim().length < 2 && (
-                            <div className="sync-empty-hint">
-                                Type at least 2 characters to search users
-                            </div>
+                            <>
+                                <ContactMatches
+                                    contacts={contacts}
+                                    onPick={u => handleSelectUser(u._id)}
+                                    busyId={startingId}
+                                />
+                                <div className="sync-empty-hint">
+                                    Or type at least 2 characters to search
+                                    users
+                                </div>
+                            </>
                         )}
 
                         {results.map(u => (
@@ -172,6 +187,7 @@ export function NewGroupChatModal({ onClose, onGroupReady }) {
     const [query, setQuery] = useState("");
     const [results, setResults] = useState([]);
     const [selectedUsers, setSelectedUsers] = useState([]);
+    const contacts = useContactMatches();
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
 
@@ -342,6 +358,15 @@ export function NewGroupChatModal({ onClose, onGroupReady }) {
                     {error && <div className="sync-alert error">{error}</div>}
 
                     <div className="sync-user-results compact">
+                        {query.trim().length < 2 && (
+                            <ContactMatches
+                                contacts={contacts}
+                                onPick={toggleMember}
+                                selectedIds={
+                                    new Set(selectedUsers.map(u => u._id))
+                                }
+                            />
+                        )}
                         {results.map(u => {
                             const isSelected = selectedUsers.some(
                                 s => s._id === u._id
@@ -645,6 +670,50 @@ export function ChatInfoDrawer({ conversation, onClose }) {
 
                 {!isGroup ? (
                     <>
+                        <div className="sync-drawer-section">
+                            <span className="sync-section-label">
+                                Contact details
+                            </span>
+                            <div className="sync-detail-list">
+                                <div className="sync-detail-row">
+                                    <UserRound size={18} />
+                                    <div className="sync-detail-text">
+                                        <small>Full name</small>
+                                        <span>{partner.fullName || "—"}</span>
+                                    </div>
+                                </div>
+                                <div className="sync-detail-row">
+                                    <AtSign size={18} />
+                                    <div className="sync-detail-text">
+                                        <small>Username</small>
+                                        <span>
+                                            {partner.username
+                                                ? `@${partner.username}`
+                                                : "—"}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="sync-detail-row">
+                                    <Phone size={18} />
+                                    <div className="sync-detail-text">
+                                        <small>Phone</small>
+                                        <span>
+                                            {partner.phoneNumber
+                                                ? `+91 ${partner.phoneNumber}`
+                                                : "—"}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="sync-detail-row">
+                                    <Mail size={18} />
+                                    <div className="sync-detail-text">
+                                        <small>Email</small>
+                                        <span>{partner.email || "—"}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="sync-drawer-section">
                             <span className="sync-section-label">About</span>
                             <p className="sync-about-text">

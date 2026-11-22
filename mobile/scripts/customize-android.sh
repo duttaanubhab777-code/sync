@@ -52,6 +52,7 @@ perms = [
     "android.permission.ACCESS_FINE_LOCATION",
     "android.permission.ACCESS_COARSE_LOCATION",
     "android.permission.RECORD_AUDIO",
+    "android.permission.READ_CONTACTS",
     "android.permission.MODIFY_AUDIO_SETTINGS",
     "android.permission.POST_NOTIFICATIONS",
     "android.permission.VIBRATE",

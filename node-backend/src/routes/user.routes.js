@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
     searchUsers,
+    matchContacts,
     getBlockedUsers,
     getUserProfile,
     updateMyProfile,
@@ -15,6 +16,7 @@ const router = Router();
 router.use(verifyJWT);
 
 router.get("/", searchUsers);
+router.post("/match-contacts", matchContacts);
 // "/me" আর "/blocked" অবশ্যই "/:id"-এর আগে থাকতে হবে
 router.patch("/me", validate(updateProfileSchema), updateMyProfile);
 router.get("/blocked", getBlockedUsers);
