@@ -1,0 +1,22 @@
+/* Android APK: লেখা টিপে ধরলে Chrome-এর মতো copy/select অপশন যেন না আসে।
+   html.sync-native main.jsx থেকে শুধু APK-তে (User-Agent-এ SyncApp/) বসে; PWA ও ব্রাউজারে কিছু বদলায় না। */
+html.sync-native,
+html.sync-native * {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+}
+/* লিখতে হয় যেখানে, সেখানে select/কার্সার ঠিক থাকবে */
+html.sync-native input,
+html.sync-native textarea,
+html.sync-native [contenteditable="true"],
+html.sync-native [contenteditable=""] {
+    -webkit-user-select: text;
+    user-select: text;
+    -webkit-touch-callout: default;
+}
+html.sync-native img,
+html.sync-native a {
+    -webkit-user-drag: none;
+}

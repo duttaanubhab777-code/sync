@@ -537,6 +537,20 @@ public class SyncMessagingService extends MessagingService {
         String noticeId = valueOr(data, "noticeId", "");
         String storyId = valueOr(data, "storyId", "");
 
+        // মেসেজ ফোনে পৌঁছেছে: অ্যাপ বন্ধ থাকলেও সার্ভারকে জানানো, যাতে প্রেরকের ডাবল টিক হয়
+        final String ackToken = valueOr(data, "ackToken", "");
+        final String ackUserId = valueOr(data, "ackUserId", "");
+        final String ackUrl = valueOr(data, "ackUrl", "");
+        if (!messageId.isEmpty() && !ackToken.isEmpty() && !ackUserId.isEmpty() && ackUrl.startsWith("https://")) {
+            final String ackMessageId = messageId;
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    postDeliveryAck(ackUrl, ackUserId, ackMessageId, ackToken);
+                }
+            }).start();
+        }
+
         String title = valueOr(data, "title", "");
         String body = valueOr(data, "body", "");
         if (remoteMessage.getNotification() != null) {
@@ -907,6 +921,32 @@ public class SyncMessagingService extends MessagingService {
             return cropCircleBitmap(remote, 192);
         }
         return createInitialsCircleBitmap(name);
+    }
+
+    private void postDeliveryAck(String urlStr, String userId, String messageId, String token) {
+        HttpURLConnection conn = null;
+        try {
+            JSONObject body = new JSONObject();
+            body.put("userId", userId);
+            body.put("messageId", messageId);
+            body.put("token", token);
+            byte[] bytes = body.toString().getBytes("UTF-8");
+            conn = (HttpURLConnection) new URL(urlStr).openConnection();
+            conn.setRequestMethod("POST");
+            conn.setConnectTimeout(6000);
+            conn.setReadTimeout(6000);
+            conn.setDoOutput(true);
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setFixedLengthStreamingMode(bytes.length);
+            java.io.OutputStream os = conn.getOutputStream();
+            os.write(bytes);
+            os.close();
+            conn.getResponseCode();
+        } catch (Exception ignored) {
+            // নেট না থাকলে অ্যাপ খোলার সময় delivered হবে
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
     }
 
     private Bitmap loadRemoteBitmap(String urlStr, int maxDim) {

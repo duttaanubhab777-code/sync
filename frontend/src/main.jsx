@@ -5,10 +5,37 @@ import { BrowserRouter } from "react-router-dom";
 import { store } from "./store/index.js";
 import App from "./App.jsx";
 import "./index.css";
+import "./styles/native-app.css";
 import { initViewportHeight } from "./utils/viewport.js";
 
 // স্ক্রিন উচ্চতা (--app-h) সবার আগে সেট হয়, যাতে পুরনো WebView-তেও লেআউট ও স্ক্রল ঠিক থাকে
 initViewportHeight();
+
+// Android APK (User-Agent-এ SyncApp/): টিপে ধরলে লেখা সিলেক্ট হওয়া, copy/share বার ও context menu বন্ধ।
+// শুধু ইনপুট/টেক্সটএরিয়ায় সিলেকশন চলে। এতে মেসেজ টিপে ধরার (hold) অ্যানিমেশন ঠিক থাকে।
+if (/SyncApp\//.test(navigator.userAgent || "")) {
+    const root = document.documentElement;
+    root.classList.add("sync-native");
+    const EDITABLE =
+        'input,textarea,[contenteditable="true"],[contenteditable=""]';
+    const isEditable = target => {
+        const el =
+            target && target.nodeType === 3 ? target.parentElement : target;
+        return Boolean(el && el.closest && el.closest(EDITABLE));
+    };
+    document.addEventListener("contextmenu", e => {
+        if (!isEditable(e.target)) e.preventDefault();
+    });
+    document.addEventListener("selectstart", e => {
+        if (!isEditable(e.target)) e.preventDefault();
+    });
+    // কিছু WebView ওপরের দুটো এড়িয়ে সিলেকশন করে ফেললে সঙ্গে সঙ্গে মুছে দেওয়া
+    document.addEventListener("selectionchange", () => {
+        const sel = window.getSelection && window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.anchorNode) return;
+        if (!isEditable(sel.anchorNode)) sel.removeAllRanges();
+    });
+}
 
 ReactDOM.createRoot(document.getElementById("root")).render(
     <React.StrictMode>

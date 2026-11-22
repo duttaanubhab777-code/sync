@@ -11,6 +11,7 @@ import { isObjectId } from "../../utils/helpers.js";
 import { cleanupInBackground } from "../../services/cloudinaryCleanup.service.js";
 import { Notification } from "../../models/notification.model.js";
 import { sendPushToUser } from "../../services/push.service.js";
+import { makeAckToken, ackUrl } from "../../utils/deliveryAck.js";
 import { getTotalUnread } from "../../services/conversation.service.js";
 
 const ALLOWED_TYPES = [
@@ -155,8 +156,18 @@ async function notifyRecipients({
                 0,
                 Math.floor(Number(freshConv?.unread?.[recipientId]) || 0)
             );
+            // push পৌঁছালেই ফোন এই টোকেন দিয়ে "delivered" জানাবে (অ্যাপ বন্ধ থাকলেও)
+            const pushData = { ...data, ackUserId: String(recipientId) };
+            try {
+                pushData.ackToken = makeAckToken(recipientId, msg._id);
+                const url = ackUrl();
+                if (url) pushData.ackUrl = url;
+            } catch {
+                // secret না থাকলে ack ছাড়াই push যাবে
+            }
             await sendPushToUser(recipientId, {
                 ...pushPayload,
+                data: pushData,
                 badgeCount,
                 chatUnread
             });

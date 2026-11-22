@@ -170,6 +170,10 @@ export const buildFcmDataMap = (payload = {}) => {
         conversationId: nested.conversationId || payload.conversationId || "",
         messageId: nested.messageId || payload.messageId || "",
         noticeId: nested.noticeId || payload.noticeId || "",
+        // push পৌঁছানোর প্রমাণ ("delivered" ডাবল টিক): Android native service এটা দিয়ে সার্ভারকে জানায়
+        ackToken: nested.ackToken || "",
+        ackUserId: nested.ackUserId || "",
+        ackUrl: nested.ackUrl || "",
         storyId: nested.storyId || payload.storyId || "",
         // Android অ্যাপ আপডেট নোটিফিকেশন (type = "app_update") এর তথ্য
         build: payload.build || nested.build || "",

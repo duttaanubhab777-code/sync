@@ -32,6 +32,8 @@ import AttachmentSheet from "../components/chat/AttachmentSheet.jsx";
 import LocationCard from "../components/chat/LocationCard.jsx";
 import ContactCard from "../components/chat/ContactCard.jsx";
 import DocumentCard from "../components/chat/DocumentCard.jsx";
+import MessageGesture from "../components/chat/MessageGesture.jsx";
+import MessageActionSheet from "../components/chat/MessageActionSheet.jsx";
 import { VoicePlayer, VideoPlayer } from "../components/MediaPlayers.jsx";
 import {
     ActivityBubble,
@@ -257,6 +259,11 @@ export default function ChatPage() {
     const convListRef = useRef(null);
     const { hasUpdate } = useAppUpdates({ autoLoad: isAndroidApp });
     const composerInputRef = useRef(null);
+    // মেসেজ টিপে ধরলে যেটার মেনু খোলা (Reply / Message info / Delete)
+    const [sheetMsg, setSheetMsg] = useState(null);
+    useEffect(() => {
+        setSheetMsg(null);
+    }, [activeConversationId]);
     const [composerError, setComposerError] = useState("");
     const [showMicrophoneHelp, setShowMicrophoneHelp] = useState(false);
     const [showAttachSheet, setShowAttachSheet] = useState(false);
@@ -1339,10 +1346,27 @@ export default function ChatPage() {
                                             </div>
                                         )}
 
-                                        <div
+                                        <MessageGesture
                                             className={`sync-msg-row ${
                                                 isMine ? "outgoing" : "incoming"
                                             }`}
+                                            disabled={Boolean(
+                                                msg.deletedForEveryone ||
+                                                    msg.optimistic ||
+                                                    msg.failed ||
+                                                    !msg._id
+                                            )}
+                                            onReply={() => {
+                                                dispatch(
+                                                    setReplyTo({
+                                                        conversationId:
+                                                            activeConversationId,
+                                                        message: msg
+                                                    })
+                                                );
+                                                composerInputRef.current?.focus();
+                                            }}
+                                            onLongPress={() => setSheetMsg(msg)}
                                         >
                                             <div
                                                 className={`sync-msg-bubble ${
@@ -1585,7 +1609,7 @@ export default function ChatPage() {
                                                         </div>
                                                     )}
                                             </div>
-                                        </div>
+                                        </MessageGesture>
                                     </React.Fragment>
                                 );
                             })}
@@ -1596,6 +1620,32 @@ export default function ChatPage() {
                             />
 
                             <div ref={messagesEndRef} />
+
+                            {sheetMsg && (
+                                <MessageActionSheet
+                                    message={sheetMsg}
+                                    isMine={
+                                        String(
+                                            sheetMsg.sender?._id ?? sheetMsg.sender
+                                        ) === myId
+                                    }
+                                    preview={formatReplySnippet(sheetMsg)}
+                                    onClose={() => setSheetMsg(null)}
+                                    onReply={() => {
+                                        dispatch(
+                                            setReplyTo({
+                                                conversationId:
+                                                    activeConversationId,
+                                                message: sheetMsg
+                                            })
+                                        );
+                                        composerInputRef.current?.focus();
+                                    }}
+                                    onDelete={() =>
+                                        handleDeleteMessage(sheetMsg._id)
+                                    }
+                                />
+                            )}
                         </div>
 
                         <footer className="sync-composer-wrap">

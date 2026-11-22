@@ -3,7 +3,8 @@ import { Message } from "../models/message.model.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { assertObjectId } from "../utils/helpers.js";
+import { assertObjectId, isObjectId } from "../utils/helpers.js";
+import { isValidAckToken } from "../utils/deliveryAck.js";
 import {
     POPULATE_SENDER,
     POPULATE_REPLY,
@@ -122,6 +123,62 @@ export const syncMessages = asyncHandler(async (req, res) => {
             hasMore,
             updated,
             serverTime: serverTime.toISOString()
+        })
+    );
+});
+
+// POST /api/v1/messages/delivery-ack   body: { userId, messageId, token }
+// Push notification ফোনে পৌঁছালে (অ্যাপ বন্ধ থাকলেও) ফোন এটা ডাকে, তখনই প্রেরকের ডাবল টিক হয়।
+// লগইন টোকেন লাগে না; সার্ভারের দেওয়া স্বাক্ষরিত টোকেনই প্রমাণ। ভুল হলে চুপচাপ 204।
+export const deliveryAck = asyncHandler(async (req, res) => {
+    const { userId, messageId, token } = req.body || {};
+    if (
+        isObjectId(userId) &&
+        isObjectId(messageId) &&
+        isValidAckToken(userId, messageId, token)
+    ) {
+        const io = req.app.get("io");
+        await markDelivered(io, String(userId), [String(messageId)]);
+    }
+    res.status(204).end();
+});
+
+// GET /api/v1/messages/:id/info — নিজের পাঠানো মেসেজ কখন পাঠানো / পৌঁছানো / দেখা হয়েছে (WhatsApp-এর Message info)
+export const getMessageInfo = asyncHandler(async (req, res) => {
+    const id = assertObjectId(req.params.id, "message id");
+    const me = String(req.user._id);
+
+    const msg = await Message.findById(id)
+        .select("sender conversationId status createdAt deliveredTo seenBy")
+        .populate({ path: "deliveredTo.user", select: "fullName username avatar" })
+        .populate({ path: "seenBy.user", select: "fullName username avatar" })
+        .lean();
+    if (!msg || String(msg.sender) !== me) {
+        throw new ApiError(404, "Message not found");
+    }
+    const conv = await loadMemberConversation(msg.conversationId, me);
+
+    const pick = (list, timeKey) =>
+        (list || [])
+            .filter(x => x.user && String(x.user._id ?? x.user) !== me)
+            .map(x => ({
+                user: {
+                    _id: String(x.user._id ?? x.user),
+                    fullName: x.user.fullName || "",
+                    username: x.user.username || "",
+                    avatar: x.user.avatar || ""
+                },
+                at: x[timeKey]
+            }));
+
+    res.status(200).json(
+        new ApiResponse(200, {
+            messageId: String(msg._id),
+            isGroup: conv.type === "group",
+            status: msg.status,
+            sentAt: msg.createdAt,
+            deliveredTo: pick(msg.deliveredTo, "deliveredAt"),
+            seenBy: pick(msg.seenBy, "seenAt")
         })
     );
 });

@@ -53,6 +53,25 @@ const applyBadge = async count => {
     }
 };
 
+// মেসেজ ফোনে পৌঁছেছে, সার্ভারকে জানানো (প্রেরকের ডাবল টিক)। অ্যাপ বন্ধ থাকলেও কাজ করে।
+const ackDelivery = async data => {
+    try {
+        if (!data || !data.ackToken || !data.messageId || !data.ackUserId) return;
+        await fetch("/api/v1/messages/delivery-ack", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                userId: data.ackUserId,
+                messageId: data.messageId,
+                token: data.ackToken
+            }),
+            keepalive: true
+        });
+    } catch {
+        // নেট না থাকলে অ্যাপ খোলার সময় delivered হবে
+    }
+};
+
 self.addEventListener("push", event => {
     let payload = {};
     try {
@@ -60,6 +79,7 @@ self.addEventListener("push", event => {
     } catch {
         payload = { body: event.data?.text() || "" };
     }
+    event.waitUntil(ackDelivery(payload.data));
 
     event.waitUntil(
         (async () => {

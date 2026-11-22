@@ -9,7 +9,11 @@ import adminRoutes from "./admin.routes.js";
 import linkPreviewRoutes from "./linkPreview.routes.js";
 import appUpdateRoutes from "./appUpdate.routes.js";
 import wallpaperRoutes from "./wallpaper.routes.js";
-import { syncMessages } from "../controllers/message.controller.js";
+import {
+    syncMessages,
+    deliveryAck,
+    getMessageInfo
+} from "../controllers/message.controller.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
 const router = Router();
@@ -25,5 +29,7 @@ router.use("/link-preview", linkPreviewRoutes);
 router.use("/app", appUpdateRoutes);
 router.use("/wallpapers", wallpaperRoutes);
 router.get("/sync", verifyJWT, syncMessages);
+router.post("/messages/delivery-ack", deliveryAck);
+router.get("/messages/:id/info", verifyJWT, getMessageInfo);
 
 export default router;
