@@ -264,3 +264,290 @@
     background: var(--bg-1);
 }
 .sync-wp-footer .sync-btn { flex: 1; justify-content: center; }
+
+/* =====================================================================
+   Wallpaper picker v2 — full-screen gallery + swipe preview + brightness
+   ===================================================================== */
+.sync-wpx {
+    position: fixed;
+    inset: 0;
+    z-index: 900;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(165deg, var(--bg-2), var(--bg-1));
+    color: var(--text);
+    animation: sync-fade 0.2s both;
+}
+
+/* ----- gallery ----- */
+.sync-wpx-head {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: calc(var(--safe-top, 0px) + 10px) 12px 10px;
+    border-bottom: 1px solid var(--line);
+}
+.sync-wpx-head h3 { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em; }
+.sync-wpx-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 16px 16px calc(20px + var(--safe-bottom, 0px));
+}
+
+/* ----- shared buttons ----- */
+.sync-wpx-icon {
+    width: 42px;
+    height: 42px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    color: #fff;
+    background: transparent;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.sync-wpx-icon:active { background: rgba(255, 255, 255, 0.12); }
+
+/* ----- preview ----- */
+.sync-wpx-preview { background: #02100d; }
+.sync-wpx-pager {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+}
+.sync-wpx-pager::-webkit-scrollbar { display: none; }
+.sync-wpx-page {
+    position: relative;
+    flex: 0 0 100%;
+    height: 100%;
+    scroll-snap-align: center;
+    scroll-snap-stop: always;
+}
+.sync-wpx-page-img,
+.sync-wpx-page-plain { position: absolute; inset: 0; }
+.sync-wpx-page-img {
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    transition: filter 0.12s linear;
+}
+.sync-wpx-page-plain {
+    background:
+        radial-gradient(420px 320px at 88% 0%, rgba(182, 243, 77, 0.12), transparent 70%),
+        radial-gradient(460px 360px at 6% 100%, rgba(31, 167, 176, 0.16), transparent 70%),
+        var(--bg-chat);
+}
+
+.sync-wpx-topbar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: calc(var(--safe-top, 0px) + 10px) 12px 10px;
+    background: rgba(3, 21, 18, 0.78);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--line);
+}
+.sync-wpx-topbar h3 { flex: 1; font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em; }
+.sync-wpx-set {
+    width: 46px;
+    height: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    color: #02150f;
+    background: var(--grad-btn, linear-gradient(135deg, #00ed64, #3de6a8));
+    box-shadow: 0 6px 20px -6px rgba(0, 237, 100, 0.7);
+    cursor: pointer;
+}
+.sync-wpx-set:disabled { opacity: 0.7; }
+.sync-wpx-set:active { transform: scale(0.95); }
+
+.sync-wpx-bubbles {
+    position: absolute;
+    z-index: 2;
+    top: calc(var(--safe-top, 0px) + 78px);
+    left: 12px;
+    right: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+}
+.sync-wpx-bubbles > div {
+    max-width: 82%;
+    padding: 9px 12px 7px;
+    border-radius: 16px;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+}
+.sync-wpx-bubbles time {
+    display: block;
+    margin-top: 2px;
+    text-align: right;
+    font-size: 0.68rem;
+    opacity: 0.7;
+}
+.sync-wpx-bubbles .in { align-self: flex-start; background: var(--bg-2); border-top-left-radius: 4px; }
+.sync-wpx-bubbles .out { align-self: flex-end; background: var(--grad-out); border-top-right-radius: 4px; }
+
+/* ----- brightness (right side) ----- */
+.sync-wpx-bright {
+    position: absolute;
+    z-index: 3;
+    right: 14px;
+    bottom: calc(var(--safe-bottom, 0px) + 22px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+.sync-wpx-bright-value {
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #fff;
+    background: rgba(3, 21, 18, 0.72);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+}
+.sync-wpx-bright-track {
+    position: relative;
+    width: 52px;
+    height: min(34vh, 230px);
+    padding: 0;
+    border-radius: 26px;
+    background: rgba(3, 21, 18, 0.72);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    border: 1px solid var(--line-strong);
+    overflow: hidden;
+    touch-action: none;
+    cursor: pointer;
+    outline: none;
+}
+.sync-wpx-bright-track:focus-visible { box-shadow: 0 0 0 3px rgba(0, 237, 100, 0.45); }
+.sync-wpx-bright-fill {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(180deg, rgba(61, 230, 168, 0.5), rgba(0, 237, 100, 0.28));
+}
+.sync-wpx-bright-thumb {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 18px;
+    color: #02150f;
+    background: #eafff4;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+}
+.sync-wpx-round {
+    width: 52px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    color: #02150f;
+    background: #eafff4;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+}
+.sync-wpx-round:active { transform: scale(0.94); }
+
+/* ----- bottom: name + dots ----- */
+.sync-wpx-bottom {
+    position: absolute;
+    z-index: 3;
+    left: 14px;
+    right: 90px;
+    bottom: calc(var(--safe-bottom, 0px) + 22px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+.sync-wpx-name {
+    max-width: 100%;
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 0.84rem;
+    font-weight: 700;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    background: rgba(3, 21, 18, 0.72);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+}
+.sync-wpx-name small { font-weight: 500; opacity: 0.75; }
+.sync-wpx-dots {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 14px;
+    border-radius: 999px;
+    background: rgba(3, 21, 18, 0.72);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+}
+.sync-wpx-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.4);
+    transition: transform 0.2s var(--ease), background 0.2s;
+}
+.sync-wpx-dot.is-edge { transform: scale(0.62); }
+.sync-wpx-dot.is-active { background: #fff; transform: scale(1.25); }
+.sync-wpx-error {
+    max-width: 100%;
+    padding: 8px 12px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #ffd7dc;
+    background: rgba(120, 10, 25, 0.82);
+    text-align: center;
+}
+
+@media (min-width: 900px) {
+    .sync-wpx-gallery .sync-wpx-scroll,
+    .sync-wpx-gallery .sync-wpx-head { width: min(100%, 820px); margin-inline: auto; }
+    .sync-wpx-bubbles { left: 50%; right: auto; width: min(560px, calc(100% - 24px)); transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .sync-wpx, .sync-wpx-page-img, .sync-wpx-dot { animation: none; transition: none; }
+}

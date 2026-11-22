@@ -13,18 +13,25 @@ let pluginRef;
 const capacitor = () =>
     typeof window !== "undefined" ? window.Capacitor : undefined;
 
+const isNativeApp = () => Boolean(capacitor()?.isNativePlatform?.());
+
+// এই অ্যাপ লাইভ সাইট (server.url) থেকে চলে, তাই বাকি কোডের মতোই window.Capacitor.Plugins.X ব্যবহার করতে হয়
+// (পুরনো APK-তে প্লাগিন না থাকলে এটা undefined)
 const getNativePlugin = () => {
-    if (pluginRef !== undefined) return pluginRef;
     const cap = capacitor();
+    if (!cap || !isNativeApp()) return null;
+    if (cap.Plugins?.Contacts) return cap.Plugins.Contacts;
     try {
-        pluginRef =
-            cap?.isNativePlatform?.() && cap.registerPlugin
-                ? cap.registerPlugin("Contacts")
-                : null;
+        if (
+            typeof cap.registerPlugin === "function" &&
+            cap.isPluginAvailable?.("Contacts")
+        ) {
+            return cap.registerPlugin("Contacts");
+        }
     } catch {
-        pluginRef = null;
+        /* ignore */
     }
-    return pluginRef;
+    return null;
 };
 
 const webPickerSupported = () =>
@@ -32,9 +39,13 @@ const webPickerSupported = () =>
     "contacts" in navigator &&
     typeof navigator.contacts?.select === "function";
 
-// "native" | "picker" | "none"
+// "native" : APK + Contacts প্লাগিন আছে → permission চেয়ে অটো লোড
+// "update" : APK আছে কিন্তু প্লাগিন নেই → নতুন APK লাগবে
+// "picker" : সাধারণ ব্রাউজার (Android Chrome) → ইউজার নিজে বাছাই করে
+// "none"   : সাপোর্ট নেই
 export const getContactsMode = () => {
     if (getNativePlugin()) return "native";
+    if (isNativeApp()) return "update";
     if (webPickerSupported()) return "picker";
     return "none";
 };
@@ -55,7 +66,7 @@ export const hasContactsPermission = async () => {
     if (!plugin) return false;
     try {
         const res = await plugin.checkPermissions();
-        return res?.contacts === "granted";
+        return res?.contacts === "granted" || res?.readContacts === "granted";
     } catch {
         return false;
     }
@@ -66,7 +77,7 @@ export const requestContactsPermission = async () => {
     if (!plugin) return false;
     try {
         const res = await plugin.requestPermissions();
-        return res?.contacts === "granted";
+        return res?.contacts === "granted" || res?.readContacts === "granted";
     } catch {
         return false;
     }
@@ -95,7 +106,7 @@ const readDeviceContacts = async mode => {
 // contact তালিকা পড়ে সার্ভারে মিলিয়ে নিয়ে মিলে যাওয়া ইউজার ফেরত দেয়
 export const syncContacts = async ({ force = false } = {}) => {
     const mode = getContactsMode();
-    if (mode === "none") return [];
+    if (mode === "none" || mode === "update") return [];
     if (!force && cache && Date.now() - cache.at < SESSION_TTL_MS) {
         return cache.matches;
     }

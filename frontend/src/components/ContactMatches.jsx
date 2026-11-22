@@ -10,7 +10,7 @@ export default function ContactMatches({
     busyId,
     actionLabel = "Message"
 }) {
-    const { mode, status, matches, enable, refresh } = contacts;
+    const { mode, status, matches, errorMsg, enable, refresh } = contacts;
     if (status === "unsupported") return null;
 
     return (
@@ -29,6 +29,21 @@ export default function ContactMatches({
                 )}
             </div>
 
+            {status === "update" && (
+                <div className="sync-contacts-cta">
+                    <span className="sync-contacts-cta-icon">
+                        <BookUser size={22} />
+                    </span>
+                    <div className="sync-contacts-cta-text">
+                        <strong>Update the Sync app</strong>
+                        <small>
+                            Contacts sync needs the latest version of the Sync
+                            app. Install the new version to use it.
+                        </small>
+                    </div>
+                </div>
+            )}
+
             {(status === "prompt" || status === "denied" || status === "error") && (
                 <div className="sync-contacts-cta">
                     <span className="sync-contacts-cta-icon">
@@ -44,10 +59,12 @@ export default function ContactMatches({
                         </strong>
                         <small>
                             {status === "denied"
-                                ? "Allow contacts access in your phone settings, then try again."
-                                : mode === "native"
-                                  ? "Allow contacts access to see who in your phonebook is already on Sync."
-                                  : "Pick contacts to see who is already on Sync."}
+                                ? "Open phone Settings > Apps > Sync > Permissions and allow Contacts, then tap Retry."
+                                : status === "error"
+                                  ? errorMsg || "Something went wrong. Please try again."
+                                  : mode === "native"
+                                    ? "Allow contacts access to see who in your phonebook is already on Sync."
+                                    : "Pick contacts to see who is already on Sync."}
                         </small>
                     </div>
                     <button

@@ -25,7 +25,7 @@ const isAlreadyLoaded = src => {
 // - ডিভাইসে সেভ করা ছবি (blob) বা ব্রাউজারে cache করা ছবি হলে কোনো fade/delay ছাড়াই
 // - একেবারে নতুন ছবি হলে তবেই হালকা fade-in
 export default function ChatWallpaperLayer() {
-    const { effective, loaded } = useWallpaper();
+    const { effective, loaded, brightness } = useWallpaper();
     const url = effective ? wallpaperFullUrl(effective.url) : "";
     const src = useCachedWallpaper(url);
     const isLocal = Boolean(src) && src === peekCachedWallpaper(url);
@@ -64,7 +64,11 @@ export default function ChatWallpaperLayer() {
     return (
         <div
             className={`sync-wallpaper-layer ${instant ? "is-ready is-instant" : ""}`}
-            style={{ backgroundImage: `url("${src}")` }}
+            style={{
+                backgroundImage: `url("${src}")`,
+                filter:
+                    brightness < 100 ? `brightness(${brightness / 100})` : undefined
+            }}
             aria-hidden="true"
         />
     );

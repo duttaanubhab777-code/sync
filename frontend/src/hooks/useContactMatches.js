@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { extractErrorMessage } from "../services/api.js";
 import {
     getContactsMode,
     hasContactsPermission,
@@ -6,13 +7,14 @@ import {
     syncContacts
 } from "../services/contacts.js";
 
-// status: "unsupported" | "prompt" | "loading" | "ready" | "denied" | "error"
+// status: "unsupported" | "update" | "prompt" | "loading" | "ready" | "denied" | "error"
 export default function useContactMatches() {
     const mode = getContactsMode();
     const [status, setStatus] = useState(
-        mode === "none" ? "unsupported" : "prompt"
+        mode === "none" ? "unsupported" : mode === "update" ? "update" : "prompt"
     );
     const [matches, setMatches] = useState([]);
+    const [errorMsg, setErrorMsg] = useState("");
 
     const load = useCallback(async force => {
         setStatus("loading");
@@ -21,13 +23,19 @@ export default function useContactMatches() {
             setMatches(list);
             setStatus("ready");
         } catch (err) {
-            // ব্রাউজারের picker বন্ধ করলে বা permission না দিলে
-            const msg = String(err?.message || err || "").toLowerCase();
-            setStatus(
-                msg.includes("denied") || msg.includes("permission")
-                    ? "denied"
-                    : "error"
+            const raw = String(err?.message || err || "");
+            const low = raw.toLowerCase();
+            if (!err?.response && (low.includes("denied") || low.includes("permission"))) {
+                setStatus("denied");
+                return;
+            }
+            // সার্ভার/নেটওয়ার্কের ভুল হলে আসল কারণটা দেখানো, যাতে বোঝা যায় কী হয়েছে
+            setErrorMsg(
+                err?.response
+                    ? extractErrorMessage(err, "Server error")
+                    : raw || "Unknown error"
             );
+            setStatus("error");
         }
     }, []);
 
@@ -54,5 +62,5 @@ export default function useContactMatches() {
         load(true);
     }, [mode, load]);
 
-    return { mode, status, matches, enable, refresh: () => load(true) };
+    return { mode, status, matches, errorMsg, enable, refresh: () => load(true) };
 }

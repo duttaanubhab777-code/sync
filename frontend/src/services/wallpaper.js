@@ -31,6 +31,24 @@ let state = readCache() || {
     loaded: false
 };
 
+// চ্যাট wallpaper-এর উজ্জ্বলতা (এই ডিভাইসে সেভ থাকে)। ডিফল্ট ১০০ = পূর্ণ উজ্জ্বলতা
+export const MIN_WALLPAPER_BRIGHTNESS = 20;
+const BRIGHTNESS_KEY = "sync_wallpaper_brightness";
+
+const readBrightness = () => {
+    try {
+        const n = Number(localStorage.getItem(BRIGHTNESS_KEY));
+        if (Number.isFinite(n) && n >= MIN_WALLPAPER_BRIGHTNESS && n <= 100) {
+            return Math.round(n);
+        }
+    } catch {
+        /* ignore */
+    }
+    return 100;
+};
+
+state = { ...state, brightness: readBrightness() };
+
 const listeners = new Set();
 
 const setState = next => {
@@ -116,6 +134,20 @@ if (typeof window !== "undefined") {
     window.addEventListener("online", retryIfNeeded);
     document.addEventListener("visibilitychange", retryIfNeeded);
 }
+
+export const setWallpaperBrightness = value => {
+    const v = Math.min(
+        100,
+        Math.max(MIN_WALLPAPER_BRIGHTNESS, Math.round(Number(value) || 100))
+    );
+    try {
+        if (v === 100) localStorage.removeItem(BRIGHTNESS_KEY);
+        else localStorage.setItem(BRIGHTNESS_KEY, String(v));
+    } catch {
+        /* ignore */
+    }
+    setState({ brightness: v });
+};
 
 // আমার wallpaper বদলানো। id = null মানে "Default"
 export const chooseWallpaper = async id => {
