@@ -176,6 +176,15 @@ const formatEta = seconds => {
     return `${Math.floor(seconds / 60)}m ${seconds % 60}s left`;
 };
 
+// compress-এর ফল: "4.2 MB → 310 KB (93% smaller)"; ছোট না হলে খালি
+const formatCompressSaving = info => {
+    const before = Number(info?.originalSize);
+    const after = Number(info?.compressedSize);
+    if (!before || !after || after >= before) return "";
+    const pct = Math.round((1 - after / before) * 100);
+    return `${formatBytes(before)} → ${formatBytes(after)} (${pct}% smaller)`;
+};
+
 const formatReplySnippet = target => {
     if (!target) return "";
     if (target.deletedForEveryone) return "This message was deleted";
@@ -1650,49 +1659,93 @@ export default function ChatPage() {
                                 </div>
                             )}
 
-                            {uploadingMedia && (
-                                <div className="sync-composer-banner uploading">
-                                    <div className="sync-upload-top">
-                                        <Loader2 size={15} className="spin" />
-                                        <span className="sync-upload-name">
-                                            {uploadInfo?.phase === "processing"
-                                                ? "Finalizing"
-                                                : "Uploading"}{" "}
-                                            {uploadInfo?.name || "file"}
-                                        </span>
-                                        <strong className="sync-upload-pct">
-                                            {uploadProgress}%
-                                        </strong>
-                                    </div>
-                                    <div
-                                        className="sync-upload-bar"
-                                        role="progressbar"
-                                        aria-valuemin={0}
-                                        aria-valuemax={100}
-                                        aria-valuenow={uploadProgress}
-                                    >
+                            {uploadingMedia && (() => {
+                                const phase = uploadInfo?.phase;
+                                const busyBeforeUpload =
+                                    phase === "compressing" || phase === "preparing";
+                                const compressPct = Number.isFinite(uploadInfo?.compressPct)
+                                    ? Math.round(uploadInfo.compressPct)
+                                    : null;
+                                const indeterminate =
+                                    phase === "preparing" ||
+                                    (phase === "compressing" && compressPct === null);
+                                const barPct =
+                                    phase === "compressing" && compressPct !== null
+                                        ? compressPct
+                                        : busyBeforeUpload
+                                          ? 0
+                                          : uploadProgress;
+                                const label =
+                                    phase === "compressing"
+                                        ? "Compressing"
+                                        : phase === "preparing"
+                                          ? "Preparing"
+                                          : phase === "processing"
+                                            ? "Finalizing"
+                                            : "Uploading";
+                                const saving = busyBeforeUpload
+                                    ? ""
+                                    : formatCompressSaving(uploadInfo);
+                                return (
+                                    <div className="sync-composer-banner uploading">
+                                        <div className="sync-upload-top">
+                                            <Loader2 size={15} className="spin" />
+                                            <span className="sync-upload-name">
+                                                {label} {uploadInfo?.name || "file"}
+                                            </span>
+                                            <strong className="sync-upload-pct">
+                                                {busyBeforeUpload
+                                                    ? compressPct !== null
+                                                        ? `${compressPct}%`
+                                                        : ""
+                                                    : `${uploadProgress}%`}
+                                            </strong>
+                                        </div>
                                         <div
-                                            className="sync-upload-fill"
-                                            style={{ width: `${uploadProgress}%` }}
-                                        />
+                                            className="sync-upload-bar"
+                                            role="progressbar"
+                                            aria-valuemin={0}
+                                            aria-valuemax={100}
+                                            aria-valuenow={indeterminate ? undefined : barPct}
+                                        >
+                                            <div
+                                                className={`sync-upload-fill${
+                                                    indeterminate ? " indeterminate" : ""
+                                                }`}
+                                                style={
+                                                    indeterminate
+                                                        ? undefined
+                                                        : { width: `${barPct}%` }
+                                                }
+                                            />
+                                        </div>
+                                        {saving && (
+                                            <div className="sync-upload-saved">
+                                                Compressed {saving}
+                                            </div>
+                                        )}
+                                        <div className="sync-upload-meta">
+                                            <span>
+                                                {busyBeforeUpload
+                                                    ? formatBytes(uploadInfo?.originalSize || uploadInfo?.size) || ""
+                                                    : `${formatBytes(uploadInfo?.loaded || 0) || "0 B"} / ${
+                                                          formatBytes(uploadInfo?.total || uploadInfo?.size) || ""
+                                                      }`}
+                                            </span>
+                                            <span>
+                                                {busyBeforeUpload
+                                                    ? ""
+                                                    : [
+                                                          formatSpeed(uploadInfo?.speed),
+                                                          formatEta(uploadInfo?.eta)
+                                                      ]
+                                                          .filter(Boolean)
+                                                          .join(" · ")}
+                                            </span>
+                                        </div>
                                     </div>
-                                    <div className="sync-upload-meta">
-                                        <span>
-                                            {formatBytes(uploadInfo?.loaded || 0) || "0 B"}
-                                            {" / "}
-                                            {formatBytes(uploadInfo?.total || uploadInfo?.size) || ""}
-                                        </span>
-                                        <span>
-                                            {[
-                                                formatSpeed(uploadInfo?.speed),
-                                                formatEta(uploadInfo?.eta)
-                                            ]
-                                                .filter(Boolean)
-                                                .join(" · ")}
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
+                                );
+                            })()}
 
                             {replyingTo && (
                                 <div className="sync-reply-banner">

@@ -665,6 +665,12 @@ input[type="checkbox"] {
     overflow: hidden;
 }
 
+.sync-progress-bar > .sync-progress-indeterminate {
+    width: 38%;
+    transition: none;
+    animation: sync-upload-indeterminate 1.05s ease-in-out infinite;
+}
+
 .sync-progress-bar > div {
     height: 100%;
     border-radius: inherit;

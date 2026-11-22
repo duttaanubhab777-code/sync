@@ -29,6 +29,7 @@ import {
 import { uploadMediaToCloudinary } from "../services/media.js";
 import { pushBackHandler } from "../services/backNavigation.js";
 import {
+    formatBytes,
     formatChatListTime,
     formatTime,
     generateClientMsgId
@@ -83,6 +84,8 @@ export default function StoriesPage() {
     const [bgColor, setBgColor] = useState(STORY_COLORS[0]);
     const [mediaFile, setMediaFile] = useState(null);
     const [uploadProgress, setUploadProgress] = useState(0);
+    // compress / upload-এর ধাপ ও সাইজ (original → compressed) দেখানোর জন্য
+    const [uploadInfo, setUploadInfo] = useState(null);
     const [createError, setCreateError] = useState("");
     // Share Story একবার ট্যাপেই সাথে সাথে lock: state async বলে আলাদা ref দিয়ে সিঙ্ক্রোনাস গার্ড
     const [submitting, setSubmitting] = useState(false);
@@ -195,7 +198,10 @@ export default function StoriesPage() {
                 }
                 const media = await uploadMediaToCloudinary(
                     mediaFile,
-                    setUploadProgress,
+                    (pct, info) => {
+                        setUploadProgress(pct);
+                        setUploadInfo(info || null);
+                    },
                     { purpose: "story", compress: true }
                 );
                 const detectedType = mediaFile.type.startsWith("video/")
@@ -215,6 +221,7 @@ export default function StoriesPage() {
             setCaption("");
             setMediaFile(null);
             setUploadProgress(0);
+            setUploadInfo(null);
             setShowCreateModal(false);
         } catch (err) {
             setCreateError(
@@ -991,6 +998,12 @@ export default function StoriesPage() {
                                             }
                                         />
                                     </div>
+                                    {(uploadInfo?.phase === "compressing" ||
+                                        uploadInfo?.phase === "preparing") && (
+                                        <div className="sync-progress-bar">
+                                            <div className="sync-progress-indeterminate" />
+                                        </div>
+                                    )}
                                     {uploadProgress > 0 &&
                                         uploadProgress < 100 && (
                                             <div className="sync-progress-bar">
@@ -999,6 +1012,15 @@ export default function StoriesPage() {
                                                         width: `${uploadProgress}%`
                                                     }}
                                                 />
+                                            </div>
+                                        )}
+                                    {uploadInfo?.compressedSize <
+                                        uploadInfo?.originalSize &&
+                                        uploadInfo?.phase !== "compressing" && (
+                                            <div className="sync-upload-saved">
+                                                Compressed{" "}
+                                                {formatBytes(uploadInfo.originalSize)}{" "}
+                                                → {formatBytes(uploadInfo.compressedSize)}
                                             </div>
                                         )}
                                 </>
@@ -1025,10 +1047,12 @@ export default function StoriesPage() {
                                     disabled={posting || submitting}
                                 >
                                     {posting || submitting
-                                        ? uploadProgress > 0 &&
-                                          uploadProgress < 100
-                                            ? `Uploading ${Math.round(uploadProgress)}%`
-                                            : "Posting..."
+                                        ? uploadInfo?.phase === "compressing"
+                                            ? "Compressing..."
+                                            : uploadProgress > 0 &&
+                                                uploadProgress < 100
+                                              ? `Uploading ${Math.round(uploadProgress)}%`
+                                              : "Posting..."
                                         : "Share Story"}
                                 </button>
                             </div>

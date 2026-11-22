@@ -1,6 +1,6 @@
 import axios from "axios";
 import { getStoredToken, PY_URL_KEY, refreshAccessToken } from "./api.js";
-import { compressImageFile } from "../utils/image.js";
+import { compressMediaFile } from "../utils/compress.js";
 
 // XMLHttpRequest দিয়ে আপলোড, কারণ এতে প্রতিটা পাঠানো বাইটের খবর পাওয়া যায়।
 // ব্রাউজার অনেক সময় কয়েকটা বড় লাফে (0% -> 100%) প্রগ্রেস জানায়, তাই এখানে
@@ -118,21 +118,8 @@ const uploadWithProgress = (url, formData, fileSize, onProgress) =>
         xhr.send(formData);
     });
 
-// options.purpose (ঐচ্ছিক): "chat" (ডিফল্ট) | "voice" | "avatar" | "story" | "group"
-// Python সার্ভিস এটা দেখে Cloudinary folder ঠিক করে। না দিলে আগের মতোই sync/chat।
-// options.compress === true হলে ছবি আপলোডের আগে ফোনেই ছোট করা হয় (WhatsApp-এর মতো)।
-export const uploadMediaToCloudinary = async (file, onProgress, options = {}) => {
-    if (!file) throw new Error("No file selected");
-
-    if (options?.compress === true) {
-        file = await compressImageFile(file);
-    }
-
-    const MAX_BYTES = 25 * 1024 * 1024;
-    if (file.size > MAX_BYTES) {
-        throw new Error("File is too large (max 25 MB)");
-    }
-
+// Python সার্ভিস থেকে আপলোডের signature আনা (401 হলে token refresh করে আবার চেষ্টা)
+const fetchUploadSignature = async options => {
     const pyBaseUrl = (
         import.meta.env.VITE_PYTHON_SERVICE_URL ||
         localStorage.getItem(PY_URL_KEY) ||
@@ -146,32 +133,17 @@ export const uploadMediaToCloudinary = async (file, onProgress, options = {}) =>
     }
 
     const signBody = options?.purpose ? { purpose: options.purpose } : {};
-
-    let token = getStoredToken();
+    const sign = token =>
+        axios.post(`${pyBaseUrl}/api/v1/media/sign`, signBody, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
 
     let signRes;
     try {
-        signRes = await axios.post(
-            `${pyBaseUrl}/api/v1/media/sign`,
-            signBody,
-            {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            }
-        );
+        signRes = await sign(getStoredToken());
     } catch (err) {
         if (err.response?.status === 401) {
-            token = await refreshAccessToken();
-            signRes = await axios.post(
-                `${pyBaseUrl}/api/v1/media/sign`,
-                signBody,
-                {
-                    headers: {
-                        Authorization: `Bearer ${token}`
-                    }
-                }
-            );
+            signRes = await sign(await refreshAccessToken());
         } else {
             throw new Error(
                 err.response?.data?.message ||
@@ -181,11 +153,54 @@ export const uploadMediaToCloudinary = async (file, onProgress, options = {}) =>
     }
 
     const signData = signRes.data?.data || signRes.data;
-    const { cloudName, apiKey, timestamp, folder, signature } = signData || {};
-
+    const { cloudName, apiKey, signature } = signData || {};
     if (!cloudName || !apiKey || !signature) {
         throw new Error("Invalid upload signature from Python service");
     }
+    return signData;
+};
+
+// options.purpose (ঐচ্ছিক): "chat" (ডিফল্ট) | "voice" | "avatar" | "story" | "group"
+// Python সার্ভিস এটা দেখে Cloudinary folder ঠিক করে। না দিলে আগের মতোই sync/chat।
+// options.compress === true হলে ছবি আপলোডের আগে ফোনেই ছোট করা হয় (WhatsApp-এর মতো)।
+//
+// onProgress(percent, info) এর info.phase এখন:
+//   "compressing" -> ফোনে ছোট করা হচ্ছে (info.compressPct থাকলে ০–১০০, না থাকলে অনির্দিষ্ট)
+//   "preparing"   -> signature আনা হচ্ছে (compress ছাড়া ফাইলে)
+//   "uploading" / "processing" / "done" -> আগের মতো
+// info.originalSize ও info.compressedSize (বাইট) compress-এর পর থেকে সব ইভেন্টে থাকে।
+export const uploadMediaToCloudinary = async (file, onProgress, options = {}) => {
+    if (!file) throw new Error("No file selected");
+
+    const originalSize = file.size;
+    let compressedSize = file.size;
+    const report = (pct, info) => {
+        if (typeof onProgress !== "function") return;
+        onProgress(pct, { originalSize, compressedSize, ...info });
+    };
+
+    // signature আনা আর compress একসাথে চলে, তাই compress-এর সময়টা আলাদা করে অপেক্ষা যোগ করে না
+    const signaturePromise = fetchUploadSignature(options);
+    signaturePromise.catch(() => {}); // compress চলাকালীন ব্যর্থ হলে unhandled rejection আটকানো
+
+    if (options?.compress === true) {
+        report(0, { phase: "compressing", total: originalSize });
+        file = await compressMediaFile(file, {
+            onProgress: compressPct =>
+                report(0, { phase: "compressing", total: originalSize, compressPct })
+        });
+        compressedSize = file.size;
+    } else {
+        report(0, { phase: "preparing", total: originalSize });
+    }
+
+    const MAX_BYTES = 25 * 1024 * 1024;
+    if (file.size > MAX_BYTES) {
+        throw new Error("File is too large (max 25 MB)");
+    }
+
+    const signData = await signaturePromise;
+    const { cloudName, apiKey, timestamp, folder, signature } = signData;
 
     const formData = new FormData();
     formData.append("file", file);
@@ -202,13 +217,16 @@ export const uploadMediaToCloudinary = async (file, onProgress, options = {}) =>
     const detectedType = detectMessageTypeFromFile(file);
     const resourceEndpoint = detectedType === "file" ? "raw" : "auto";
 
+    // আপলোড শুরুর মুহূর্তেই UI "Uploading"-এ চলে যায়, কোনো ফাঁকা সময় থাকে না
+    report(0, { phase: "uploading", total: file.size });
+
     let data;
     try {
         data = await uploadWithProgress(
             `https://api.cloudinary.com/v1_1/${cloudName}/${resourceEndpoint}/upload`,
             formData,
             file.size,
-            onProgress
+            (pct, info) => report(pct, info)
         );
     } catch (err) {
         // Cloudinary আসল কারণ জানায় (যেমন "Invalid Signature", "File size too large"), সেটা দেখানো

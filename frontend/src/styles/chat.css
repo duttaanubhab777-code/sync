@@ -503,6 +503,22 @@
     background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
     animation: sync-shimmer 1.2s linear infinite;
 }
+/* compress / signature আনার সময় (শতাংশ জানা নেই): একটা আলো বারের ওপর দিয়ে চলতে থাকে */
+.sync-upload-fill.indeterminate {
+    width: 38%;
+    transition: none;
+    animation: sync-upload-indeterminate 1.05s ease-in-out infinite;
+}
+@keyframes sync-upload-indeterminate {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(263%); }
+}
+.sync-upload-saved {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #b6f6cf;
+    font-variant-numeric: tabular-nums;
+}
 .sync-upload-meta {
     display: flex;
     justify-content: space-between;
