@@ -10,7 +10,6 @@ import {
     Mic,
     Pause,
     Play,
-    Reply,
     Trash2,
     Info,
     ArrowLeft,
@@ -27,6 +26,7 @@ import {
 import Avatar from "../components/Avatar.jsx";
 import SyncBrandBar from "../components/SyncBrandBar.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
+import MessagePreview from "../components/MessagePreview.jsx";
 import LinkPreviewCard from "../components/LinkPreviewCard.jsx";
 import AttachmentSheet from "../components/chat/AttachmentSheet.jsx";
 import LocationCard from "../components/chat/LocationCard.jsx";
@@ -210,6 +210,21 @@ const formatReplySnippet = target => {
 };
 
 
+// রিপ্লাই কোটে মিডিয়া হলে আইকনসহ দেখায়, টেক্সট হলে সাধারণ টেক্সট
+function ReplySnippet({ target }) {
+    if (!target) return null;
+    if (target.deletedForEveryone) {
+        return <MessagePreview deleted />;
+    }
+    if (target.text) return <>{target.text}</>;
+    return (
+        <MessagePreview
+            type={target.type}
+            text={formatReplySnippet(target)}
+        />
+    );
+}
+
 const VOICE_BAR_COUNT = 40;
 const MIN_VOICE_MS = 800;
 
@@ -225,6 +240,8 @@ export default function ChatPage() {
     const dispatch = useDispatch();
     const signOut = useSignOut();
     const [confirmLogout, setConfirmLogout] = useState(false);
+    const [confirmDeleteMsgId, setConfirmDeleteMsgId] = useState(null);
+    const [deletingMsg, setDeletingMsg] = useState(false);
     const [loggingOut, setLoggingOut] = useState(false);
 
     const handleConfirmLogout = async () => {
@@ -972,12 +989,20 @@ export default function ChatPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeConversationId]);
 
-    const handleDeleteMessage = async msgId => {
-        if (!window.confirm("Delete this message for everyone?")) return;
+    const handleDeleteMessage = msgId => {
+        setConfirmDeleteMsgId(msgId);
+    };
+
+    const handleConfirmDeleteMessage = async () => {
+        const msgId = confirmDeleteMsgId;
+        if (!msgId) return;
+        setDeletingMsg(true);
         const ack = await deleteSocketMessage(msgId);
         if (!ack?.ok) {
             setComposerError(ack?.error || "Could not delete message");
         }
+        setDeletingMsg(false);
+        setConfirmDeleteMsgId(null);
     };
 
     const handleLoadOlder = () => {
@@ -1171,8 +1196,21 @@ export default function ChatPage() {
                                                     }
                                                 />
                                             ) : (
-                                                conv.lastMessage?.text ||
-                                                "No messages yet"
+                                                conv.lastMessage ? (
+                                                    <MessagePreview
+                                                        type={
+                                                            conv.lastMessage
+                                                                .type
+                                                        }
+                                                        text={
+                                                            conv.lastMessage
+                                                                .text
+                                                        }
+                                                        fallback="No messages yet"
+                                                    />
+                                                ) : (
+                                                    "No messages yet"
+                                                )
                                             )}
                                         </span>
                                         {unread > 0 && (
@@ -1447,9 +1485,11 @@ export default function ChatPage() {
                                                             <span className="reply-bar" />
                                                             <div className="reply-content">
                                                                 <p>
-                                                                    {formatReplySnippet(
-                                                                        msg.replyTo
-                                                                    )}
+                                                                    <ReplySnippet
+                                                                        target={
+                                                                            msg.replyTo
+                                                                        }
+                                                                    />
                                                                 </p>
                                                             </div>
                                                         </div>
@@ -1539,7 +1579,7 @@ export default function ChatPage() {
                                                     msg.deletedForEveryone) && (
                                                     <div className="sync-msg-text">
                                                         {msg.deletedForEveryone
-                                                            ? "🚫 This message was deleted"
+                                                            ? <MessagePreview deleted />
                                                             : <MessageLinkContent text={msg.text} />}
                                                     </div>
                                                 )}
@@ -1565,49 +1605,6 @@ export default function ChatPage() {
                                                             />
                                                         )}
                                                 </div>
-
-                                                {!msg.deletedForEveryone &&
-                                                    !msg.optimistic && (
-                                                        <div className="sync-msg-actions">
-                                                            <button
-                                                                type="button"
-                                                                title="Reply"
-                                                                onClick={() =>
-                                                                    dispatch(
-                                                                        setReplyTo(
-                                                                            {
-                                                                                conversationId:
-                                                                                    activeConversationId,
-                                                                                message:
-                                                                                    msg
-                                                                            }
-                                                                        )
-                                                                    )
-                                                                }
-                                                            >
-                                                                <Reply
-                                                                    size={14}
-                                                                />
-                                                            </button>
-                                                            {isMine && (
-                                                                <button
-                                                                    type="button"
-                                                                    title="Delete for everyone"
-                                                                    onClick={() =>
-                                                                        handleDeleteMessage(
-                                                                            msg._id
-                                                                        )
-                                                                    }
-                                                                >
-                                                                    <Trash2
-                                                                        size={
-                                                                            14
-                                                                        }
-                                                                    />
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    )}
                                             </div>
                                         </MessageGesture>
                                     </React.Fragment>
@@ -1806,7 +1803,7 @@ export default function ChatPage() {
                                                 "message"}
                                         </strong>
                                         <p>
-                                            {formatReplySnippet(replyingTo)}
+                                            <ReplySnippet target={replyingTo} />
                                         </p>
                                     </div>
                                     <button
@@ -2037,6 +2034,18 @@ export default function ChatPage() {
                     </button>
                     <img src={lightboxUrl} alt="Full view" />
                 </div>
+            )}
+
+            {confirmDeleteMsgId && (
+                <ConfirmDialog
+                    icon={Trash2}
+                    title="Delete this message?"
+                    message="This message will be removed for everyone in this chat."
+                    confirmLabel="Delete"
+                    busy={deletingMsg}
+                    onConfirm={handleConfirmDeleteMessage}
+                    onCancel={() => setConfirmDeleteMsgId(null)}
+                />
             )}
 
             {confirmLogout && (

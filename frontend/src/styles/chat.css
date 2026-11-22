@@ -995,3 +995,22 @@
     transform: translate(-50%, -50%);
     pointer-events: none;
 }
+
+/* ---------- preview icon + label (chat list, reply quote) ---------- */
+.sync-preview-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    min-width: 0;
+    vertical-align: bottom;
+}
+.sync-preview-chip svg { flex-shrink: 0; opacity: 0.85; }
+.sync-preview-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.sync-msg-reply-quote .sync-preview-chip,
+.sync-reply-banner .sync-preview-chip { display: flex; }

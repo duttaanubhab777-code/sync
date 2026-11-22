@@ -1304,3 +1304,6 @@
 @media (prefers-reduced-motion: reduce) {
     .sync-react-btn, .sync-react-cell, .sync-react-chip, .sync-burst-main > span, .sync-burst-particle { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* কনফার্ম ডায়ালগ সবসময় সবার ওপরে (স্টোরি ভিউয়ার, অ্যাডমিন প্রিভিউ ইত্যাদির ওপরেও) */
+.sync-confirm-backdrop { z-index: 1000; }

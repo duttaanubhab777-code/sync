@@ -16,6 +16,7 @@ import {
     Lock
 } from "lucide-react";
 import Avatar from "./Avatar.jsx";
+import ConfirmDialog from "./ConfirmDialog.jsx";
 import { api, extractErrorMessage } from "../services/api.js";
 import {
     createGroupChat,
@@ -412,6 +413,8 @@ export function ChatInfoDrawer({ conversation, onClose }) {
         isGroup &&
         (conversation.admins || []).some(a => String(a) === myId);
 
+    const [confirmLeave, setConfirmLeave] = useState(false);
+    const [leavingGroup, setLeavingGroup] = useState(false);
     const [partnerProfile, setPartnerProfile] = useState(null);
     const [groupName, setGroupName] = useState(conversation?.groupName || "");
     const [groupDescription, setGroupDescription] = useState(
@@ -538,15 +541,19 @@ export function ChatInfoDrawer({ conversation, onClose }) {
         }
     };
 
-    const handleLeaveGroup = async () => {
-        if (!window.confirm("Are you sure you want to leave this group?")) {
-            return;
-        }
+    const handleLeaveGroup = () => setConfirmLeave(true);
+
+    const handleConfirmLeaveGroup = async () => {
+        setLeavingGroup(true);
         try {
             await dispatch(leaveGroupChat(conversation._id)).unwrap();
+            setConfirmLeave(false);
             onClose();
         } catch (err) {
+            setConfirmLeave(false);
             setError(typeof err === "string" ? err : "Could not leave group");
+        } finally {
+            setLeavingGroup(false);
         }
     };
 
@@ -887,6 +894,18 @@ export function ChatInfoDrawer({ conversation, onClose }) {
                     </>
                 )}
             </div>
+
+            {confirmLeave && (
+                <ConfirmDialog
+                    icon={LogOut}
+                    title="Leave this group?"
+                    message="You will stop receiving messages from this group."
+                    confirmLabel="Leave"
+                    busy={leavingGroup}
+                    onConfirm={handleConfirmLeaveGroup}
+                    onCancel={() => setConfirmLeave(false)}
+                />
+            )}
         </aside>
     );
 }

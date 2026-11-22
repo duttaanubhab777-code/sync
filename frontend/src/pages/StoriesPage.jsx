@@ -17,6 +17,7 @@ import {
 import Avatar from "../components/Avatar.jsx";
 import SyncBrandBar from "../components/SyncBrandBar.jsx";
 import MoreMenu from "../components/MoreMenu.jsx";
+import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import {
     createNewStory,
     deleteMyStory,
@@ -79,6 +80,7 @@ export default function StoriesPage() {
     );
 
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [confirmDeleteStory, setConfirmDeleteStory] = useState(false);
     const [storyType, setStoryType] = useState("text");
     const [caption, setCaption] = useState("");
     const [bgColor, setBgColor] = useState(STORY_COLORS[0]);
@@ -311,9 +313,17 @@ export default function StoriesPage() {
         }
     };
 
-    const handleDeleteCurrentStory = async () => {
+    const handleDeleteCurrentStory = () => {
         if (!activeStory) return;
-        if (!window.confirm("Delete this story?")) return;
+        setConfirmDeleteStory(true);
+    };
+
+    const handleConfirmDeleteStory = async () => {
+        if (!activeStory) {
+            setConfirmDeleteStory(false);
+            return;
+        }
+        setConfirmDeleteStory(false);
         await dispatch(deleteMyStory(activeStory._id));
         setViewerState(null);
         setShowViewersList(false);
@@ -1059,6 +1069,17 @@ export default function StoriesPage() {
                         </form>
                     </div>
                 </div>
+            )}
+
+            {confirmDeleteStory && (
+                <ConfirmDialog
+                    icon={Trash2}
+                    title="Delete this story?"
+                    message="Your story will be removed for everyone who can see it."
+                    confirmLabel="Delete"
+                    onConfirm={handleConfirmDeleteStory}
+                    onCancel={() => setConfirmDeleteStory(false)}
+                />
             )}
         </div>
     );

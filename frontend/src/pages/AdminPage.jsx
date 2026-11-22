@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncLogo from "../components/SyncLogo.jsx";
+import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import WallpaperAdmin from "../components/WallpaperAdmin.jsx";
 import LoginHistoryAdmin from "../components/LoginHistoryAdmin.jsx";
 import {
@@ -138,6 +139,14 @@ export default function AdminPage() {
     const [userFilter, setUserFilter] = useState("all");
     const [loadingUsers, setLoadingUsers] = useState(false);
     const [busyUserId, setBusyUserId] = useState(null);
+    // সব delete/remove কনফার্মেশনের জন্য অ্যাপ-স্টাইল ডায়ালগ
+    const [confirmCfg, setConfirmCfg] = useState(null);
+    const askConfirm = cfg => setConfirmCfg(cfg);
+    const runConfirm = () => {
+        const fn = confirmCfg?.onConfirm;
+        setConfirmCfg(null);
+        fn?.();
+    };
 
     // Super Admin: নতুন Admin তৈরির ফর্ম
     const [showCreateAdmin, setShowCreateAdmin] = useState(false);
@@ -412,14 +421,15 @@ export default function AdminPage() {
         }
     };
 
-    const handleDeleteUser = async target => {
-        if (
-            !window.confirm(
-                `Permanently delete user @${target.username} (${target.fullName})?`
-            )
-        ) {
-            return;
-        }
+    const handleDeleteUser = target =>
+        askConfirm({
+            title: "Delete this user?",
+            message: `@${target.username} (${target.fullName}) will be permanently deleted. This cannot be undone.`,
+            confirmLabel: "Delete",
+            onConfirm: () => doDeleteUser(target)
+        });
+
+    const doDeleteUser = async target => {
         setBusyUserId(target._id);
         try {
             await api.delete(`/api/v1/admin/users/${target._id}`);
@@ -435,16 +445,17 @@ export default function AdminPage() {
     };
 
     // ---------- Handlers: Media ----------
-    const handleRemoveMedia = async item => {
-        if (
-            !window.confirm(
-                `Remove this ${item.type} from ${
-                    item.source === "story" ? "Stories" : "Chat"
-                } for everyone?`
-            )
-        ) {
-            return;
-        }
+    const handleRemoveMedia = item =>
+        askConfirm({
+            title: `Remove this ${item.type}?`,
+            message: `It will be removed from ${
+                item.source === "story" ? "Stories" : "Chat"
+            } for everyone.`,
+            confirmLabel: "Remove",
+            onConfirm: () => doRemoveMedia(item)
+        });
+
+    const doRemoveMedia = async item => {
         setDeletingMediaId(item.id);
         try {
             const endpoint =
@@ -555,8 +566,15 @@ export default function AdminPage() {
         }
     };
 
-    const handleDeleteNotice = async id => {
-        if (!window.confirm("Delete this notice for all users?")) return;
+    const handleDeleteNotice = id =>
+        askConfirm({
+            title: "Delete this notice?",
+            message: "The notice will be removed for all users.",
+            confirmLabel: "Delete",
+            onConfirm: () => doDeleteNotice(id)
+        });
+
+    const doDeleteNotice = async id => {
         try {
             await api.delete(`/api/v1/admin/notices/${id}`);
             setNotices(prev => prev.filter(n => n._id !== id));
@@ -568,14 +586,15 @@ export default function AdminPage() {
     };
 
     // ---------- Handlers: Groups ----------
-    const handleDeleteGroup = async g => {
-        if (
-            !window.confirm(
-                `Delete group "${g.name}" (${g.memberCount} members)?`
-            )
-        ) {
-            return;
-        }
+    const handleDeleteGroup = g =>
+        askConfirm({
+            title: "Delete this group?",
+            message: `"${g.name}" (${g.memberCount} members) will be deleted for everyone.`,
+            confirmLabel: "Delete",
+            onConfirm: () => doDeleteGroup(g)
+        });
+
+    const doDeleteGroup = async g => {
         setDeletingGroupId(g.id);
         try {
             await api.delete(`/api/v1/admin/groups/${g.id}`);
@@ -2194,6 +2213,17 @@ export default function AdminPage() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {confirmCfg && (
+                <ConfirmDialog
+                    icon={Trash2}
+                    title={confirmCfg.title}
+                    message={confirmCfg.message}
+                    confirmLabel={confirmCfg.confirmLabel}
+                    onConfirm={runConfirm}
+                    onCancel={() => setConfirmCfg(null)}
+                />
             )}
         </div>
     );

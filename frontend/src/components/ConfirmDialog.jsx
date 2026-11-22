@@ -22,7 +22,7 @@ export default function ConfirmDialog({
 
     return (
         <div
-            className="sync-modal-backdrop"
+            className="sync-modal-backdrop sync-confirm-backdrop"
             onClick={() => !busy && onCancel?.()}
             role="presentation"
         >
