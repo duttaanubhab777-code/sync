@@ -59,7 +59,9 @@ export default function ContactMatches({
                         </strong>
                         <small>
                             {status === "denied"
-                                ? "Open phone Settings > Apps > Sync > Permissions and allow Contacts, then tap Retry."
+                                ? `Open phone Settings > Apps > Sync > Permissions and allow Contacts, then tap Retry.${
+                                      errorMsg ? ` (${errorMsg})` : ""
+                                  }`
                                 : status === "error"
                                   ? errorMsg || "Something went wrong. Please try again."
                                   : mode === "native"

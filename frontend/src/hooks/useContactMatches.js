@@ -53,8 +53,9 @@ export default function useContactMatches() {
 
     const enable = useCallback(async () => {
         if (mode === "native") {
-            const ok = await requestContactsPermission();
-            if (!ok) {
+            const { granted, error } = await requestContactsPermission();
+            if (!granted) {
+                setErrorMsg(error);
                 setStatus("denied");
                 return;
             }

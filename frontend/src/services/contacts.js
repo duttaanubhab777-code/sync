@@ -61,25 +61,38 @@ export const toPhone10 = raw => {
     return /^[6-9]\d{9}$/.test(d) ? d : "";
 };
 
+// প্লাগিনের ফলাফলের key ভার্সনভেদে আলাদা হতে পারে (contacts / readContacts), তাই কোনো একটা "granted" হলেই চলবে
+const isGranted = res =>
+    Boolean(res) &&
+    Object.values(res).some(v => v === "granted");
+
 export const hasContactsPermission = async () => {
     const plugin = getNativePlugin();
     if (!plugin) return false;
     try {
-        const res = await plugin.checkPermissions();
-        return res?.contacts === "granted" || res?.readContacts === "granted";
+        return isGranted(await plugin.checkPermissions());
     } catch {
         return false;
     }
 };
 
+// { granted, error } ফেরত দেয়; আগে error গিলে ফেলা হতো বলে আসল কারণ (যেমন manifest-এ permission নেই) বোঝা যেত না
 export const requestContactsPermission = async () => {
     const plugin = getNativePlugin();
-    if (!plugin) return false;
+    if (!plugin) return { granted: false, error: "Contacts plugin not found" };
     try {
+        // Settings থেকে ফিরে এলে বা আগেই দেওয়া থাকলে আর ডায়ালগ লাগে না
+        if (await hasContactsPermission()) return { granted: true, error: "" };
         const res = await plugin.requestPermissions();
-        return res?.contacts === "granted" || res?.readContacts === "granted";
-    } catch {
-        return false;
+        if (isGranted(res)) return { granted: true, error: "" };
+        // ডায়ালগের পর আবার যাচাই (কিছু ডিভাইসে request-এর ফলাফল দেরিতে আপডেট হয়)
+        if (await hasContactsPermission()) return { granted: true, error: "" };
+        return { granted: false, error: "" };
+    } catch (err) {
+        return {
+            granted: false,
+            error: String(err?.message || err || "Permission request failed")
+        };
     }
 };
 

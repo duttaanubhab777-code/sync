@@ -53,6 +53,10 @@ perms = [
     "android.permission.ACCESS_COARSE_LOCATION",
     "android.permission.RECORD_AUDIO",
     "android.permission.READ_CONTACTS",
+    # @capacitor-community/contacts এর permission alias READ + WRITE দুটোই ধরে। WRITE_CONTACTS manifest-এ না থাকলে
+    # Capacitor "Missing the following permissions in AndroidManifest.xml" বলে request রিজেক্ট করে দেয়,
+    # ফলে Contacts permission-এর ডায়ালগ কখনোই আসে না। (অ্যাপ কোনো contact লেখে না, শুধু পড়ে।)
+    "android.permission.WRITE_CONTACTS",
     "android.permission.MODIFY_AUDIO_SETTINGS",
     "android.permission.POST_NOTIFICATIONS",
     "android.permission.VIBRATE",

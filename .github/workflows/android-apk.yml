@@ -114,6 +114,19 @@ jobs:
                   echo "actual  =$GOT"
                   [ "$EXPECT" = "$GOT" ] || { echo "APK is NOT signed with debug.keystore" >&2; exit 1; }
 
+            # Contacts permission APK-তে সত্যিই আছে কিনা (না থাকলে permission ডায়ালগ আসবে না) আর প্লাগিন native-এ রেজিস্টার হয়েছে কিনা দেখে
+            - name: Verify contacts permission and plugin
+              run: |
+                  BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)"
+                  APK=android/app/build/outputs/apk/debug/app-debug.apk
+                  "$BT/aapt" dump permissions "$APK" | grep -E "CONTACTS|POST_NOTIFICATIONS"
+                  for P in READ_CONTACTS WRITE_CONTACTS; do
+                      "$BT/aapt" dump permissions "$APK" | grep -q "android.permission.$P" || { echo "$P missing from APK" >&2; exit 1; }
+                  done
+                  echo "--- capacitor.plugins.json ---"
+                  cat android/app/src/main/assets/capacitor.plugins.json
+                  grep -q "Contacts" android/app/src/main/assets/capacitor.plugins.json || { echo "Contacts plugin not registered" >&2; exit 1; }
+
             - name: Prepare file
               run: cp android/app/build/outputs/apk/debug/app-debug.apk Sync.apk
 
