@@ -144,6 +144,15 @@ The interface is responsive and installable as a Progressive Web App. The reposi
 - Unread-count badges on supported Android launchers and PWAs, with a browser-tab title count fallback; badges clear when messages are read or the user signs out
 - Real-time updates for messages, stories, notices and account-role changes
 
+### Interface & mobile interaction
+
+- Keep the mobile message composer focused after sending, so the on-screen keyboard remains available for consecutive messages; users can dismiss it with the device Back action or by tapping elsewhere
+- Stabilise the application viewport on Android WebView by accounting for temporary visual-viewport height changes during keyboard animations
+- Use Inter as the primary interface font, with Hind Siliguri as the Bengali-language fallback
+- Apply a refined desktop pointer style while preserving native touch behaviour and normal text-selection cursors on form fields
+- Keep page-level overflow actions close to their relevant content; the Stories page places its More menu beside Add Story instead of using a separate global top bar
+- Use consistent Lucide SVG controls in the Admin Media Inspector for all-media, image-only and video-only filters
+
 ### Admin workspace
 
 - Platform statistics and dashboard overview
@@ -466,7 +475,7 @@ The GitHub Actions workflow is located at [`.github/workflows/android-apk.yml`](
 <a id="api"></a>
 <img src="docs/assets/headers/api.svg" alt="API Reference" height="64"/>
 
-The Node API is mounted under `/api`. Most application endpoints require a valid access token, sent as a Bearer token or supported session cookie.
+The Node REST API is versioned under `/api/v1`; unversioned `/api/...` application routes are not mounted. Most application endpoints require a valid access token, sent as a Bearer token or supported session cookie. The standalone Node infrastructure health check remains `/health`, and Socket.IO continues to use `/socket.io`.
 
 | Area | Base path | Purpose |
 | --- | --- | --- |
