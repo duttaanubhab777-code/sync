@@ -1,5 +1,6 @@
 import axios from "axios";
 import { getStoredToken, PY_URL_KEY, refreshAccessToken } from "./api.js";
+import { compressImageFile } from "../utils/image.js";
 
 // XMLHttpRequest দিয়ে আপলোড, কারণ এতে প্রতিটা পাঠানো বাইটের খবর পাওয়া যায়।
 // ব্রাউজার অনেক সময় কয়েকটা বড় লাফে (0% -> 100%) প্রগ্রেস জানায়, তাই এখানে
@@ -119,8 +120,13 @@ const uploadWithProgress = (url, formData, fileSize, onProgress) =>
 
 // options.purpose (ঐচ্ছিক): "chat" (ডিফল্ট) | "voice" | "avatar" | "story" | "group"
 // Python সার্ভিস এটা দেখে Cloudinary folder ঠিক করে। না দিলে আগের মতোই sync/chat।
+// options.compress === true হলে ছবি আপলোডের আগে ফোনেই ছোট করা হয় (WhatsApp-এর মতো)।
 export const uploadMediaToCloudinary = async (file, onProgress, options = {}) => {
     if (!file) throw new Error("No file selected");
+
+    if (options?.compress === true) {
+        file = await compressImageFile(file);
+    }
 
     const MAX_BYTES = 25 * 1024 * 1024;
     if (file.size > MAX_BYTES) {

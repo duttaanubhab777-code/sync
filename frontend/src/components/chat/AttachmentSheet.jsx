@@ -220,6 +220,15 @@ export default function AttachmentSheet({
         }
     };
 
+    // Document বোতামের ফাইল compress ছাড়া, আসল অবস্থায় যাবে
+    const handleDocInputChange = e => {
+        const files = e.target.files ? Array.from(e.target.files) : [];
+        e.target.value = "";
+        if (files.length > 0) {
+            onFilesSelected(files, { asDocument: true });
+        }
+    };
+
     const triggerPicker = ref => {
         if (disabled) return;
         requestClose();
@@ -416,7 +425,7 @@ export default function AttachmentSheet({
                 multiple
                 hidden
                 disabled={disabled}
-                onChange={handleInputChange}
+                onChange={handleDocInputChange}
             />
             <input
                 ref={audioInputRef}

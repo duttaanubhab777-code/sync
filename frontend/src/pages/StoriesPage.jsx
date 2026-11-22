@@ -196,7 +196,7 @@ export default function StoriesPage() {
                 const media = await uploadMediaToCloudinary(
                     mediaFile,
                     setUploadProgress,
-                    { purpose: "story" }
+                    { purpose: "story", compress: true }
                 );
                 const detectedType = mediaFile.type.startsWith("video/")
                     ? "video"

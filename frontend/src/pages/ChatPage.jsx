@@ -509,7 +509,8 @@ export default function ChatPage() {
     };
 
     // এক বা একাধিক ফাইল একটা একটা করে আপলোড ও পাঠানো; কোনোটা ব্যর্থ হলে বাকিগুলো চলবে
-    const handleFilesSelected = async selectedFiles => {
+    // options.asDocument = true হলে (Document বোতাম থেকে) কোনো compress হবে না, আসল ফাইলই যাবে
+    const handleFilesSelected = async (selectedFiles, options = {}) => {
         const files = Array.from(selectedFiles || []).filter(Boolean);
         if (files.length === 0 || !activeConversationId || !canSendInActive) return;
 
@@ -543,7 +544,8 @@ export default function ChatPage() {
                                 size: file.size,
                                 ...info
                             });
-                        }
+                        },
+                        { compress: !options?.asDocument }
                     );
                     const msgType = detectMessageTypeFromFile(file);
 

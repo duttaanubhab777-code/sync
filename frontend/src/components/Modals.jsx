@@ -208,7 +208,8 @@ export function NewGroupChatModal({ onClose, onGroupReady }) {
         setError("");
         try {
             const uploaded = await uploadMediaToCloudinary(file, undefined, {
-                purpose: "group"
+                purpose: "group",
+                compress: true
             });
             setGroupIcon(uploaded.url);
         } catch (err) {
@@ -502,7 +503,8 @@ export function ChatInfoDrawer({ conversation, onClose }) {
         setError("");
         try {
             const media = await uploadMediaToCloudinary(file, undefined, {
-                purpose: "group"
+                purpose: "group",
+                compress: true
             });
             await dispatch(
                 updateGroupDetails({
