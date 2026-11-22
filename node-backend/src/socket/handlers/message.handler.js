@@ -8,7 +8,7 @@ import {
     pickLocation
 } from "../../utils/attachments.js";
 import { isObjectId } from "../../utils/helpers.js";
-import { cleanupInBackground } from "../services/cloudinaryCleanup.service.js";
+import { cleanupInBackground } from "../../services/cloudinaryCleanup.service.js";
 import { Notification } from "../../models/notification.model.js";
 import { sendPushToUser } from "../../services/push.service.js";
 import { getTotalUnread } from "../../services/conversation.service.js";
