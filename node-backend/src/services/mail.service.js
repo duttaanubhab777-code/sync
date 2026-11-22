@@ -40,35 +40,46 @@ const escapeHtml = s =>
             })[c]
     );
 
-export const buildOtpEmail = ({ fullName, otp, minutes }) => {
-    const name = escapeHtml(String(fullName || "there").split(" ")[0]);
+// Gmail-এর "Copy code" বোতাম Gmail নিজেই ঠিক করে (গ্যারান্টি নেই); তবে সাধারণ, পরিষ্কার OTP মেইলে
+// (লেখা + আলাদা লাইনে শুধু কোড + "valid for N minutes") সেটা আসার সম্ভাবনা সবচেয়ে বেশি।
+// Subject-এ কোড রাখা হয় না, আর মেইল সাধারণ লেখার মতো রাখা হয় (spam filter-এর জন্য ভালো)।
+const buildCodeEmail = ({ fullName, otp, minutes, intro, ignoreNote }) => {
+    const name = escapeHtml(String(fullName || "User").split(" ")[0]);
     const code = escapeHtml(otp);
-    const html =
-        `<div style="font-family:Arial,Helvetica,sans-serif;background:#f4f6f8;padding:24px">` +
-        `<div style="max-width:420px;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px;color:#1f2933">` +
-        `<h2 style="margin:0 0 12px;color:#0f766e">Sync</h2>` +
-        `<p style="margin:0 0 16px">Hi ${name}, use this code to verify your email and finish creating your Sync account:</p>` +
-        `<div style="font-size:32px;letter-spacing:8px;font-weight:bold;text-align:center;background:#ecfdf5;border-radius:8px;padding:14px 0;margin:0 0 16px">${code}</div>` +
-        `<p style="margin:0 0 8px;font-size:14px">This code expires in ${minutes} minutes.</p>` +
-        `<p style="margin:0;font-size:12px;color:#6b7280">If you did not try to sign up for Sync, you can safely ignore this email. Never share this code with anyone.</p>` +
-        `</div></div>`;
-    return { subject: `${otp} is your Sync verification code`, html };
+    return (
+        `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#202124">` +
+        `<p>Dear ${name},</p>` +
+        `<p>${intro}</p>` +
+        `<p style="font-family:'Courier New',monospace;font-size:28px;font-weight:bold;letter-spacing:4px;background:#f4f4f4;padding:12px 14px;margin:16px 0">${code}</p>` +
+        `<p>This OTP is valid for ${minutes} minutes and not to be shared with anyone.</p>` +
+        `<p style="color:#5f6368;font-size:13px">${ignoreNote}</p>` +
+        `<p>Regards,<br>Team Sync</p>` +
+        `</div>`
+    );
+};
+
+export const buildOtpEmail = ({ fullName, otp, minutes }) => {
+    const html = buildCodeEmail({
+        fullName,
+        otp,
+        minutes,
+        intro: "Your One-Time Password (OTP) for verifying your Sync account is:",
+        ignoreNote: "If you did not try to sign up for Sync, you can ignore this email."
+    });
+    return { subject: "Your OTP to verify your Sync account", html };
 };
 
 // পাসওয়ার্ড রিসেটের ইমেইল (relay-র ৮ KB সীমার ভেতরে ছোট HTML)
 export const buildPasswordResetEmail = ({ fullName, otp, minutes }) => {
-    const name = escapeHtml(String(fullName || "there").split(" ")[0]);
-    const code = escapeHtml(otp);
-    const html =
-        `<div style="font-family:Arial,Helvetica,sans-serif;background:#f4f6f8;padding:24px">` +
-        `<div style="max-width:420px;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px;color:#1f2933">` +
-        `<h2 style="margin:0 0 12px;color:#0f766e">Sync</h2>` +
-        `<p style="margin:0 0 16px">Hi ${name}, use this code to reset your Sync password:</p>` +
-        `<div style="font-size:32px;letter-spacing:8px;font-weight:bold;text-align:center;background:#ecfdf5;border-radius:8px;padding:14px 0;margin:0 0 16px">${code}</div>` +
-        `<p style="margin:0 0 8px;font-size:14px">This code expires in ${minutes} minutes.</p>` +
-        `<p style="margin:0;font-size:12px;color:#6b7280">If you did not ask to reset your password, ignore this email; your password will not change. Never share this code with anyone.</p>` +
-        `</div></div>`;
-    return { subject: `${otp} is your Sync password reset code`, html };
+    const html = buildCodeEmail({
+        fullName,
+        otp,
+        minutes,
+        intro: "Your One-Time Password (OTP) for resetting your Sync password is:",
+        ignoreNote:
+            "If you did not ask to reset your password, ignore this email; your password will not change."
+    });
+    return { subject: "Your OTP to reset your Sync password", html };
 };
 
 // relay-এর JSON error-কে MailRelayError বানানো (secret বা পুরো body কখনো log হয় না)

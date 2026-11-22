@@ -47,6 +47,8 @@ def build_message(settings, to: str, subject: str, html: str, from_name: str = "
     msg["From"] = formataddr((one_line(from_name or settings.mail_from_name, 80), settings.gmail_user))
     msg["To"] = to
     msg["Subject"] = subject
+    msg["Auto-Submitted"] = "auto-generated"  # automatic transactional mail, not a person writing
+    msg["X-Auto-Response-Suppress"] = "All"
     msg["Date"] = formatdate(localtime=False)
     msg["Message-ID"] = make_msgid(domain=settings.gmail_user.split("@")[-1] or None)
     if reply_to:

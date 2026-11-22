@@ -35,7 +35,8 @@ test("reset email carries the code, escapes the name and fits the relay limit", 
         otp: "123456",
         minutes: 10
     });
-    assert.match(subject, /123456/);
+    assert.match(subject, /reset your Sync password/);
+    assert.equal(subject.includes("123456"), false);
     assert.ok(html.includes("123456"));
     assert.ok(!html.includes("<img"));
     assert.ok(Buffer.byteLength(html, "utf8") < MAX_MAIL_HTML_BYTES);

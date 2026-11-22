@@ -58,7 +58,8 @@ test("buildOtpEmail escapes HTML and stays well under MAX_MAIL_HTML_BYTES", () =
         otp: "123456",
         minutes: 10
     });
-    assert.match(subject, /123456/);
+    assert.match(subject, /verify your Sync account/);
+    assert.equal(subject.includes("123456"), false);
     assert.equal(html.includes("<script>"), false);
     assert.equal(html.includes("&lt;script&gt;"), true);
     assert.equal(html.includes("123456"), true);

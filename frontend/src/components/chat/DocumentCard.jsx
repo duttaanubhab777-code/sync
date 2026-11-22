@@ -8,6 +8,16 @@ import {
     Presentation
 } from "lucide-react";
 import { formatBytes } from "../../utils/format.js";
+import { isAndroidApp } from "../../services/appUpdate.js";
+
+// Cloudinary-র fl_attachment ফ্ল্যাগ দিলে ফাইল ব্রাউজারে খোলার বদলে সরাসরি ফোনে ডাউনলোড হয়।
+// শুধু আমাদের Cloudinary-র /upload/ লিংকে বসানো হয়; আগে থেকেই থাকলে আবার বসে না।
+const toDownloadUrl = url => {
+    const s = String(url || "");
+    if (!/^https:\/\/res\.cloudinary\.com\//.test(s)) return s;
+    if (/\/upload\/[^/]*fl_attachment/.test(s)) return s;
+    return s.replace("/upload/", "/upload/fl_attachment/");
+};
 
 // URL বা publicId থেকে ফাইলনেম অনুমান (পুরনো মেসেজগুলোতে fileName না থাকলে fallback)
 const inferFileName = media => {
@@ -52,15 +62,24 @@ export default function DocumentCard({ media }) {
     const ext = getExtension(fileName, media.mime);
     const { Icon, kind } = getDocVisual(ext);
     const sizeText = formatBytes(media.bytes);
+    const downloadUrl = toDownloadUrl(media.url);
+
+    const handleClick = e => {
+        e.stopPropagation();
+        // অ্যাপে (Capacitor WebView) ট্যাপ করলে সিস্টেম ব্রাউজার ফাইলটা নামায়
+        if (isAndroidApp) {
+            e.preventDefault();
+            window.location.href = downloadUrl;
+        }
+    };
 
     return (
         <a
-            href={media.url}
+            href={downloadUrl}
             target="_blank"
             rel="noopener noreferrer"
-            download={fileName}
             className="sync-msg-file-card sync-doc-card"
-            onClick={e => e.stopPropagation()}
+            onClick={handleClick}
         >
             <span className={`sync-doc-badge ${kind}`} aria-hidden="true">
                 <Icon size={20} />
