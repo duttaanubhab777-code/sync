@@ -1011,7 +1011,16 @@ export default function StoriesPage() {
                                     {(uploadInfo?.phase === "compressing" ||
                                         uploadInfo?.phase === "preparing") && (
                                         <div className="sync-progress-bar">
-                                            <div className="sync-progress-indeterminate" />
+                                            {uploadInfo?.phase === "compressing" &&
+                                            Number.isFinite(uploadInfo?.compressPct) ? (
+                                                <div
+                                                    style={{
+                                                        width: `${Math.round(uploadInfo.compressPct)}%`
+                                                    }}
+                                                />
+                                            ) : (
+                                                <div className="sync-progress-indeterminate" />
+                                            )}
                                         </div>
                                     )}
                                     {uploadProgress > 0 &&
@@ -1058,7 +1067,9 @@ export default function StoriesPage() {
                                 >
                                     {posting || submitting
                                         ? uploadInfo?.phase === "compressing"
-                                            ? "Compressing..."
+                                            ? Number.isFinite(uploadInfo?.compressPct)
+                                                ? `Compressing ${Math.round(uploadInfo.compressPct)}%`
+                                                : "Compressing..."
                                             : uploadProgress > 0 &&
                                                 uploadProgress < 100
                                               ? `Uploading ${Math.round(uploadProgress)}%`
