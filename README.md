@@ -150,6 +150,14 @@ The interface is responsive and installable as a Progressive Web App. The reposi
 - Duplicate-submission protection for story creation
 - Expired story media is removed from Cloudinary by the background cleanup process before the expired database records are swept
 
+### Media storage & cleanup
+
+- Remove eligible Cloudinary assets when messages, stories, notices, wallpapers, avatars or group icons are deleted or replaced, and when groups or accounts are removed
+- Check whether another message, profile, group or content record still references an asset before deleting it
+- Retry transient Cloudinary deletion failures and invalidate the CDN cache after successful removal
+- Sweep expired story and notice media before the delayed MongoDB TTL cleanup removes their records; the sweeper runs periodically in the Node service
+- Configure `CLOUDINARY_API_KEY` and `CLOUDINARY_API_SECRET` on the Node backend to enable remote deletion; without them, database deletion still works but remote files remain in Cloudinary
+
 ### Notifications
 
 - In-app notification center with individual and mark-all-as-read actions
@@ -161,6 +169,12 @@ The interface is responsive and installable as a Progressive Web App. The reposi
 - Dedicated Sync notification tones for messages and notices on supported Android devices
 - Unread-count badges on supported Android launchers and PWAs, with a browser-tab title count fallback; badges clear when messages are read or the user signs out
 - Real-time updates for messages, stories, notices and account-role changes
+
+### Chat appearance & wallpapers
+
+- Admin-managed wallpaper library with a platform default and individual user preferences; users can follow the current admin default or select a personal wallpaper
+- Wallpaper picker keeps the preview and save controls visible while the wallpaper gallery scrolls, and automatically brings the current selection into view
+- Preview supports brightness adjustment before saving; wallpaper thumbnails use the app's image cache
 
 ### Interface & mobile interaction
 
@@ -234,11 +248,11 @@ The public Contact page allows visitors to submit a name, email address, subject
 | Component | Deployment | Responsibility |
 | --- | --- | --- |
 | React + Redux Toolkit + Vite | Built and served by Node service | UI, routing, state management, media upload client, PWA |
-| Node.js + Express | Render Web Service | REST API, authentication, validation, admin operations, static frontend hosting |
+| Node.js + Express | Render Web Service | Versioned REST API, authentication, validation, admin operations, Cloudinary cleanup and static frontend hosting |
 | Socket.IO | Same Node HTTP server | Authenticated real-time messaging, presence, typing, read/delivery state and live events |
 | MongoDB Atlas + Mongoose | MongoDB Atlas | Users, device sessions, password-reset OTPs, conversations, messages, stories, notices, notifications, wallpapers and Android update state |
 | Flask media/mail service | PythonAnywhere | JWT-verified Cloudinary upload signatures and protected signup OTP mail relay |
-| Cloudinary | Cloudinary | Uploaded chat media, voice notes, avatars, stories, group icons and notice banners |
+| Cloudinary | Cloudinary | Uploaded chat media, voice notes, avatars, stories, group icons, notice banners and admin wallpapers; eligible assets are removed by the Node cleanup service when no longer referenced |
 | Firebase Cloud Messaging | Firebase | Native Android push delivery |
 | Web Push (VAPID) | Browser push services | Browser and installed-PWA notifications |
 | Capacitor Android shell | Android app | Native app container, Contacts and Geolocation plugins, push notification handling, launcher badges, APK download/install handoff and app lifecycle integration |
@@ -328,7 +342,7 @@ sync/
 │   ├── app.py
 │   ├── config.example.py
 │   └── requirements.txt
-├── mobile/                       # Capacitor Android wrapper and native build scripts
+├── mobile/                       # Capacitor Android wrapper, Contacts plugin and native build scripts
 │   ├── assets/sounds/            # Custom Android notification tones
 │   ├── scripts/                  # Android permissions, icons, badges and notification setup
 │   ├── www/                      # Local fallback and offline screens
@@ -512,7 +526,7 @@ The Node REST API is versioned under `/api/v1`; unversioned `/api/...` applicati
 
 | Area | Base path | Purpose |
 | --- | --- | --- |
-| Authentication | `/api/v1/auth` | OTP signup, resend/verify OTP, login, refresh, logout, current user |
+| Authentication | `/api/v1/auth` | OTP signup, login, refresh/logout, forgot-password OTP reset, authenticated password change and current user |
 | Users | `/api/v1/users` | User search, contact matching, public profiles, profile updates and block controls |
 | Wallpapers | `/api/v1/wallpapers` | List available wallpapers and save the signed-in user's wallpaper preference |
 | Conversations | `/api/v1/conversations` | Direct/group conversations, members, read state and paginated messages |
@@ -521,7 +535,7 @@ The Node REST API is versioned under `/api/v1`; unversioned `/api/...` applicati
 | Notices | `/api/v1/notices` | Pending notices and acknowledgement |
 | Admin | `/api/v1/admin` | Platform stats, users, roles, media, groups and notices |
 | Link previews | `/api/v1/link-preview` | Fetch metadata for a URL |
-| App updates | `/api/v1/app/updates` | Public Android release metadata, version history and protected release-notification trigger |
+| App updates | `/api/v1/app/updates` | Public Android release metadata/version history and protected GitHub Actions release-notification trigger |
 | Message details & delivery | `/api/v1/messages` | Sender-only Message Info and signed push-delivery acknowledgements |
 | Offline sync | `/api/v1/sync` | Recover messages and message updates missed while disconnected |
 | Python service health | `/api/v1/health` | Service health and non-secret runtime configuration status |
@@ -554,6 +568,7 @@ The detailed request/response contract is maintained in [`docs/API.md`](docs/API
 <img src="docs/assets/headers/security.svg" alt="Security" height="64"/>
 
 - Passwords are hashed with bcrypt.
+- Password reset consumes its OTP once, limits sends and verification attempts, and revokes existing sessions after a successful reset.
 - Access and refresh tokens use separate signing secrets when configured; refresh tokens are stored as hashes per account/device.
 - Signup and password-reset OTPs are time-limited, attempt-limited and protected by resend/rate limits; password-reset responses avoid account enumeration.
 - API write routes use Zod request validation and rate limiting.
