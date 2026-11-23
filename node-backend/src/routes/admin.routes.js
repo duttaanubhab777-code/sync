@@ -22,8 +22,12 @@ import {
     adminListWallpapers,
     createWallpaper,
     renameWallpaper,
+    moveWallpapers,
     setDefaultWallpaper,
-    deleteWallpaper
+    deleteWallpaper,
+    createWallpaperCategory,
+    renameWallpaperCategory,
+    deleteWallpaperCategory
 } from "../controllers/wallpaper.controller.js";
 
 const router = Router();
@@ -59,7 +63,13 @@ router.delete("/notices/:id", deleteNotice);
 router.get("/wallpapers", adminListWallpapers);
 router.post("/wallpapers", createWallpaper);
 router.put("/wallpapers/default", setDefaultWallpaper);
+router.patch("/wallpapers/move", moveWallpapers);
 router.patch("/wallpapers/:id", renameWallpaper);
 router.delete("/wallpapers/:id", deleteWallpaper);
+
+// wallpaper ক্যাটাগরি: যোগ / নাম বদল / মোছা
+router.post("/wallpaper-categories", createWallpaperCategory);
+router.patch("/wallpaper-categories/:id", renameWallpaperCategory);
+router.delete("/wallpaper-categories/:id", deleteWallpaperCategory);
 
 export default router;

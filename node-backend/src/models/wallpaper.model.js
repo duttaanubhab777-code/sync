@@ -12,6 +12,8 @@ const wallpaperSchema = new Schema(
             width: { type: Number, default: 0 },
             height: { type: Number, default: 0 }
         },
+        // কোন ক্যাটাগরিতে আছে। null মানে এখনো ক্যাটাগরি দেওয়া হয়নি (আগের আপলোড করা wallpaper-গুলো)
+        category: { type: Schema.Types.ObjectId, ref: "WallpaperCategory", default: null, index: true },
         isDefault: { type: Boolean, default: false, index: true },
         // কখন default করা হয়েছে, যাতে কোনো কারণে একাধিক isDefault থাকলেও সবচেয়ে নতুনটা জেতে
         defaultSetAt: { type: Date, default: null },

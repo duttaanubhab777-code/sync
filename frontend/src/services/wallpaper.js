@@ -16,7 +16,11 @@ const readCache = () => {
     try {
         const raw = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
         if (raw && Array.isArray(raw.wallpapers)) {
-            return { ...raw, loaded: false };
+            return {
+                ...raw,
+                categories: Array.isArray(raw.categories) ? raw.categories : [],
+                loaded: false
+            };
         }
     } catch {
         /* ignore */
@@ -26,6 +30,7 @@ const readCache = () => {
 
 let state = readCache() || {
     wallpapers: [],
+    categories: [],
     defaultId: null,
     myChoice: null,
     loaded: false
@@ -58,6 +63,7 @@ const setState = next => {
             CACHE_KEY,
             JSON.stringify({
                 wallpapers: state.wallpapers,
+                categories: state.categories,
                 defaultId: state.defaultId,
                 myChoice: state.myChoice
             })
@@ -106,6 +112,7 @@ export const loadWallpapers = async () => {
             const d = res.data?.data || {};
             setState({
                 wallpapers: Array.isArray(d.wallpapers) ? d.wallpapers : [],
+                categories: Array.isArray(d.categories) ? d.categories : [],
                 defaultId: d.defaultId || null,
                 myChoice: d.myChoice || null,
                 loaded: true

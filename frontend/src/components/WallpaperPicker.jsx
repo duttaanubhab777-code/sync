@@ -293,6 +293,7 @@ function PreviewScreen({
 export default function WallpaperPicker({ onClose }) {
     const {
         wallpapers,
+        categories,
         defaultId,
         myChoice,
         loaded,
@@ -313,7 +314,34 @@ export default function WallpaperPicker({ onClose }) {
         [wallpapers, defaultId]
     );
 
-    // প্রথম পাতা "Default" (admin যা ঠিক করে সেটাই অনুসরণ), তারপর সব wallpaper
+    // ---- ক্যাটাগরি ট্যাব ----
+    // প্রতিটা wallpaper-এর ক্যাটাগরি আছে। যেসব ক্যাটাগরিতে অন্তত একটা wallpaper আছে সেগুলোই দেখায়
+    // (খালিগুলো ইউজারকে দেখানো হয় না), ক্রম admin যেভাবে সাজিয়েছে সেভাবে (Super Hero প্রথমে)
+    const tabs = useMemo(() => {
+        const counts = new Map();
+        for (const w of wallpapers) {
+            if (w.category) counts.set(w.category, (counts.get(w.category) || 0) + 1);
+        }
+        return categories
+            .filter(c => counts.get(c._id))
+            .map(c => ({ id: c._id, name: c.name, count: counts.get(c._id) }));
+    }, [categories, wallpapers]);
+
+    const [catId, setCatId] = useState(null);
+    // কোনো ট্যাব বাছা না থাকলে: এখন যে wallpaper ব্যবহার করছি সেটার ক্যাটাগরি, নাহলে প্রথম ক্যাটাগরি (Super Hero)
+    const activeId = useMemo(() => {
+        if (tabs.some(t => t.id === catId)) return catId;
+        const mine = wallpapers.find(w => w._id === myChoice);
+        if (mine?.category && tabs.some(t => t.id === mine.category)) return mine.category;
+        return tabs[0]?.id || null;
+    }, [tabs, catId, wallpapers, myChoice]);
+
+    const visible = useMemo(
+        () => wallpapers.filter(w => w.category === activeId),
+        [wallpapers, activeId]
+    );
+
+    // প্রথম পাতা "Default" সব ক্যাটাগরিতেই থাকে (admin যা ঠিক করে সেটাই অনুসরণ), তারপর ওই ক্যাটাগরির wallpaper
     const pages = useMemo(
         () => [
             {
@@ -322,9 +350,9 @@ export default function WallpaperPicker({ onClose }) {
                 sub: defaultWallpaper?.name || "",
                 wallpaper: defaultWallpaper
             },
-            ...wallpapers.map(w => ({ id: w._id, name: w.name, wallpaper: w }))
+            ...visible.map(w => ({ id: w._id, name: w.name, wallpaper: w }))
         ],
-        [wallpapers, defaultWallpaper]
+        [visible, defaultWallpaper]
     );
 
     const current = myChoice || "default";
@@ -408,7 +436,28 @@ export default function WallpaperPicker({ onClose }) {
                     <ArrowLeft size={22} />
                 </button>
                 <h3>Chat wallpaper</h3>
+                {wallpapers.length > 0 && (
+                    <span className="sync-wp-total">{wallpapers.length} wallpapers</span>
+                )}
             </div>
+
+            {tabs.length > 0 && (
+                <div className="sync-wp-cats" role="tablist" aria-label="Wallpaper categories">
+                    {tabs.map(t => (
+                        <button
+                            key={t.id}
+                            type="button"
+                            role="tab"
+                            aria-selected={activeId === t.id}
+                            className={`sync-wp-cat ${activeId === t.id ? "is-active" : ""}`}
+                            onClick={() => setCatId(t.id)}
+                        >
+                            {t.name}
+                            <em>{t.count}</em>
+                        </button>
+                    ))}
+                </div>
+            )}
 
             <div className="sync-wpx-scroll">
                 {!loaded && wallpapers.length === 0 ? (
@@ -421,7 +470,7 @@ export default function WallpaperPicker({ onClose }) {
                         ones from the Admin panel.
                     </p>
                 ) : (
-                    <div className="sync-wp-grid" role="listbox">
+                    <div className="sync-wp-grid" role="listbox" key={activeId || "none"}>
                         {pages.map(pg => (
                             <button
                                 key={pg.id}

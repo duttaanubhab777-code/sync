@@ -551,3 +551,135 @@
 @media (prefers-reduced-motion: reduce) {
     .sync-wpx, .sync-wpx-page-img, .sync-wpx-dot { animation: none; transition: none; }
 }
+
+/* ==========================================================================
+   Wallpaper ক্যাটাগরি: user picker-এর ট্যাব + admin-এর ক্যাটাগরি ম্যানেজার
+   ========================================================================== */
+
+.sync-wp-total {
+    margin-left: auto;
+    padding-right: 4px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--text-3);
+}
+
+/* আনুভূমিকভাবে স্ক্রল হওয়া ক্যাটাগরি ট্যাব */
+.sync-wp-cats {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 4px 16px 10px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    flex-shrink: 0;
+}
+.sync-wp-cats::-webkit-scrollbar { display: none; }
+.sync-wp-cats.admin { padding: 12px 0 4px; flex-wrap: wrap; overflow: visible; }
+
+.sync-wp-cat {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex-shrink: 0;
+    padding: 7px 13px;
+    border-radius: 999px;
+    border: 1px solid var(--line-strong);
+    background: var(--bg-2);
+    color: var(--text-2);
+    font-size: 0.82rem;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: transform 0.15s ease, background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+.sync-wp-cat em {
+    font-style: normal;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-3);
+}
+.sync-wp-cat:active { transform: scale(0.96); }
+.sync-wp-cat.is-active {
+    background: var(--grad-btn);
+    border-color: transparent;
+    color: #02100d;
+}
+.sync-wp-cat.is-active em { background: rgba(2, 16, 13, 0.18); color: #02100d; }
+
+/* ক্যাটাগরি বদলালে গ্রিড নরমভাবে আসে */
+.sync-wp-grid { animation: sync-wp-grid-in 0.22s ease both; }
+@keyframes sync-wp-grid-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: none; }
+}
+
+/* ---------- admin ---------- */
+.sync-wp-select {
+    min-width: 0;
+    max-width: 100%;
+    padding: 9px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--line-strong);
+    background: var(--bg-1);
+    color: var(--text);
+    font-size: 0.88rem;
+}
+
+.sync-wp-cat-add { display: flex; gap: 8px; margin-top: 12px; }
+.sync-wp-cat-add input {
+    flex: 1;
+    min-width: 0;
+    padding: 9px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--line-strong);
+    background: var(--bg-1);
+    color: var(--text);
+    font-size: 0.88rem;
+}
+
+.sync-wp-cat-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.sync-wp-cat-list li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 6px 6px 12px;
+    border-radius: 12px;
+    background: var(--bg-2);
+    min-height: 44px;
+}
+.sync-wp-cat-list li.is-none { opacity: 0.8; }
+.sync-wp-cat-list .sync-wp-rename { flex: 1; }
+.sync-wp-cat-name { flex: 1; min-width: 0; font-size: 0.88rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sync-wp-cat-count {
+    font-style: normal;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: rgba(0, 237, 100, 0.12);
+    color: var(--mongo);
+}
+
+.sync-wp-selectbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.sync-wp-selectbar .sync-wp-select { flex: 1; min-width: 140px; }
+
+.sync-wp-admin-card.is-picked { border-color: var(--mongo); box-shadow: 0 0 0 3px rgba(0, 237, 100, 0.18); }
+.sync-wp-admin-card .sync-wp-thumb { position: relative; }
+.sync-wp-pick {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+}
+.sync-wp-admin-card.is-picked .sync-wp-pick { color: var(--mongo); }

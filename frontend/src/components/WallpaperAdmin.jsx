@@ -1,11 +1,15 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     Check,
+    CheckCircle2,
+    Circle,
     Image as ImageIcon,
     Loader2,
     Pencil,
+    Plus,
     RefreshCw,
     Star,
+    Tag,
     Trash2,
     Upload,
     X
@@ -35,6 +39,22 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
     const [followingDefault, setFollowingDefault] = useState(0);
     const [loading, setLoading] = useState(true);
 
+    // ---- ক্যাটাগরি ----
+    const [categories, setCategories] = useState([]);
+    const [filterId, setFilterId] = useState(null); // null = এখনো বাছা হয়নি (নিচে ঠিক হয়)
+    const [newCatName, setNewCatName] = useState("");
+    const [catBusy, setCatBusy] = useState(null);
+    const [catRenameId, setCatRenameId] = useState(null);
+    const [catRenameValue, setCatRenameValue] = useState("");
+    const [catToDelete, setCatToDelete] = useState(null);
+    const [uploadCat, setUploadCat] = useState(""); // নতুন wallpaper আপলোডের ক্যাটাগরি (বাধ্যতামূলক)
+
+    // ---- একসাথে সরানো ----
+    const [selectMode, setSelectMode] = useState(false);
+    const [selected, setSelected] = useState(() => new Set());
+    const [moveTo, setMoveTo] = useState("");
+    const [moving, setMoving] = useState(false);
+
     // ---- নতুন wallpaper ফর্ম ----
     const fileRef = useRef(null);
     const [file, setFile] = useState(null);
@@ -58,6 +78,7 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
             const d = res.data?.data || {};
             setItems(Array.isArray(d.wallpapers) ? d.wallpapers : []);
             setFollowingDefault(d.followingDefault || 0);
+            setCategories(Array.isArray(d.categories) ? d.categories : []);
         } catch (err) {
             flashError(err);
         } finally {
@@ -135,6 +156,7 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
         const cleanName = name.trim();
         if (!file) return flashError("Choose an image first");
         if (!cleanName) return flashError("Give the wallpaper a name");
+        if (!effectiveUploadCat) return flashError("Add a category first, then upload");
 
         setUploading(true);
         setPct(0);
@@ -150,7 +172,8 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
                 imagePublicId: uploaded.publicId || "",
                 width: uploaded.width || dims?.width || 0,
                 height: uploaded.height || dims?.height || 0,
-                makeDefault
+                makeDefault,
+                categoryId: effectiveUploadCat
             });
             flashSuccess(
                 makeDefault
@@ -239,6 +262,119 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
         }
     };
 
+    // ---------- ক্যাটাগরি অ্যাকশন ----------
+    const catName = id => categories.find(c => c._id === id)?.name || "";
+
+    // কোন ক্যাটাগরি এখন দেখানো হচ্ছে: বাছা ক্যাটাগরি, নাহলে যেটায় আগে wallpaper আছে (পুরোনো "Uncategorized" গোছানোর সুবিধার জন্য)
+    const activeFilter = (() => {
+        if (filterId && categories.some(c => c._id === filterId)) return filterId;
+        const uncat = categories.find(c => /^uncategorized$/i.test(c.name) && c.count > 0);
+        if (uncat) return uncat._id;
+        return (categories.find(c => c.count > 0) || categories[0])?._id || null;
+    })();
+
+    // আপলোডের ক্যাটাগরি না বাছলে প্রথম ক্যাটাগরিটাই ধরা হয়
+    const effectiveUploadCat =
+        categories.some(c => c._id === uploadCat) ? uploadCat : categories[0]?._id || "";
+
+    const shownItems = items.filter(i => i.category === activeFilter);
+
+    const addCategory = async e => {
+        e.preventDefault();
+        const name = newCatName.trim();
+        if (!name) return;
+        setCatBusy("add");
+        try {
+            const res = await api.post("/api/v1/admin/wallpaper-categories", { name });
+            flashSuccess(`Category "${name}" added`);
+            setNewCatName("");
+            await load();
+            setFilterId(res.data?.data?._id || null);
+        } catch (err) {
+            flashError(err);
+        } finally {
+            setCatBusy(null);
+        }
+    };
+
+    const submitCatRename = async cat => {
+        const next = catRenameValue.trim();
+        if (!next || next === cat.name) {
+            setCatRenameId(null);
+            return;
+        }
+        setCatBusy(cat._id);
+        try {
+            await api.patch(`/api/v1/admin/wallpaper-categories/${cat._id}`, { name: next });
+            flashSuccess("Category renamed");
+            setCatRenameId(null);
+            await load();
+        } catch (err) {
+            flashError(err);
+        } finally {
+            setCatBusy(null);
+        }
+    };
+
+    const confirmDeleteCategory = async () => {
+        const cat = catToDelete;
+        if (!cat) return;
+        setCatBusy(cat._id);
+        try {
+            await api.delete(`/api/v1/admin/wallpaper-categories/${cat._id}`);
+            flashSuccess(`Category "${cat.name}" deleted`);
+            setCatToDelete(null);
+            if (filterId === cat._id) setFilterId(null);
+            if (uploadCat === cat._id) setUploadCat("");
+            await load();
+        } catch (err) {
+            flashError(err);
+        } finally {
+            setCatBusy(null);
+        }
+    };
+
+    // ---------- একসাথে সরানো ----------
+    const toggleSelect = id =>
+        setSelected(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+
+    const exitSelect = () => {
+        setSelectMode(false);
+        setSelected(new Set());
+        setMoveTo("");
+    };
+
+    const allShownSelected =
+        shownItems.length > 0 && shownItems.every(i => selected.has(i._id));
+
+    const toggleSelectAll = () =>
+        setSelected(allShownSelected ? new Set() : new Set(shownItems.map(i => i._id)));
+
+    const handleMove = async () => {
+        if (selected.size === 0 || !moveTo) return;
+        setMoving(true);
+        try {
+            await api.patch("/api/v1/admin/wallpapers/move", {
+                ids: [...selected],
+                categoryId: moveTo
+            });
+            flashSuccess(
+                `${selected.size} wallpaper${selected.size === 1 ? "" : "s"} moved to "${catName(moveTo)}"`
+            );
+            exitSelect();
+            await load();
+        } catch (err) {
+            flashError(err);
+        } finally {
+            setMoving(false);
+        }
+    };
+
     const defaultItem = items.find(i => i.isDefault);
 
     return (
@@ -323,6 +459,23 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
                                 />
                             </div>
 
+                            <div className="sync-field">
+                                <label>Category *</label>
+                                <select
+                                    className="sync-wp-select"
+                                    value={effectiveUploadCat}
+                                    onChange={e => setUploadCat(e.target.value)}
+                                    disabled={uploading}
+                                    required
+                                >
+                                    {categories.map(c => (
+                                        <option key={c._id} value={c._id}>
+                                            {c.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
                             <label className="sync-wp-check-row">
                                 <input
                                     type="checkbox"
@@ -374,11 +527,126 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
                     </div>
                 </form>
 
+                {/* ---------- ক্যাটাগরি ---------- */}
+                <div className="sync-profile-card">
+                    <h3>
+                        <Tag size={18} /> Categories
+                    </h3>
+                    <p className="sync-muted">
+                        Total {items.length} wallpaper{items.length === 1 ? "" : "s"}
+                        {" · "}
+                        {categories.length} categor{categories.length === 1 ? "y" : "ies"}
+                        . Every wallpaper must have a category. New categories are
+                        always added at the end.
+                    </p>
+
+                    <form className="sync-wp-cat-add" onSubmit={addCategory}>
+                        <input
+                            type="text"
+                            maxLength={30}
+                            placeholder="New category name"
+                            value={newCatName}
+                            onChange={e => setNewCatName(e.target.value)}
+                            disabled={catBusy === "add"}
+                        />
+                        <button
+                            type="submit"
+                            className="sync-btn primary sm"
+                            disabled={catBusy === "add" || !newCatName.trim()}
+                        >
+                            {catBusy === "add" ? (
+                                <Loader2 size={15} className="spin" />
+                            ) : (
+                                <Plus size={15} />
+                            )}{" "}
+                            Add
+                        </button>
+                    </form>
+
+                    <ul className="sync-wp-cat-list">
+                        {categories.map(cat => (
+                            <li key={cat._id}>
+                                {catRenameId === cat._id ? (
+                                    <form
+                                        className="sync-wp-rename"
+                                        onSubmit={e => {
+                                            e.preventDefault();
+                                            submitCatRename(cat);
+                                        }}
+                                    >
+                                        <input
+                                            type="text"
+                                            maxLength={30}
+                                            value={catRenameValue}
+                                            onChange={e => setCatRenameValue(e.target.value)}
+                                            autoFocus
+                                        />
+                                        <button
+                                            type="submit"
+                                            className="sync-icon-btn"
+                                            aria-label="Save name"
+                                            disabled={catBusy === cat._id}
+                                        >
+                                            <Check size={16} />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="sync-icon-btn"
+                                            aria-label="Cancel"
+                                            onClick={() => setCatRenameId(null)}
+                                        >
+                                            <X size={16} />
+                                        </button>
+                                    </form>
+                                ) : (
+                                    <>
+                                        <span className="sync-wp-cat-name" title={cat.name}>
+                                            {cat.name}
+                                        </span>
+                                        <em className="sync-wp-cat-count">{cat.count}</em>
+                                        <button
+                                            type="button"
+                                            className="sync-icon-btn"
+                                            aria-label="Rename category"
+                                            title="Rename"
+                                            onClick={() => {
+                                                setCatRenameId(cat._id);
+                                                setCatRenameValue(cat.name);
+                                            }}
+                                        >
+                                            <Pencil size={15} />
+                                        </button>
+                                        {!cat.isSystem && (
+                                            <button
+                                                type="button"
+                                                className="sync-icon-btn danger"
+                                                aria-label="Delete category"
+                                                title="Delete"
+                                                onClick={() =>
+                                                    cat.count > 0
+                                                        ? flashError(
+                                                              `"${cat.name}" still has ${cat.count} wallpaper${
+                                                                  cat.count === 1 ? "" : "s"
+                                                              }. Move ${cat.count === 1 ? "it" : "them"} to another category first.`
+                                                          )
+                                                        : setCatToDelete(cat)
+                                                }
+                                            >
+                                                <Trash2 size={15} />
+                                            </button>
+                                        )}
+                                    </>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+
                 {/* ---------- তালিকা ---------- */}
                 <div className="sync-profile-card">
                     <div className="sync-admin-section-head">
                         <div>
-                            <h3>Wallpapers ({items.length})</h3>
+                            <h3>Wallpapers (total {items.length})</h3>
                             <p className="sync-muted">
                                 {defaultItem
                                     ? `Default: “${defaultItem.name}” · ${followingDefault} user${
@@ -412,6 +680,82 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
                         </div>
                     </div>
 
+                    {items.length > 0 && (
+                        <div className="sync-wp-cats admin" role="tablist">
+                            {categories.map(c => (
+                                <button
+                                    key={c._id}
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={activeFilter === c._id}
+                                    className={`sync-wp-cat ${activeFilter === c._id ? "is-active" : ""}`}
+                                    onClick={() => {
+                                        setFilterId(c._id);
+                                        setSelected(new Set());
+                                    }}
+                                >
+                                    {c.name}
+                                    <em>{c.count}</em>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {items.length > 0 && (
+                        <div className="sync-wp-selectbar">
+                            {!selectMode ? (
+                                <button
+                                    type="button"
+                                    className="sync-btn secondary sm"
+                                    onClick={() => setSelectMode(true)}
+                                    disabled={shownItems.length === 0}
+                                >
+                                    <CheckCircle2 size={15} /> Select &amp; move
+                                </button>
+                            ) : (
+                                <>
+                                    <button
+                                        type="button"
+                                        className="sync-btn secondary sm"
+                                        onClick={toggleSelectAll}
+                                    >
+                                        {allShownSelected ? "Clear" : `Select all (${shownItems.length})`}
+                                    </button>
+                                    <select
+                                        className="sync-wp-select"
+                                        value={moveTo}
+                                        onChange={e => setMoveTo(e.target.value)}
+                                        aria-label="Move to category"
+                                    >
+                                        <option value="">Move {selected.size} to...</option>
+                                        {categories
+                                            .filter(c => c._id !== activeFilter)
+                                            .map(c => (
+                                                <option key={c._id} value={c._id}>
+                                                    {c.name}
+                                                </option>
+                                            ))}
+                                    </select>
+                                    <button
+                                        type="button"
+                                        className="sync-btn primary sm"
+                                        onClick={handleMove}
+                                        disabled={moving || selected.size === 0 || !moveTo}
+                                    >
+                                        {moving ? <Loader2 size={15} className="spin" /> : "Move"}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="sync-btn secondary sm"
+                                        onClick={exitSelect}
+                                    >
+                                        Cancel
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    )}
+
                     {loading && items.length === 0 ? (
                         <div className="sync-wp-empty">
                             <Loader2 size={18} className="spin" /> Loading...
@@ -420,16 +764,34 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
                         <div className="sync-wp-empty">
                             No wallpapers yet. Add the first one.
                         </div>
+                    ) : shownItems.length === 0 ? (
+                        <div className="sync-wp-empty">
+                            No wallpapers in this category yet.
+                        </div>
                     ) : (
                         <div className="sync-wp-admin-grid">
-                            {items.map(item => (
+                            {shownItems.map(item => (
                                 <div
                                     key={item._id}
                                     className={`sync-wp-admin-card ${
                                         item.isDefault ? "is-default" : ""
-                                    }`}
+                                    } ${selectMode && selected.has(item._id) ? "is-picked" : ""}`}
                                 >
-                                    <div className="sync-wp-thumb">
+                                    <div
+                                        className="sync-wp-thumb"
+                                        onClick={selectMode ? () => toggleSelect(item._id) : undefined}
+                                        role={selectMode ? "checkbox" : undefined}
+                                        aria-checked={selectMode ? selected.has(item._id) : undefined}
+                                    >
+                                        {selectMode && (
+                                            <span className="sync-wp-pick">
+                                                {selected.has(item._id) ? (
+                                                    <CheckCircle2 size={22} />
+                                                ) : (
+                                                    <Circle size={22} />
+                                                )}
+                                            </span>
+                                        )}
                                         <CachedImg
                                             url={wallpaperThumbUrl(item.url)}
                                             alt={item.name}
@@ -533,6 +895,18 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
                     )}
                 </div>
             </div>
+
+            {catToDelete && (
+                <ConfirmDialog
+                    icon={Trash2}
+                    title="Delete this category?"
+                    message={`“${catToDelete.name}” is empty and will be deleted.`}
+                    confirmLabel="Delete category"
+                    busy={catBusy === catToDelete._id}
+                    onConfirm={confirmDeleteCategory}
+                    onCancel={() => setCatToDelete(null)}
+                />
+            )}
 
             {toDelete && (
                 <ConfirmDialog
