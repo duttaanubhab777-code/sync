@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Loader2 } from "lucide-react";
 
 // window.confirm এর বদলে অ্যাপের স্টাইলের কনফার্ম ডায়ালগ
@@ -20,7 +21,7 @@ export default function ConfirmDialog({
         return () => window.removeEventListener("keydown", onKey);
     }, [busy, onCancel]);
 
-    return (
+    return createPortal(
         <div
             className="sync-modal-backdrop sync-confirm-backdrop"
             onClick={() => !busy && onCancel?.()}
@@ -64,6 +65,7 @@ export default function ConfirmDialog({
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
