@@ -98,6 +98,17 @@ The interface is responsive and installable as a Progressive Web App. The reposi
 - Optional profile photo upload during signup, with image preview before account completion
 - Automatically suggested usernames based on the email address, live availability checks, and alternative suggestions for taken names
 - Block and unblock other users
+- Forgot-password flow with email OTP, expiry, resend cooldown and attempt limits; responses do not reveal whether an email address has an account
+- Change Password from the profile after verifying the current password; password changes revoke other device sessions and invalidate older access tokens
+
+### Contacts & user discovery
+
+- Find people already using Sync from the device address book through the native Capacitor Contacts plugin on Android
+- On supported browsers, use the browser Contact Picker so the user explicitly chooses which contacts to share for matching
+- Normalize supported Indian phone-number formats and send numbers to the authenticated contact-match endpoint in bounded batches
+- Show matched users with their local contact names where available, with refresh and permission-retry states
+- Contact matching excludes the signed-in user, blocked users and users who have blocked them; it does not return email addresses
+- Full phone and email details are only returned in a profile context when a direct conversation already exists between the two users
 
 ### Direct & group messaging
 
@@ -109,8 +120,14 @@ The interface is responsive and installable as a Progressive Web App. The reposi
 - Share contact cards through the browser Contact Picker where supported, with a manual-entry fallback; recipients can copy or call shared numbers
 - Document cards preserve filenames, show file types and sizes, and provide direct downloads
 - Select and send multiple files sequentially, with per-file upload progress, speed/ETA feedback and independent failure handling
+- Compress eligible chat, story and group images in the browser before upload (up to 1600 px, WebP with JPEG fallback); small files, GIF/SVG and images that do not shrink are left unchanged
+- Document uploads bypass image compression; if compression fails, the original image is uploaded
+- Upload feedback distinguishes compression, preparation, transfer and server processing, and reports original/compressed sizes
 - Browser voice recording with pause/resume, waveform feedback and playback
-- Swipe-to-reply and quoted message context
+- Swipe left or right on a message to reply, with quoted message context
+- Long-press a message to open the action sheet for Reply, Message Info or Delete for everyone
+- Message Info shows sent, delivered and seen timestamps; group messages include per-member delivery/read details
+- Signed delivery acknowledgements from push notifications update delivery state even when the Android app is not open
 - Sent, delivered and seen states, including group delivery/read information
 - Typing and voice-recording activity indicators
 - Online presence and last-seen information
@@ -131,6 +148,7 @@ The interface is responsive and installable as a Progressive Web App. The reposi
 - Emoji reactions, reaction summaries and live reaction updates
 - Reply to a story directly into the relevant conversation
 - Duplicate-submission protection for story creation
+- Expired story media is removed from Cloudinary by the background cleanup process before the expired database records are swept
 
 ### Notifications
 
@@ -152,6 +170,9 @@ The interface is responsive and installable as a Progressive Web App. The reposi
 - Apply a refined desktop pointer style while preserving native touch behaviour and normal text-selection cursors on form fields
 - Keep page-level overflow actions close to their relevant content; the Stories page places its More menu beside Add Story instead of using a separate global top bar
 - Use consistent Lucide SVG controls in the Admin Media Inspector for all-media, image-only and video-only filters
+- Use themed confirmation dialogs for destructive actions across chats, stories and the Admin workspace; mobile dialogs account for the persistent bottom navigation and device safe area
+- Message preview labels use consistent SVG icons for images, videos, voice notes, documents, locations and contact cards instead of emoji or text placeholders
+- In the Android app, prevent accidental text selection and the system copy/context menu on chat content while keeping form fields selectable
 
 ### Admin workspace
 
@@ -164,6 +185,8 @@ The interface is responsive and installable as a Progressive Web App. The reposi
 - Real-time notice delivery and acknowledgement tracking
 - Role hierarchy: **Super Admin** → **Platform Admin** → **Group Admin** (group-scoped permissions)
 - Private chat text and story captions are not exposed in the admin media moderation view
+- Responsive analytics dashboard with role-aware navigation and consistent SVG media filters
+- Administrative deletion flows use the shared confirmation dialog; media cleanup removes eligible Cloudinary assets when no other record references them
 
 ### Contact, updates & app experience
 
@@ -171,11 +194,14 @@ The interface is responsive and installable as a Progressive Web App. The reposi
 - Contact form integration with the separate Email Sender service
 - Android release lookup from GitHub Releases, latest APK download and release history
 - In-app update popup and dedicated Updates page
+- Android-only FCM release notifications with **Update Now** and **Later** actions; Update Now downloads the APK with native progress feedback and opens the Android installer when ready
+- New Android releases are detected through a protected GitHub Actions notification hook and a server-side polling fallback; duplicate notifications are suppressed per build
 - Responsive layouts for mobile, tablet and desktop, including a mobile-friendly floating chat action button
 - PWA manifest, service worker, app icons, install support and unread app-badge integration
 - A native Android app built with Capacitor that loads the live Sync web application
 - Branded animated splash screens and an offline/retry experience for unavailable networks or a sleeping web service
 - Android notification channels with custom Sync sounds, native badge support and notification-to-chat navigation
+- Native Android Contacts permission handling through the Capacitor Contacts plugin
 - Sound feedback, animated interface elements and consistent Sync branding
 
 <a id="contact"></a>
@@ -195,6 +221,8 @@ The public Contact page allows visitors to submit a name, email address, subject
 - [PythonAnywhere deployment guide](docs/PYTHONANYWHERE_DEPLOYMENT_GUIDE.md)
 - [Python service README](python-service/README.md)
 - [Screenshot asset guidelines](docs/screenshots/README.md)
+- [Android release notification setup](docs/APP_UPDATE_NOTIFICATION.md)
+- [Android wrapper and APK workflow](mobile/README.md)
 
 <a id="architecture"></a>
 <img src="docs/assets/headers/architecture.svg" alt="Architecture" height="64"/>
@@ -208,12 +236,12 @@ The public Contact page allows visitors to submit a name, email address, subject
 | React + Redux Toolkit + Vite | Built and served by Node service | UI, routing, state management, media upload client, PWA |
 | Node.js + Express | Render Web Service | REST API, authentication, validation, admin operations, static frontend hosting |
 | Socket.IO | Same Node HTTP server | Authenticated real-time messaging, presence, typing, read/delivery state and live events |
-| MongoDB Atlas + Mongoose | MongoDB Atlas | Users, sessions, conversations, messages, stories, notices, notifications and device subscriptions |
+| MongoDB Atlas + Mongoose | MongoDB Atlas | Users, device sessions, password-reset OTPs, conversations, messages, stories, notices, notifications, wallpapers and Android update state |
 | Flask media/mail service | PythonAnywhere | JWT-verified Cloudinary upload signatures and protected signup OTP mail relay |
 | Cloudinary | Cloudinary | Uploaded chat media, voice notes, avatars, stories, group icons and notice banners |
 | Firebase Cloud Messaging | Firebase | Native Android push delivery |
 | Web Push (VAPID) | Browser push services | Browser and installed-PWA notifications |
-| Capacitor Android shell | Android app | Native app container, geolocation integration, push notification handling, launcher badges and app lifecycle integration |
+| Capacitor Android shell | Android app | Native app container, Contacts and Geolocation plugins, push notification handling, launcher badges, APK download/install handoff and app lifecycle integration |
 | GitHub Actions | GitHub Actions | Automated Android APK builds and GitHub Release publishing |
 | GitHub Releases | GitHub | Android APK release metadata, changelogs and downloads |
 
@@ -246,8 +274,8 @@ The Python service does **not** receive or proxy the uploaded file.
 | Database | MongoDB Atlas |
 | Media storage | Cloudinary |
 | Browser notifications | Web Push / VAPID |
-| Android notifications | Firebase Cloud Messaging HTTP v1, Capacitor Push Notifications and native Android notification channels |
-| Android runtime | Capacitor 7, Android native Java integration and Geolocation plugin |
+| Android notifications | Firebase Cloud Messaging HTTP v1, Capacitor Push Notifications, native delivery acknowledgements and Android notification channels |
+| Android runtime | Capacitor 7, Android native Java integration, Contacts, Geolocation, Push Notifications and Splash Screen plugins |
 | Hosting | Render, PythonAnywhere |
 | Android distribution | GitHub Releases |
 
@@ -267,14 +295,15 @@ sync/
 │   ├── assets/                   # README banner, headers and diagrams
 │   ├── screenshots/
 │   ├── API.md
+│   ├── APP_UPDATE_NOTIFICATION.md
 │   ├── CONTACT_PAGE_SETUP.md
 │   ├── OTP_AND_MAIL_RELAY_SETUP_GUIDE.md
 │   └── PYTHONANYWHERE_DEPLOYMENT_GUIDE.md
 ├── frontend/
 │   └── src/
 │       ├── components/           # Layout, dialogs, media players, notifications
-│       │   └── chat/             # Attachment sheet, location, contact and document cards
-│       ├── hooks/                # App badge, sign-out and shared UI hooks
+│       │   └── chat/             # Attachment sheet, location, contact, document and message-action components
+│       ├── hooks/                # App badge, contact matching, sign-out and shared UI hooks
 │       ├── pages/                # Auth, chats, stories, profile, admin, contact, updates
 │       ├── services/             # API, Socket.IO, media, previews, sounds, app badges, contact mail
 │       ├── store/                # Redux Toolkit slices
@@ -282,12 +311,12 @@ sync/
 │       └── utils/
 ├── node-backend/
 │   └── src/
-│       ├── controllers/
+│       ├── controllers/          # Auth, chat, admin, story, wallpaper and app updates
 │       ├── db/
 │       ├── middlewares/
-│       ├── models/
+│       ├── models/               # Users, sessions, messages, stories, notices and update state
 │       ├── routes/
-│       ├── services/
+│       ├── services/             # Messaging, push, mail, app updates and Cloudinary cleanup
 │       ├── socket/
 │       │   └── handlers/
 │       ├── utils/
@@ -421,6 +450,10 @@ Use `node-backend/.env.example` as the source of truth for Node environment vari
 | `FRONTEND_URL` | Optional | Extra allowed frontend origin(s), comma-separated |
 | `EMAIL_SENDER_URL` | Optional | Contact-form Email Sender origin; defaults to the configured project service |
 | `OTP_SECRET` | Optional | Dedicated secret for OTP hashing |
+| `APP_UPDATE_NOTIFY_SECRET` | Optional | Shared secret for the protected GitHub Actions → Node Android-release notification hook; polling remains available without it |
+| `APP_UPDATE_POLL_MS` | Optional | Android release watcher polling interval in milliseconds (minimum 60 seconds) |
+| `APP_UPDATE_WATCHER` | Optional | Set to `off` to disable the server-side release watcher |
+| `GITHUB_REPO`, `GITHUB_TOKEN` | Optional | Android release source repository and optional token for private-repository access / higher GitHub API limits |
 | `JWT_EXPIRES_IN`, `REFRESH_TOKEN_EXPIRY` | Optional | Access/refresh token lifetimes |
 
 For Firebase, use either the complete service-account JSON in `FIREBASE_SERVICE_ACCOUNT_JSON`, or provide the project ID, client email and private key separately. Do not commit or expose the JSON/private key.
@@ -480,14 +513,16 @@ The Node REST API is versioned under `/api/v1`; unversioned `/api/...` applicati
 | Area | Base path | Purpose |
 | --- | --- | --- |
 | Authentication | `/api/v1/auth` | OTP signup, resend/verify OTP, login, refresh, logout, current user |
-| Users | `/api/v1/users` | User search, public profiles, profile updates and block controls |
+| Users | `/api/v1/users` | User search, contact matching, public profiles, profile updates and block controls |
+| Wallpapers | `/api/v1/wallpapers` | List available wallpapers and save the signed-in user's wallpaper preference |
 | Conversations | `/api/v1/conversations` | Direct/group conversations, members, read state and paginated messages |
 | Stories | `/api/v1/stories` | Story feed, create, view, viewers, reactions and replies |
 | Notifications | `/api/v1/notifications` | In-app notifications, read state, push config and device subscriptions |
 | Notices | `/api/v1/notices` | Pending notices and acknowledgement |
 | Admin | `/api/v1/admin` | Platform stats, users, roles, media, groups and notices |
 | Link previews | `/api/v1/link-preview` | Fetch metadata for a URL |
-| App updates | `/api/v1/app/updates` | Public Android release/update metadata |
+| App updates | `/api/v1/app/updates` | Public Android release metadata, version history and protected release-notification trigger |
+| Message details & delivery | `/api/v1/messages` | Sender-only Message Info and signed push-delivery acknowledgements |
 | Offline sync | `/api/v1/sync` | Recover messages and message updates missed while disconnected |
 | Python service health | `/api/v1/health` | Service health and non-secret runtime configuration status |
 
@@ -511,6 +546,8 @@ Socket.IO is attached to the same HTTP server and authenticates connections usin
 | `notice:new` / `notice:removed` | Broadcast notice changes |
 | `user:role_updated` / `user:blocked` | Account permission changes |
 
+Additional message endpoints include `GET /api/v1/messages/:id/info` (sender-only delivery/read details) and `POST /api/v1/messages/delivery-ack` (signed acknowledgement from a delivered push notification). Contact discovery uses `POST /api/v1/users/match-contacts`; wallpaper preferences use `GET /api/v1/wallpapers` and `PUT /api/v1/wallpapers/me`. Password recovery uses `POST /api/v1/auth/forgot-password/send-otp` and `POST /api/v1/auth/forgot-password/reset`; authenticated password changes use `POST /api/v1/auth/change-password`. Android update notifications are triggered by the protected `POST /api/v1/app/updates/notify` endpoint.
+
 The detailed request/response contract is maintained in [`docs/API.md`](docs/API.md).
 
 <a id="security"></a>
@@ -518,12 +555,15 @@ The detailed request/response contract is maintained in [`docs/API.md`](docs/API
 
 - Passwords are hashed with bcrypt.
 - Access and refresh tokens use separate signing secrets when configured; refresh tokens are stored as hashes per account/device.
-- Signup OTPs are time-limited, attempt-limited and protected by resend/rate limits.
+- Signup and password-reset OTPs are time-limited, attempt-limited and protected by resend/rate limits; password-reset responses avoid account enumeration.
 - API write routes use Zod request validation and rate limiting.
 - Helmet security headers and a Content Security Policy are configured by the Node server.
 - Python media signing verifies the Node-issued JWT, enforces an origin allow-list and applies rate limits.
 - The mail relay is server-to-server only, checks a shared secret and applies per-recipient limits.
 - Uploaded media is sent directly to Cloudinary; Node validates media URLs against the configured Cloudinary account.
+- Cloudinary deletion uses server-side credentials, validated Cloudinary URLs, reference checks and bounded retries; missing cleanup credentials do not expose secrets to the client but leave remote assets untouched.
+- Contact matching requires authentication, filters blocked relationships, and does not disclose matched users' email addresses; full contact details are restricted to existing direct-chat relationships.
+- Push-delivery acknowledgements use a message- and recipient-specific signed token rather than requiring a long-lived login token from the background notification handler.
 - Admin media moderation does not expose private chat text.
 - Secrets and local environment files must remain outside version control.
 
