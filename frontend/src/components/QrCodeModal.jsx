@@ -58,7 +58,22 @@ export default function QrCodeModal({ onClose, initialTab = "my" }) {
         }
     };
 
+    // Android অ্যাপের (WebView) নেটিভ ব্রিজ; Chrome/ব্রাউজারে এটা থাকে না
+    const nativeBridge = () => {
+        const b = typeof window !== "undefined" ? window.SyncNativeNotif : null;
+        return b && typeof b.shareImage === "function" && typeof b.saveImage === "function" ? b : null;
+    };
+    const canvasBase64 = () => canvasRef.current.toDataURL("image/png").split(",")[1] || "";
+
     const share = async () => {
+        const native = nativeBridge();
+        if (native) {
+            try {
+                if (native.shareImage(canvasBase64(), `sync-${user.username}.png`, `Chat with me on Sync: ${link}`)) return;
+            } catch {
+                /* নিচের সাধারণ পথে */
+            }
+        }
         try {
             const blob = await canvasToBlob(canvasRef.current);
             const file = blob && new File([blob], `sync-${user.username}.png`, { type: "image/png" });
@@ -81,6 +96,19 @@ export default function QrCodeModal({ onClose, initialTab = "my" }) {
     };
 
     const download = async () => {
+        const native = nativeBridge();
+        if (native) {
+            try {
+                if (native.saveImage(canvasBase64(), `sync-qr-${user.username}.png`)) {
+                    flash("Saved to Pictures/Sync");
+                    return;
+                }
+            } catch {
+                /* নিচের সাধারণ পথে */
+            }
+            flash("Could not save. Try Share instead");
+            return;
+        }
         const blob = await canvasToBlob(canvasRef.current);
         if (!blob) return;
         const url = URL.createObjectURL(blob);

@@ -234,12 +234,23 @@ mkdir -p "$JAVA_DIR"
 cat > "$JAVA_DIR/MainActivity.java" <<'JAVA'
 package com.sync.chat;
 
+import android.content.ContentValues;
 import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.provider.MediaStore;
+import android.util.Base64;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import androidx.activity.OnBackPressedCallback;
+import android.widget.Toast;
+import androidx.core.content.FileProvider;
 import com.getcapacitor.BridgeActivity;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
 
 public class MainActivity extends BridgeActivity {
     public static volatile boolean isAppInForeground = false;
@@ -369,6 +380,71 @@ public class MainActivity extends BridgeActivity {
             String url = pendingTargetUrl;
             pendingTargetUrl = "";
             return url != null ? url : "";
+        }
+
+        // QR কার্ডের ছবি শেয়ার: WebView-তে navigator.share(files) চলে না, তাই নেটিভ Share sheet
+        @JavascriptInterface
+        public boolean shareImage(String base64Png, String fileName, String text) {
+            try {
+                byte[] bytes = Base64.decode(base64Png, Base64.DEFAULT);
+                File dir = new File(getCacheDir(), "shared");
+                if (!dir.exists() && !dir.mkdirs()) return false;
+                String safe = fileName == null ? "sync-qr.png" : fileName.replaceAll("[^A-Za-z0-9._-]", "_");
+                File file = new File(dir, safe);
+                try (FileOutputStream out = new FileOutputStream(file)) {
+                    out.write(bytes);
+                }
+                final Uri uri = FileProvider.getUriForFile(
+                    MainActivity.this, getPackageName() + ".updateprovider", file);
+                final String body = text == null ? "" : text;
+                runOnUiThread(() -> {
+                    try {
+                        Intent send = new Intent(Intent.ACTION_SEND);
+                        send.setType("image/png");
+                        send.putExtra(Intent.EXTRA_STREAM, uri);
+                        send.putExtra(Intent.EXTRA_TEXT, body);
+                        send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivity(Intent.createChooser(send, "Share QR code"));
+                    } catch (Exception ignored) {
+                    }
+                });
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        // QR কার্ডের ছবি গ্যালারিতে (Pictures/Sync) সেভ
+        @JavascriptInterface
+        public boolean saveImage(String base64Png, String fileName) {
+            try {
+                byte[] bytes = Base64.decode(base64Png, Base64.DEFAULT);
+                String safe = fileName == null ? "sync-qr.png" : fileName.replaceAll("[^A-Za-z0-9._-]", "_");
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ContentValues values = new ContentValues();
+                    values.put(MediaStore.Images.Media.DISPLAY_NAME, safe);
+                    values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+                    values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Sync");
+                    Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+                    if (uri == null) return false;
+                    try (OutputStream out = getContentResolver().openOutputStream(uri)) {
+                        if (out == null) return false;
+                        out.write(bytes);
+                    }
+                } else {
+                    File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Sync");
+                    if (!dir.exists() && !dir.mkdirs()) return false;
+                    File file = new File(dir, safe);
+                    try (FileOutputStream out = new FileOutputStream(file)) {
+                        out.write(bytes);
+                    }
+                    sendBroadcast(new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(file)));
+                }
+                runOnUiThread(() -> Toast.makeText(MainActivity.this, "Saved to Pictures/Sync", Toast.LENGTH_SHORT).show());
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
         }
 
         // ওয়েব অংশ মোট unread পাঠায় → লঞ্চার আইকনে badge (০ হলে মুছে যায়)
@@ -1097,6 +1173,7 @@ cat > "$RES/xml/sync_update_paths.xml" <<'XML'
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <external-files-path name="updates" path="updates/" />
+    <cache-path name="shared" path="shared/" />
 </paths>
 XML
 

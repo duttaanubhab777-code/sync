@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
-import { MessageSquarePlus, UserPlus, Users, X } from "lucide-react";
+import { MessageSquarePlus, QrCode, UserPlus, Users, X } from "lucide-react";
 
 // WhatsApp-স্টাইল floating বাটন (শুধু মোবাইলে দেখায়, CSS দিয়ে)।
 // চাপলে "New chat" আর "New group" ওপরে উঠে আসে। লিস্ট নিচে স্ক্রল করলে ছোট হয়ে লুকায়, ওপরে স্ক্রল করলে ফিরে আসে।
 // স্ক্রলের সময় re-render হয় না (শুধু classList বদলায়), তাই lag হয় না।
-export default function ChatFab({ onNewChat, onNewGroup, scrollRef }) {
+export default function ChatFab({ onNewChat, onNewGroup, onQr, scrollRef }) {
     const rootRef = useRef(null);
     const [open, setOpen] = useState(false);
 
@@ -66,6 +66,18 @@ export default function ChatFab({ onNewChat, onNewGroup, scrollRef }) {
                     </span>
                 </button>
             </div>
+
+            {onQr && (
+                <button
+                    type="button"
+                    className="sync-fab-qr"
+                    onClick={onQr}
+                    aria-label="QR code and scan"
+                    title="QR code & scan"
+                >
+                    <QrCode size={22} />
+                </button>
+            )}
 
             <button
                 type="button"

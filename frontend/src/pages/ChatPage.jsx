@@ -5,6 +5,7 @@ import {
     Search,
     UserPlus,
     Users,
+    QrCode,
     Send,
     Paperclip,
     Mic,
@@ -63,6 +64,7 @@ import {
 } from "../services/media.js";
 import { playSound } from "../services/sounds.js";
 import MoreMenu from "../components/MoreMenu.jsx";
+import QrCodeModal from "../components/QrCodeModal.jsx";
 import ChatFab from "../components/ChatFab.jsx";
 import ChatWallpaperLayer from "../components/ChatWallpaperLayer.jsx";
 import { useAppUpdates, isAndroidApp } from "../services/appUpdate.js";
@@ -266,6 +268,7 @@ export default function ChatPage() {
     const [searchText, setSearchText] = useState("");
     const [filterTab, setFilterTab] = useState("all");
     const [showNewDirect, setShowNewDirect] = useState(false);
+    const [showQr, setShowQr] = useState(false);
     const [showNewGroup, setShowNewGroup] = useState(false);
     const [showInfoDrawer, setShowInfoDrawer] = useState(false);
 
@@ -1073,6 +1076,15 @@ export default function ChatPage() {
                         >
                             <Users size={19} />
                         </button>
+                        <button
+                            type="button"
+                            className="sync-icon-btn sync-desk-only"
+                            title="QR code & scan"
+                            aria-label="QR code and scan"
+                            onClick={() => setShowQr(true)}
+                        >
+                            <QrCode size={19} />
+                        </button>
                         <MoreMenu
                             hasUpdate={hasUpdate}
                             onSignOut={() => setConfirmLogout(true)}
@@ -1229,6 +1241,7 @@ export default function ChatPage() {
                     scrollRef={convListRef}
                     onNewChat={() => setShowNewDirect(true)}
                     onNewGroup={() => setShowNewGroup(true)}
+                    onQr={() => setShowQr(true)}
                 />
             </section>
 
@@ -2005,6 +2018,8 @@ export default function ChatPage() {
                     />
                 )}
             </section>
+
+            {showQr && <QrCodeModal onClose={() => setShowQr(false)} />}
 
             {showNewDirect && (
                 <NewDirectChatModal
