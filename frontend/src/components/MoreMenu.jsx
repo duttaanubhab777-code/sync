@@ -8,10 +8,12 @@ import {
     Download,
     Mail,
     LogOut,
+    QrCode,
     Image as ImageIcon
 } from "lucide-react";
 import { isSoundEnabled, setSoundEnabled } from "../services/sounds.js";
 import WallpaperPicker from "./WallpaperPicker.jsx";
+import QrCodeModal from "./QrCodeModal.jsx";
 
 // নেভবার-এ জায়গা বাঁচাতে সব কম-দরকারি জিনিস এই এক ⋮ মেনুতে।
 // মোবাইলে নিচ থেকে উঠে আসা sheet, ডেস্কটপে বাটনের নিচে ছোট popover।
@@ -24,6 +26,7 @@ export default function MoreMenu({ onSignOut, hasUpdate = false, className = "" 
     const [pos, setPos] = useState({ top: 0, right: 0 });
     const [soundOn, setSoundOn] = useState(isSoundEnabled());
     const [showWallpaper, setShowWallpaper] = useState(false);
+    const [showQr, setShowQr] = useState(false);
 
     const close = useCallback(() => {
         setClosing(true);
@@ -110,6 +113,21 @@ export default function MoreMenu({ onSignOut, hasUpdate = false, className = "" 
                                 className="sync-more-item"
                                 onClick={() => {
                                     close();
+                                    setTimeout(() => setShowQr(true), 120);
+                                }}
+                            >
+                                <span className="sync-more-ico">
+                                    <QrCode size={18} />
+                                </span>
+                                <span className="sync-more-text">QR code &amp; scan</span>
+                            </button>
+
+                            <button
+                                type="button"
+                                role="menuitem"
+                                className="sync-more-item"
+                                onClick={() => {
+                                    close();
                                     setTimeout(() => setShowWallpaper(true), 120);
                                 }}
                             >
@@ -157,6 +175,7 @@ export default function MoreMenu({ onSignOut, hasUpdate = false, className = "" 
                 )}
 
             {showWallpaper && <WallpaperPicker onClose={() => setShowWallpaper(false)} />}
+            {showQr && <QrCodeModal onClose={() => setShowQr(false)} />}
         </>
     );
 }

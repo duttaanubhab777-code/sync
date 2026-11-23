@@ -27,6 +27,7 @@ import { isPlatformAdmin } from "../App.jsx";
 import { loadWallpapers } from "../services/wallpaper.js";
 import { clearAppBadge } from "../services/appBadge.js";
 import { useAppUpdates, isAndroidApp } from "../services/appUpdate.js";
+import { takePendingPath } from "../utils/qrLink.js";
 
 export default function AppLayout() {
     const dispatch = useDispatch();
@@ -46,6 +47,17 @@ export default function AppLayout() {
 
     const [confirmLogout, setConfirmLogout] = useState(false);
     const [loggingOut, setLoggingOut] = useState(false);
+
+    // লগইন ছাড়া QR লিংক (/u/<username>) খুলেছিল, এখন লগইন হয়ে গেছে: ওই চ্যাটে পাঠানো
+    useEffect(() => {
+        if (!isAuthenticated) return;
+        const pending = takePendingPath();
+        if (pending && pending !== location.pathname) {
+            navigate(pending, { replace: true });
+        }
+        // শুধু প্রথমবার লগইন-পরবর্তী মাউন্টে চালানো দরকার
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isAuthenticated]);
 
     const isAdmin = isPlatformAdmin(user);
     const isSuperAdmin = Boolean(

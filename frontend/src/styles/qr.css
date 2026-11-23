@@ -1,0 +1,162 @@
+/* ==========================================================================
+   QR code (My code + Scan) — Sync ব্র্যান্ড রঙ
+   ========================================================================== */
+.sync-qr-modal { max-width: 440px; }
+
+.sync-qr-tabs {
+    display: flex;
+    gap: 6px;
+    margin: 0 18px 4px;
+    padding: 4px;
+    border-radius: 16px;
+    background: rgba(130, 255, 190, 0.06);
+    border: 1px solid var(--line);
+}
+.sync-qr-tabs button {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 9px 10px;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--text-2);
+    font-weight: 700;
+    font-size: 0.9rem;
+    transition: background 0.18s var(--ease), color 0.18s var(--ease), transform 0.12s;
+}
+.sync-qr-tabs button:active { transform: scale(0.97); }
+.sync-qr-tabs button.is-active {
+    background: var(--grad-btn);
+    color: var(--on-brand);
+}
+
+.sync-qr-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding-top: 14px;
+}
+
+.sync-qr-canvas-wrap {
+    position: relative;
+    width: min(100%, 300px);
+    aspect-ratio: 720 / 980;
+    border-radius: 22px;
+    box-shadow: 0 24px 50px -22px rgba(0, 0, 0, 0.8), 0 0 0 1px var(--line-strong);
+    overflow: hidden;
+    background: var(--bg-0);
+}
+.sync-qr-canvas-wrap canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    transition: opacity 0.25s var(--ease);
+}
+.sync-qr-canvas-wrap canvas.is-drawing { opacity: 0; }
+.sync-qr-spin { position: absolute; inset: 0; margin: auto; color: var(--leaf); }
+
+.sync-qr-note {
+    margin: 0;
+    min-height: 2.6em;
+    text-align: center;
+    font-size: 0.84rem;
+    line-height: 1.4;
+    color: var(--text-2);
+}
+.sync-qr-actions { display: flex; gap: 8px; width: 100%; }
+.sync-qr-actions .sync-btn { flex: 1; padding-left: 10px; padding-right: 10px; }
+.sync-qr-error {
+    margin: 0;
+    padding: 10px 14px;
+    border-radius: 14px;
+    background: rgba(255, 93, 108, 0.12);
+    border: 1px solid rgba(255, 93, 108, 0.3);
+    color: var(--danger);
+    font-size: 0.88rem;
+    text-align: center;
+}
+
+/* ---- Scanner ---- */
+.sync-qrscan { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.sync-qrscan-view {
+    position: relative;
+    width: min(100%, 320px);
+    aspect-ratio: 1;
+    border-radius: 26px;
+    overflow: hidden;
+    background: #000;
+    box-shadow: 0 0 0 1px var(--line-strong), 0 24px 50px -24px rgba(0, 0, 0, 0.9);
+}
+.sync-qrscan-view video { width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.3s; }
+.sync-qrscan-view video.is-live { opacity: 1; }
+
+.sync-qrscan-frame { position: absolute; inset: 16%; pointer-events: none; }
+.sync-qrscan-frame i {
+    position: absolute;
+    width: 28px;
+    height: 28px;
+    border: 4px solid var(--leaf);
+    filter: drop-shadow(0 0 6px rgba(0, 237, 100, 0.55));
+}
+.sync-qrscan-frame i:nth-child(1) { top: 0; left: 0; border-right: 0; border-bottom: 0; border-top-left-radius: 14px; }
+.sync-qrscan-frame i:nth-child(2) { top: 0; right: 0; border-left: 0; border-bottom: 0; border-top-right-radius: 14px; }
+.sync-qrscan-frame i:nth-child(3) { bottom: 0; left: 0; border-right: 0; border-top: 0; border-bottom-left-radius: 14px; }
+.sync-qrscan-frame i:nth-child(4) { bottom: 0; right: 0; border-left: 0; border-top: 0; border-bottom-right-radius: 14px; }
+.sync-qrscan-line {
+    position: absolute;
+    left: 6%;
+    right: 6%;
+    top: 0;
+    height: 3px;
+    border-radius: 3px;
+    background: var(--grad-brand);
+    box-shadow: 0 0 14px rgba(0, 237, 100, 0.8);
+    animation: sync-qr-sweep 2.2s ease-in-out infinite alternate;
+    will-change: transform;
+}
+@keyframes sync-qr-sweep { from { transform: translateY(0); } to { transform: translateY(calc(var(--qr-h, 190px))); } }
+.sync-qrscan-frame { --qr-h: 190px; }
+
+.sync-qrscan-msg {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 22px;
+    text-align: center;
+    color: var(--text-2);
+    font-size: 0.86rem;
+}
+.sync-qrscan-msg strong { color: var(--text); font-size: 0.98rem; }
+.sync-qrscan-msg.is-busy { background: rgba(3, 21, 18, 0.78); color: var(--text); }
+
+.sync-qrscan-hint { margin: 0; font-size: 0.86rem; color: var(--text-2); text-align: center; }
+.sync-qrscan-hint.is-warn { color: #ffd37a; }
+.sync-qrscan > .sync-btn { width: 100%; max-width: 320px; }
+
+/* ---- /u/<username> লোডিং পেজ ---- */
+.sync-userlink {
+    flex: 1;
+    min-height: 60vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 24px;
+    text-align: center;
+    color: var(--text-2);
+}
+.sync-userlink h3 { margin: 0; color: var(--text); font-size: 1.05rem; }
+.sync-userlink p { margin: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+    .sync-qrscan-line { animation: none; top: 50%; }
+}

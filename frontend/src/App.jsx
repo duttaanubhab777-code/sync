@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { Loader2 } from "lucide-react";
 import SyncLogo from "./components/SyncLogo.jsx";
@@ -14,6 +14,8 @@ import ProfilePage from "./pages/ProfilePage.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
 import ContactPage from "./pages/ContactPage.jsx";
 import UpdatesPage from "./pages/UpdatesPage.jsx";
+import UserLinkPage from "./pages/UserLinkPage.jsx";
+import { rememberPendingPath } from "./utils/qrLink.js";
 import UpdatePopup from "./components/UpdatePopup.jsx";
 import { createBackHandler } from "./services/backNavigation.js";
 
@@ -29,6 +31,7 @@ function ProtectedRoute({ children }) {
     const { isAuthenticated, initializing, serverWaking } = useSelector(
         state => state.auth
     );
+    const location = useLocation();
 
     if (initializing) {
         return (
@@ -48,6 +51,10 @@ function ProtectedRoute({ children }) {
     }
 
     if (!isAuthenticated) {
+        // QR/প্রোফাইল লিংক (/u/<username>) খুলে লগইন না থাকলে, লগইনের পর ওই চ্যাটেই ফেরা হবে
+        if (location.pathname.startsWith("/u/")) {
+            rememberPendingPath(location.pathname);
+        }
         return <Navigate to="/login" replace />;
     }
 
@@ -108,6 +115,7 @@ export default function App() {
                 <Route index element={<HomeRedirect />} />
                 <Route path="chats" element={<ChatPage />} />
                 <Route path="chats/:conversationId" element={<ChatPage />} />
+                <Route path="u/:username" element={<UserLinkPage />} />
                 <Route path="stories" element={<StoriesPage />} />
                 <Route path="profile" element={<ProfilePage />} />
                 <Route path="updates" element={<UpdatesPage />} />

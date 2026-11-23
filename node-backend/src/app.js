@@ -135,6 +135,33 @@ app.get("/health", (_req, res) => {
     });
 });
 
+// ---------- Android App Links ----------
+// Android এই ফাইল দেখে নিশ্চিত হয় যে https://<domain>/u/<username> লিংক Sync অ্যাপ খুলতে পারবে।
+// Express-এর static ".well-known" (dot-folder) দেয় না, তাই আলাদা route।
+// fingerprint = mobile/debug.keystore-এর SHA-256 (APK এই key দিয়েই sign হয়)।
+// অন্য key দিয়ে sign করলে ANDROID_CERT_SHA256 (কমা দিয়ে একাধিক) env-এ দাও।
+const DEFAULT_ANDROID_CERT_SHA256 =
+    "CA:A9:3B:D1:CA:4B:E4:E1:79:A0:CD:34:17:9F:37:87:F4:17:AD:04:F3:EB:82:70:FF:F2:77:A4:BD:BC:5C:F5";
+app.get("/.well-known/assetlinks.json", (_req, res) => {
+    const fingerprints = (
+        process.env.ANDROID_CERT_SHA256 || DEFAULT_ANDROID_CERT_SHA256
+    )
+        .split(",")
+        .map(f => f.trim().toUpperCase())
+        .filter(Boolean);
+    res.set("Cache-Control", "public, max-age=3600");
+    res.status(200).json([
+        {
+            relation: ["delegate_permission/common.handle_all_urls"],
+            target: {
+                namespace: "android_app",
+                package_name: process.env.ANDROID_PACKAGE_NAME || "com.sync.chat",
+                sha256_cert_fingerprints: fingerprints
+            }
+        }
+    ]);
+});
+
 // ---------- API ----------
 app.use("/api/v1", apiLimiter, apiRouter);
 app.use("/api/v1", (_req, res) => {

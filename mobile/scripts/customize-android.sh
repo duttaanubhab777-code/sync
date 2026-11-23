@@ -149,6 +149,28 @@ app_extras = """
 if "SyncMessagingService" not in s:
     s = s.replace("</application>", app_extras + "    </application>", 1)
 
+# Android App Links: https://<sync-domain>/u/<username> (QR code / শেয়ার করা লিংক) অ্যাপেই খুলবে।
+# Google Lens, ক্যামেরা বা ব্রাউজার থেকে লিংকে ট্যাপ করলে ব্রাউজারের বদলে সরাসরি Sync অ্যাপ।
+# যাচাই হয় https://<domain>/.well-known/assetlinks.json দিয়ে (node-backend সেটা serve করে)।
+if "android:autoVerify" not in s:
+    import json, re
+    host = "sync-5lfm.onrender.com"
+    try:
+        cfg = json.load(open("capacitor.config.json", encoding="utf-8"))
+        host = re.sub(r"^https?://", "", cfg["server"]["url"]).split("/")[0] or host
+    except Exception:
+        pass
+    link_filter = f"""
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="{host}" android:pathPrefix="/u/" />
+            </intent-filter>
+        """
+    # Capacitor-এর টেমপ্লেটে প্রথম <activity> হলো MainActivity
+    s = s.replace("</activity>", link_filter + "</activity>", 1)
+
 open(path, "w", encoding="utf-8").write(s)
 PY
 
@@ -312,6 +334,15 @@ public class MainActivity extends BridgeActivity {
         }
         if (targetUrl != null && !targetUrl.isEmpty() && targetUrl.startsWith("/")) {
             pendingTargetUrl = targetUrl;
+        }
+
+        // QR / প্রোফাইল লিংক (https://<domain>/u/<username>) থেকে অ্যাপ খুললে সরাসরি ওই চ্যাটে
+        android.net.Uri data = intent.getData();
+        if (data != null && Intent.ACTION_VIEW.equals(intent.getAction())) {
+            String path = data.getPath();
+            if (path != null && path.matches("^/u/[A-Za-z0-9_]{3,20}/?$")) {
+                pendingTargetUrl = path;
+            }
         }
     }
 

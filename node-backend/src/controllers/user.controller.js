@@ -108,6 +108,39 @@ export const getBlockedUsers = asyncHandler(async (req, res) => {
     res.status(200).json(new ApiResponse(200, me?.blockedUser || []));
 });
 
+// GET /api/v1/users/by-username/:username
+// QR code / প্রোফাইল লিংক (/u/<username>) থেকে সরাসরি চ্যাট খুলতে ব্যবহার হয়।
+// শুধু public তথ্য ফেরত দেয় (ইমেইল/ফোন নয়); ব্লক সম্পর্ক থাকলে "নেই" বলা হয়।
+const USERNAME_PARAM_RE = /^[a-z][a-z0-9_]{2,19}$/;
+export const getUserByUsername = asyncHandler(async (req, res) => {
+    const username = String(req.params.username || "").trim().toLowerCase();
+    if (!USERNAME_PARAM_RE.test(username)) {
+        throw new ApiError(404, "User not found");
+    }
+    const user = await User.findOne({ username })
+        .select(`${PUBLIC_USER_FIELDS} blockedUser isBlocked`)
+        .lean();
+
+    const theyBlockedMe = user?.blockedUser?.some(
+        b => String(b) === String(req.user._id)
+    );
+    const iBlockedThem = req.user.blockedUser.some(
+        b => String(b) === String(user?._id)
+    );
+    if (!user || user.isBlocked || theyBlockedMe || iBlockedThem) {
+        throw new ApiError(404, "User not found");
+    }
+    delete user.blockedUser;
+    delete user.isBlocked;
+
+    res.status(200).json(
+        new ApiResponse(200, {
+            ...withOnline(user),
+            isSelf: String(user._id) === String(req.user._id)
+        })
+    );
+});
+
 // GET /api/v1/users/:id
 export const getUserProfile = asyncHandler(async (req, res) => {
     const id = assertObjectId(req.params.id, "user id");
