@@ -1,0 +1,378 @@
+/* ==========================================================================
+   Sync — Story player v2 (advanced)
+   - মসৃণ প্রগ্রেস বার, হোল্ড-টু-পজ, সোয়াইপ-ডাউনে বন্ধ, গ্রুপ বদলে 3D ট্রানজিশন
+   - ছবি: blur ব্যাকড্রপ + Ken-Burns zoom, ভিডিও: ambient glow, টেক্সট: শব্দ ধরে ভেসে ওঠা
+   সব অ্যানিমেশন শুধু transform / opacity / filter
+   ========================================================================== */
+
+/* ---------- player shell ---------- */
+.sync-story-player {
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.5s ease;
+    transform-origin: 50% 70%;
+    animation: sv-open 0.42s var(--ease) backwards;
+}
+
+.sync-story-player.closing {
+    animation: sv-close 0.23s ease-in both;
+    pointer-events: none;
+}
+
+/* gradient scrim মিডিয়ার উপরে, কিন্তু header/footer-এর নিচে */
+.sync-story-player::before,
+.sync-story-player::after { z-index: 2; }
+.sync-story-player::before { height: 190px; }
+.sync-story-player > .sync-story-progress-row,
+.sync-story-player > .sync-story-player-header,
+.sync-story-player > .sync-story-footer { z-index: 4; }
+
+.sync-story-progress-row,
+.sync-story-player-header,
+.sync-story-footer {
+    transition: opacity 0.25s ease, transform 0.3s var(--ease);
+}
+
+/* আঙুল চেপে ধরলে UI মিলিয়ে যায় (WhatsApp/Instagram-এর মতো) */
+.sync-story-player.held .sync-story-progress-row,
+.sync-story-player.held .sync-story-player-header {
+    opacity: 0;
+    transform: translateY(-8px);
+}
+.sync-story-player.held .sync-story-footer {
+    opacity: 0;
+    transform: translateY(10px);
+    pointer-events: none;
+}
+
+/* ---------- progress ---------- */
+.sync-story-progress-row { gap: 5px; margin-bottom: 12px; }
+
+.sync-sv-seg {
+    position: relative;
+    flex: 1;
+    height: 3.5px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.28);
+    overflow: hidden;
+}
+
+.sync-sv-seg i {
+    position: absolute;
+    inset: 0;
+    display: block;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #fff, #d4ffe6);
+    transform: scaleX(0);
+    transform-origin: 0 50%;
+    will-change: transform;
+}
+
+.sync-sv-seg.done i { transform: scaleX(1); }
+.sync-sv-seg.active { box-shadow: 0 0 12px rgba(0, 237, 100, 0.35); }
+
+/* ---------- header ---------- */
+.sync-story-player-header { animation: sv-drop 0.5s var(--ease) both; }
+
+.sync-sv-avatar {
+    position: relative;
+    padding: 3px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+}
+
+.sync-sv-avatar::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, #00ed64, #2fd3a8, #ffffff, #00ed64);
+    animation: sync-spin 3.2s linear infinite;
+}
+
+.sync-sv-avatar > * {
+    position: relative;
+    box-shadow: 0 0 0 2px #070d10;
+    border-radius: 50%;
+}
+
+.sync-story-actions .sync-icon-btn { transition: transform 0.18s var(--ease), background-color 0.2s; }
+.sync-story-actions .sync-icon-btn:active { transform: scale(0.84); }
+.sync-sv-icon-swap { animation: sync-pop 0.3s var(--ease) both; }
+
+/* ---------- content / gestures ---------- */
+.sync-story-content {
+    perspective: 1200px;
+    touch-action: none;
+    cursor: pointer;
+}
+
+.sync-story-nav { z-index: 6; opacity: 0; transition: opacity 0.25s, background-color 0.2s, transform 0.18s var(--ease); }
+.sync-story-content:hover .sync-story-nav { opacity: 1; }
+@media (hover: none) { .sync-story-nav { display: none; } }
+
+/* গ্রুপ/স্টোরি বদলের অ্যানিমেশন র‍্যাপার */
+.sync-sv-anim {
+    position: absolute;
+    inset: 0;
+    isolation: isolate;
+    pointer-events: none;
+}
+
+.sync-sv-anim.open { animation: sv-in-open 0.55s var(--ease) both; }
+.sync-sv-anim.next { animation: sv-in-next 0.38s var(--ease) both; }
+.sync-sv-anim.prev { animation: sv-in-prev 0.38s var(--ease) both; }
+.sync-sv-anim.group-next { transform-origin: 0% 50%; animation: sv-in-group-next 0.5s var(--ease) both; }
+.sync-sv-anim.group-prev { transform-origin: 100% 50%; animation: sv-in-group-prev 0.5s var(--ease) both; }
+
+.sync-sv-media {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+/* ---------- backdrop (blur glow) ---------- */
+.sync-sv-backdrop {
+    position: absolute;
+    left: -80px;
+    right: -80px;
+    top: -460px;
+    bottom: -460px;
+    z-index: -1;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.sync-sv-backdrop > img,
+.sync-sv-ambient {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: blur(46px) saturate(1.6) brightness(0.55);
+    transform: scale(1.3);
+    opacity: 0;
+    animation: sv-soft-in 0.9s 0.1s ease both;
+}
+
+.sync-sv-ambient { transition: opacity 0.6s; }
+.sync-sv-ambient.on { animation: sv-soft-in 0.9s ease both; }
+
+/* ---------- media frame ---------- */
+.sync-sv-stack {
+    --sv-max-h: max(38vh, calc(var(--app-h, 100vh) - 300px));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    max-width: 100%;
+    min-height: 0;
+}
+
+.sync-sv-stack:has(.has-caption) { --sv-max-h: max(34vh, calc(var(--app-h, 100vh) - 380px)); }
+
+.sync-sv-frame {
+    position: relative;
+    display: flex;
+    max-width: min(100%, 560px);
+    border-radius: 24px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.35);
+    box-shadow: 0 28px 80px -20px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.09);
+    transform: translateZ(0);
+    animation: sv-frame-in 0.6s var(--ease) both;
+}
+
+.sync-sv-frame.loading { min-width: min(78vw, 300px); min-height: 42vh; }
+
+.sync-sv-frame img,
+.sync-sv-frame video {
+    display: block;
+    width: auto;
+    height: auto;
+    min-width: 240px;
+    max-width: 100%;
+    max-height: var(--sv-max-h);
+    object-fit: contain;
+    -webkit-user-drag: none;
+}
+
+.sync-sv-frame img { opacity: 0; transition: opacity 0.5s ease; }
+.sync-sv-frame.loaded img { opacity: 1; }
+.sync-sv-frame video { opacity: 0; transition: opacity 0.5s ease; }
+.sync-sv-frame.loaded video { opacity: 1; }
+
+/* Ken Burns */
+.sync-sv-frame.kb img { transform-origin: 50% 45%; }
+.sync-sv-frame.kb.loaded img { animation: sv-kb var(--sv-dur, 6500ms) linear both; }
+.sync-sv-frame.kb.is-paused img { animation-play-state: paused; }
+
+.sync-sv-skeleton {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(110deg, rgba(255,255,255,0.04) 20%, rgba(255,255,255,0.13) 40%, rgba(255,255,255,0.04) 60%);
+    background-size: 220% 100%;
+    animation: sv-shimmer 1.3s linear infinite;
+}
+
+.sync-sv-failed {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-width: 240px;
+    min-height: 200px;
+    padding: 24px;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.86rem;
+}
+
+.sync-sv-buffer {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 54px;
+    height: 54px;
+    margin: -27px 0 0 -27px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    animation: sync-pop 0.25s var(--ease) both;
+}
+
+.sync-sv-time {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    animation: sync-fade 0.4s both;
+}
+
+.sync-sv-caption {
+    max-width: min(100%, 520px);
+    max-height: 96px;
+    overflow: hidden;
+    padding: 10px 18px;
+    border-radius: 16px;
+    color: #fff;
+    font-weight: 600;
+    text-align: center;
+    line-height: 1.4;
+    background: rgba(8, 16, 14, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(14px) saturate(1.4);
+    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+    animation: sv-caption-in 0.6s 0.25s var(--ease) both;
+}
+
+/* ---------- text story ---------- */
+.sync-sv-text {
+    max-width: min(100%, 620px);
+    padding: 24px;
+    color: #fff;
+    font-size: clamp(1.5rem, 5.4vw, 2.15rem);
+    font-weight: 800;
+    line-height: 1.35;
+    letter-spacing: -0.02em;
+    text-align: center;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    text-shadow: 0 4px 30px rgba(0, 0, 0, 0.35);
+}
+
+.sync-sv-text.sm { font-size: clamp(1.1rem, 3.9vw, 1.5rem); font-weight: 700; }
+.sync-sv-text.fade { animation: sync-slide-up 0.7s var(--ease) both; }
+
+.sync-sv-word {
+    display: inline-block;
+    opacity: 0;
+    transform: translateY(14px) scale(0.9);
+    filter: blur(6px);
+    animation: sv-word 0.6s var(--ease) both;
+}
+
+.sync-sv-orb {
+    position: absolute;
+    border-radius: 50%;
+    mix-blend-mode: screen;
+    filter: blur(30px);
+    opacity: 0.55;
+    will-change: transform;
+}
+
+.sync-sv-orb.o1 { left: 8%; top: 30%; width: 360px; height: 360px; background: radial-gradient(circle, rgba(0, 237, 100, 0.5), transparent 70%); animation: sv-orb-a 9s ease-in-out infinite alternate; }
+.sync-sv-orb.o2 { right: 4%; top: 45%; width: 420px; height: 420px; background: radial-gradient(circle, rgba(120, 140, 255, 0.45), transparent 70%); animation: sv-orb-b 11s ease-in-out infinite alternate; }
+.sync-sv-orb.o3 { left: 35%; bottom: 25%; width: 300px; height: 300px; background: radial-gradient(circle, rgba(255, 120, 190, 0.38), transparent 70%); animation: sv-orb-c 13s ease-in-out infinite alternate; }
+
+/* ---------- pause badge ---------- */
+.sync-sv-pause-badge {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 5;
+    width: 78px;
+    height: 78px;
+    margin: -39px 0 0 -39px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    pointer-events: none;
+    animation: sync-pop 0.28s var(--ease) both;
+}
+
+/* ---------- keyframes ---------- */
+@keyframes sv-open { from { opacity: 0; transform: scale(0.93) translateY(24px); border-radius: 28px; } }
+@keyframes sv-close { to { opacity: 0; transform: translateY(80px) scale(0.88); border-radius: 30px; } }
+@keyframes sv-drop { from { opacity: 0; transform: translateY(-14px); } }
+@keyframes sv-in-open { from { opacity: 0; transform: scale(0.9); filter: blur(10px); } }
+@keyframes sv-in-next { from { opacity: 0; transform: translateX(44px) scale(0.94); } }
+@keyframes sv-in-prev { from { opacity: 0; transform: translateX(-44px) scale(0.94); } }
+@keyframes sv-in-group-next { from { opacity: 0.2; transform: rotateY(-62deg) translateX(18%); } }
+@keyframes sv-in-group-prev { from { opacity: 0.2; transform: rotateY(62deg) translateX(-18%); } }
+@keyframes sv-frame-in { from { opacity: 0; transform: translateY(18px) scale(0.95); } }
+@keyframes sv-soft-in { to { opacity: 0.9; } }
+@keyframes sv-kb { from { transform: scale(1); } to { transform: scale(1.08) translate(-1%, -1%); } }
+@keyframes sv-shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+@keyframes sv-caption-in { from { opacity: 0; transform: translateY(16px) scale(0.96); filter: blur(4px); } }
+@keyframes sv-word { to { opacity: 1; transform: none; filter: blur(0); } }
+@keyframes sv-orb-a { to { transform: translate(120px, -80px) scale(1.25); } }
+@keyframes sv-orb-b { to { transform: translate(-140px, -60px) scale(0.85); } }
+@keyframes sv-orb-c { to { transform: translate(90px, -120px) scale(1.2); } }
+
+@media (prefers-reduced-motion: reduce) {
+    .sync-sv-word, .sync-sv-orb, .sync-sv-frame, .sync-sv-caption, .sync-sv-anim,
+    .sync-story-player, .sync-sv-avatar::before, .sync-sv-frame.kb.loaded img {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+    }
+}
+
+@media (max-width: 560px) {
+    .sync-sv-frame { border-radius: 20px; }
+    .sync-sv-frame img, .sync-sv-frame video { min-width: 200px; }
+}

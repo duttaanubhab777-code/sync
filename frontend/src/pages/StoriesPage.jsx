@@ -12,7 +12,11 @@ import {
     Type,
     Loader2,
     Send,
-    Check
+    Check,
+    Pause,
+    Play,
+    Volume2,
+    VolumeX
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncBrandBar from "../components/SyncBrandBar.jsx";
@@ -36,7 +40,8 @@ import {
     formatTime,
     generateClientMsgId
 } from "../utils/format.js";
-import { LocalImg, LocalVideo } from "../components/LocalImg.jsx";
+import StoryMedia from "../components/story/StoryMedia.jsx";
+import StoryProgress from "../components/story/StoryProgress.jsx";
 
 const STORY_COLORS = [
     "#0F4C3A",
@@ -103,16 +108,57 @@ export default function StoriesPage() {
     const [viewerState, setViewerState] = useState(null);
     const [showViewersList, setShowViewersList] = useState(false);
 
+    // ---- Story player v2: pause / mute / transition / gesture ----
+    const [held, setHeld] = useState(false); // আঙুল চেপে ধরা
+    const [userPaused, setUserPaused] = useState(false); // Pause বাটন
+    const [muted, setMuted] = useState(false);
+    const [replyFocused, setReplyFocused] = useState(false);
+    const [tabHidden, setTabHidden] = useState(
+        typeof document !== "undefined" ? document.hidden : false
+    );
+    const [closing, setClosing] = useState(false);
+    const [nav, setNav] = useState({ dir: "open", n: 0 });
+    const progressRef = useRef(null);
+    const playerRef = useRef(null);
+    const gestureRef = useRef(null);
+    const closeTimerRef = useRef(null);
+
+    const bumpNav = dir => {
+        progressRef.current?.set(0);
+        setNav(prev => ({ dir, n: prev.n + 1 }));
+    };
+
+    // সুন্দর করে বন্ধ (slide-down + fade)
+    const closeViewer = () => {
+        if (closeTimerRef.current) return;
+        setClosing(true);
+        closeTimerRef.current = setTimeout(() => {
+            closeTimerRef.current = null;
+            setViewerState(null);
+            setShowViewersList(false);
+            setClosing(false);
+            setNav({ dir: "open", n: 0 });
+        }, 230);
+    };
+    useEffect(() => () => clearTimeout(closeTimerRef.current), []);
+
     // ফোনের Back: আগে viewers লিস্ট, তারপর story viewer বন্ধ হবে (অ্যাপ বন্ধ হবে না)
     const viewerOpen = viewerState !== null;
     useEffect(() => {
         if (!viewerOpen) return undefined;
         return pushBackHandler(() => {
             if (showViewersList) setShowViewersList(false);
-            else setViewerState(null);
+            else closeViewer();
             return true;
         });
     }, [viewerOpen, showViewersList]);
+
+    // ট্যাব/অ্যাপ লুকালে স্টোরি আপনাআপনি থামে
+    useEffect(() => {
+        const onVis = () => setTabHidden(document.hidden);
+        document.addEventListener("visibilitychange", onVis);
+        return () => document.removeEventListener("visibilitychange", onVis);
+    }, []);
 
     const [replyText, setReplyText] = useState("");
     const [replying, setReplying] = useState(false);
@@ -139,6 +185,21 @@ export default function StoriesPage() {
         setReplyText("");
         setReplyError("");
         setShowPicker(false);
+        setHeld(false);
+        setUserPaused(false);
+        setReplyFocused(false);
+    }, [activeStory?._id]);
+
+    // পরের ছবিটা আগেই লোড করে রাখা (পরের স্টোরি ঝট করে খোলে)
+    useEffect(() => {
+        if (!activeGroup || viewerState === null) return;
+        const nextInGroup = activeGroup.stories[viewerState.storyIdx + 1];
+        const nextGroup = storyGroups[viewerState.groupIdx + 1];
+        const nxt = nextInGroup || nextGroup?.stories?.[0];
+        if (nxt?.type === "image" && nxt.media?.url) {
+            const img = new Image();
+            img.src = nxt.media.url;
+        }
     }, [activeStory?._id]);
 
     useEffect(() => () => clearTimeout(toastTimerRef.current), []);
@@ -348,31 +409,33 @@ export default function StoriesPage() {
         await dispatch(deleteMyStory(activeStory._id));
         setViewerState(null);
         setShowViewersList(false);
+        setClosing(false);
     };
 
     const goNextStory = () => {
-        if (!activeGroup || viewerState === null) return;
+        if (!activeGroup || viewerState === null || closing) return;
         if (viewerState.storyIdx + 1 < activeGroup.stories.length) {
+            bumpNav("next");
             setViewerState({
                 ...viewerState,
                 storyIdx: viewerState.storyIdx + 1
             });
-            setShowViewersList(false);
         } else if (viewerState.groupIdx + 1 < storyGroups.length) {
+            bumpNav("group-next");
             setViewerState({
                 groupIdx: viewerState.groupIdx + 1,
                 storyIdx: 0
             });
-            setShowViewersList(false);
         } else {
-            setViewerState(null);
-            setShowViewersList(false);
+            closeViewer();
         }
+        setShowViewersList(false);
     };
 
     const goPrevStory = () => {
-        if (!activeGroup || viewerState === null) return;
+        if (!activeGroup || viewerState === null || closing) return;
         if (viewerState.storyIdx > 0) {
+            bumpNav("prev");
             setViewerState({
                 ...viewerState,
                 storyIdx: viewerState.storyIdx - 1
@@ -380,13 +443,171 @@ export default function StoriesPage() {
             setShowViewersList(false);
         } else if (viewerState.groupIdx > 0) {
             const prevGroup = storyGroups[viewerState.groupIdx - 1];
+            bumpNav("group-prev");
             setViewerState({
                 groupIdx: viewerState.groupIdx - 1,
                 storyIdx: Math.max(0, prevGroup.stories.length - 1)
             });
             setShowViewersList(false);
+        } else {
+            // প্রথম স্টোরিতে আবার ট্যাপ → শুরু থেকে রিস্টার্ট
+            bumpNav("prev");
         }
     };
+
+    // সোয়াইপ: পুরো গ্রুপ (এক ব্যক্তির সব স্টোরি) পাল্টানো
+    const goGroup = delta => {
+        if (viewerState === null || closing) return;
+        const ni = viewerState.groupIdx + delta;
+        if (ni < 0) return;
+        if (ni >= storyGroups.length) {
+            closeViewer();
+            return;
+        }
+        bumpNav(delta > 0 ? "group-next" : "group-prev");
+        setViewerState({ groupIdx: ni, storyIdx: 0 });
+        setShowViewersList(false);
+    };
+
+    const handleProgress = p => progressRef.current?.set(p);
+
+    // ---------- জেসচার: ট্যাপ (বাঁ/ডান), হোল্ড = পজ, সোয়াইপ ----------
+    const resetDrag = () => {
+        const el = playerRef.current;
+        if (!el) return;
+        el.style.transition =
+            "transform .28s var(--ease), opacity .28s, border-radius .28s";
+        el.style.transform = "";
+        el.style.opacity = "";
+        el.style.borderRadius = "";
+        setTimeout(() => {
+            if (playerRef.current) playerRef.current.style.transition = "";
+        }, 320);
+    };
+
+    const onStagePointerDown = e => {
+        if (e.target.closest("button")) return;
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        const g = {
+            id: e.pointerId,
+            x: e.clientX,
+            y: e.clientY,
+            dx: 0,
+            dy: 0,
+            moved: false,
+            held: false,
+            drag: false,
+            timer: null
+        };
+        g.timer = setTimeout(() => {
+            if (!g.moved) {
+                g.held = true;
+                setHeld(true);
+            }
+        }, 240);
+        gestureRef.current = g;
+        try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+            /* ignore */
+        }
+    };
+
+    const onStagePointerMove = e => {
+        const g = gestureRef.current;
+        if (!g || g.id !== e.pointerId) return;
+        g.dx = e.clientX - g.x;
+        g.dy = e.clientY - g.y;
+        if (!g.moved && Math.hypot(g.dx, g.dy) > 10) {
+            g.moved = true;
+            clearTimeout(g.timer);
+            if (g.held) {
+                g.held = false;
+                setHeld(false);
+            }
+        }
+        if (g.moved && g.dy > 0 && Math.abs(g.dy) > Math.abs(g.dx)) {
+            g.drag = true;
+            const el = playerRef.current;
+            if (el) {
+                el.style.transition = "none";
+                el.style.transform = `translateY(${g.dy * 0.9}px) scale(${Math.max(
+                    0.82,
+                    1 - g.dy / 1400
+                )})`;
+                el.style.borderRadius = `${Math.min(32, g.dy / 5)}px`;
+                el.style.opacity = String(Math.max(0.4, 1 - g.dy / 700));
+            }
+        }
+    };
+
+    const endGesture = (e, cancelled) => {
+        const g = gestureRef.current;
+        if (!g || g.id !== e.pointerId) return;
+        clearTimeout(g.timer);
+        gestureRef.current = null;
+        if (g.held) setHeld(false);
+
+        if (g.drag) {
+            if (!cancelled && g.dy > 110) closeViewer();
+            else resetDrag();
+            return;
+        }
+        if (cancelled) return;
+
+        const vertical = Math.abs(g.dy) > Math.abs(g.dx);
+        if (g.moved && vertical && g.dy < -90 && activeGroup?.isMine) {
+            setShowViewersList(true); // উপরে সোয়াইপ = viewers
+            return;
+        }
+        if (g.moved && !vertical && Math.abs(g.dx) > 70) {
+            goGroup(g.dx < 0 ? 1 : -1);
+            return;
+        }
+        if (g.moved || g.held) return;
+
+        // সাধারণ ট্যাপ
+        if (showPicker) {
+            setShowPicker(false);
+            return;
+        }
+        if (showViewersList) {
+            setShowViewersList(false);
+            return;
+        }
+        const rect = e.currentTarget.getBoundingClientRect();
+        const rel = (e.clientX - rect.left) / Math.max(1, rect.width);
+        if (rel < 0.32) goPrevStory();
+        else goNextStory();
+    };
+
+    // কিবোর্ড (ডেস্কটপ): ← → Space Esc M
+    useEffect(() => {
+        if (!viewerOpen) return undefined;
+        const onKey = e => {
+            const tag = (e.target?.tagName || "").toLowerCase();
+            if (tag === "input" || tag === "textarea") return;
+            if (e.key === "ArrowRight") goNextStory();
+            else if (e.key === "ArrowLeft") goPrevStory();
+            else if (e.key === " ") {
+                e.preventDefault();
+                setUserPaused(v => !v);
+            } else if (e.key === "Escape") closeViewer();
+            else if (e.key === "m" || e.key === "M") setMuted(v => !v);
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    });
+
+    const storyPaused =
+        held ||
+        userPaused ||
+        showPicker ||
+        showViewersList ||
+        confirmDeleteStory ||
+        replyFocused ||
+        tabHidden ||
+        closing;
 
     const myGroupIdx = storyGroups.findIndex(g => g.isMine);
     const myGroup = myGroupIdx !== -1 ? storyGroups[myGroupIdx] : null;
@@ -535,7 +756,10 @@ export default function StoriesPage() {
                     </div>
                 ) : (
                     <div
-                        className="sync-story-player"
+                        ref={playerRef}
+                        className={`sync-story-player ${held ? "held" : ""} ${
+                            closing ? "closing" : ""
+                        }`}
                         style={{
                             backgroundColor:
                                 activeStory.type === "text"
@@ -543,26 +767,24 @@ export default function StoriesPage() {
                                     : "#070d10"
                         }}
                     >
-                        <div className="sync-story-progress-row">
-                            {activeGroup.stories.map((st, idx) => (
-                                <div
-                                    key={st._id}
-                                    className={`sync-story-seg ${
-                                        idx <= viewerState.storyIdx
-                                            ? "active"
-                                            : ""
-                                    }`}
-                                />
-                            ))}
-                        </div>
+                        <StoryProgress
+                            ref={progressRef}
+                            count={activeGroup.stories.length}
+                            index={viewerState.storyIdx}
+                        />
 
-                        <div className="sync-story-player-header">
+                        <div
+                            className="sync-story-player-header"
+                            key={activeGroup.author?._id || viewerState.groupIdx}
+                        >
                             <div className="sync-story-author">
-                                <Avatar
-                                    src={activeGroup.author?.avatar}
-                                    name={activeGroup.author?.fullName}
-                                    size={38}
-                                />
+                                <div className="sync-sv-avatar">
+                                    <Avatar
+                                        src={activeGroup.author?.avatar}
+                                        name={activeGroup.author?.fullName}
+                                        size={38}
+                                    />
+                                </div>
                                 <div>
                                     <div className="sync-story-author-name">
                                         {activeGroup.isMine
@@ -576,6 +798,44 @@ export default function StoriesPage() {
                             </div>
 
                             <div className="sync-story-actions">
+                                <button
+                                    type="button"
+                                    className="sync-icon-btn light"
+                                    title={userPaused ? "Play" : "Pause"}
+                                    aria-label={userPaused ? "Play" : "Pause"}
+                                    onClick={() => setUserPaused(v => !v)}
+                                >
+                                    <span
+                                        key={userPaused ? "play" : "pause"}
+                                        className="sync-sv-icon-swap"
+                                    >
+                                        {userPaused ? (
+                                            <Play size={18} />
+                                        ) : (
+                                            <Pause size={18} />
+                                        )}
+                                    </span>
+                                </button>
+                                {activeStory.type === "video" && (
+                                    <button
+                                        type="button"
+                                        className="sync-icon-btn light"
+                                        title={muted ? "Unmute" : "Mute"}
+                                        aria-label={muted ? "Unmute" : "Mute"}
+                                        onClick={() => setMuted(v => !v)}
+                                    >
+                                        <span
+                                            key={muted ? "off" : "on"}
+                                            className="sync-sv-icon-swap"
+                                        >
+                                            {muted ? (
+                                                <VolumeX size={18} />
+                                            ) : (
+                                                <Volume2 size={18} />
+                                            )}
+                                        </span>
+                                    </button>
+                                )}
                                 {activeGroup.isMine && (
                                     <button
                                         type="button"
@@ -589,10 +849,8 @@ export default function StoriesPage() {
                                 <button
                                     type="button"
                                     className="sync-icon-btn light"
-                                    onClick={() => {
-                                        setViewerState(null);
-                                        setShowViewersList(false);
-                                    }}
+                                    title="Close"
+                                    onClick={closeViewer}
                                 >
                                     <X size={20} />
                                 </button>
@@ -601,57 +859,45 @@ export default function StoriesPage() {
 
                         <div
                             className="sync-story-content"
-                            onClick={() => setShowPicker(false)}
+                            onPointerDown={onStagePointerDown}
+                            onPointerMove={onStagePointerMove}
+                            onPointerUp={e => endGesture(e, false)}
+                            onPointerCancel={e => endGesture(e, true)}
+                            onContextMenu={e => e.preventDefault()}
                         >
                             <button
                                 type="button"
                                 className="sync-story-nav prev"
+                                aria-label="Previous"
                                 onClick={goPrevStory}
                             >
                                 <ChevronLeft size={26} />
                             </button>
 
-                            {activeStory.type === "text" && (
-                                <div className="sync-story-text-canvas">
-                                    {activeStory.caption}
+                            <div
+                                key={`${activeStory._id}_${nav.n}`}
+                                className={`sync-sv-anim ${nav.dir}`}
+                            >
+                                <StoryMedia
+                                    story={activeStory}
+                                    paused={storyPaused}
+                                    muted={muted}
+                                    onProgress={handleProgress}
+                                    onDone={goNextStory}
+                                    onAutoplayBlocked={() => setMuted(true)}
+                                />
+                            </div>
+
+                            {userPaused && (
+                                <div className="sync-sv-pause-badge">
+                                    <Pause size={32} />
                                 </div>
                             )}
-
-                            {activeStory.type === "image" &&
-                                activeStory.media?.url && (
-                                    <div className="sync-story-media-wrap">
-                                        <LocalImg
-                                            url={activeStory.media.url}
-                                            kind="story"
-                                            alt={activeStory.caption || "story"}
-                                        />
-                                        {activeStory.caption && (
-                                            <div className="sync-story-caption">
-                                                {activeStory.caption}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                            {activeStory.type === "video" &&
-                                activeStory.media?.url && (
-                                    <div className="sync-story-media-wrap">
-                                        <LocalVideo
-                                            url={activeStory.media.url}
-                                            controls
-                                            autoPlay
-                                        />
-                                        {activeStory.caption && (
-                                            <div className="sync-story-caption">
-                                                {activeStory.caption}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
 
                             <button
                                 type="button"
                                 className="sync-story-nav next"
+                                aria-label="Next"
                                 onClick={goNextStory}
                             >
                                 <ChevronRight size={26} />
@@ -773,7 +1019,11 @@ export default function StoriesPage() {
                                         onChange={e =>
                                             setReplyText(e.target.value)
                                         }
-                                        onFocus={() => setShowPicker(false)}
+                                        onFocus={() => {
+                                            setShowPicker(false);
+                                            setReplyFocused(true);
+                                        }}
+                                        onBlur={() => setReplyFocused(false)}
                                     />
                                     <button
                                         type="submit"
