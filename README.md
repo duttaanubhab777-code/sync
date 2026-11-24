@@ -29,6 +29,7 @@
 
 <p>
   <a href="#overview">Overview</a> ·
+  <a href="#beginner-guide">Beginner Guide</a> ·
   <a href="#features">Features</a> ·
   <a href="#motion-showcase">Motion</a> ·
   <a href="#architecture">Architecture</a> ·
@@ -47,7 +48,9 @@
 <a id="overview"></a>
 <img src="docs/assets/headers/overview.svg" alt="Overview" height="64"/>
 
-**Sync** is a full-stack, WhatsApp-inspired messaging application built as a deployable monorepo. It combines a React client, an Express REST API, a Socket.IO real-time layer, MongoDB persistence, and a separate Flask service for secure Cloudinary upload signing and signup email delivery.
+**Sync** is a full-stack, real-time messaging platform for the web and Android. It is organised as a monorepo, which means the frontend, backend, Python microservice, Android wrapper and project documentation live in one Git repository.
+
+This README is written for first-time contributors as well as experienced developers. Read it from top to bottom to understand the product, learn how its parts communicate, set up a local development environment, configure integrations, run tests and deploy the services. Technical terms are explained in simple language when they first appear.
 
 The Node service serves both the API and the production-built frontend. The Python service is intentionally separate: it signs short-lived media upload parameters and relays OTP emails through Gmail SMTP. Files are uploaded by the browser directly to Cloudinary; neither application server handles the media file bytes.
 
@@ -55,6 +58,84 @@ The interface is responsive and installable as a Progressive Web App. The reposi
 
 > [!NOTE]
 > The public web demo uses free hosting tiers. A service may need a short wake-up period after inactivity, and availability depends on the hosting provider.
+
+<a id="beginner-guide"></a>
+<img src="docs/assets/headers/getting-started.svg" alt="Beginner Guide" height="64"/>
+
+## Start here — a beginner guide
+
+If this is your first full-stack project, start here. You do not need to understand every folder before running the application.
+
+### What is Sync?
+
+Sync is a messaging application. A user opens the React interface, signs in, and communicates with other users. The browser sends requests to the Node.js backend and keeps a Socket.IO connection open for live events. The backend stores application data in MongoDB and uses external services for media files, email delivery and push notifications.
+
+### What does full-stack mean?
+
+| Layer | In simple words | Sync implementation |
+| --- | --- | --- |
+| Frontend | Everything a user sees and interacts with | React + Vite |
+| Backend | The server that processes requests and applies rules | Node.js + Express |
+| Real-time layer | Delivers events without repeatedly refreshing a page | Socket.IO |
+| Database | Stores accounts, messages and application records | MongoDB + Mongoose |
+| Media service | Creates secure upload signatures and sends OTP emails | Python + Flask |
+| File storage | Stores images, videos, voice notes and other media | Cloudinary |
+| Android wrapper | Packages the web app with native Android capabilities | Capacitor |
+
+### Important terms
+
+- **Repository:** the project folder tracked by Git and hosted on GitHub.
+- **Clone:** download a copy of a GitHub repository to your computer.
+- **Terminal:** an application where you run commands such as npm install.
+- **Dependency:** a library the project needs in order to work.
+- **Environment variable:** a configuration value supplied outside source code. Private values belong in local environment files or hosting dashboards.
+- **API:** a defined way for one part of an application to request data or an action from another part.
+- **REST API:** an API that uses HTTP methods such as GET, POST, PATCH and DELETE.
+- **WebSocket:** a persistent connection for two-way communication. Sync uses Socket.IO for event-based communication and reconnection support.
+- **Microservice:** a small separate application with a focused responsibility. Sync uses Flask for media signing and OTP email delivery.
+- **Build:** convert frontend source code into optimised files that a web server can serve.
+- **Deploy:** publish a tested version of an application to a hosting provider.
+- **PWA:** a Progressive Web App that can be installed from a supported browser.
+- **APK:** the Android application package that can be installed on an Android device.
+
+### What you need before starting
+
+| Tool | Why it is needed | Requirement |
+| --- | --- | --- |
+| Git | Clone the repository and manage changes | Current stable version |
+| Node.js | Run frontend tooling and the Node backend | **20.19.0 or newer** |
+| npm | Install JavaScript dependencies | Included with Node.js |
+| Python | Run the Flask microservice | **3.10 or newer** |
+| pip | Install Python dependencies | Included with Python |
+| MongoDB | Store application data | Atlas or a reachable MongoDB instance |
+| Cloudinary | Store uploaded media | Account needed for media features |
+
+Official downloads: [Git](https://git-scm.com/downloads), [Node.js](https://nodejs.org/en/download), [Python](https://www.python.org/downloads/), [MongoDB Atlas](https://www.mongodb.com/atlas) and [Cloudinary](https://cloudinary.com/).
+
+### Understand the services
+
+A local development setup normally uses these processes:
+
+1. **Vite frontend** — usually available at http://localhost:5173.
+2. **Node backend** — listens on the port configured by PORT, normally 5000.
+3. **Python service** — listens on http://127.0.0.1:5001 by default.
+4. **MongoDB** — hosted or local database configured through MONGODB_URI.
+
+The Vite development server forwards API and Socket.IO requests to Node. Node communicates with MongoDB and calls Python when a signed media upload or OTP email is required.
+
+### First-time setup checklist
+
+- [ ] Install Git, Node.js 20.19+ and Python 3.10+.
+- [ ] Create or obtain access to a MongoDB database.
+- [ ] Create a Cloudinary account if you want to test media uploads.
+- [ ] Clone the repository.
+- [ ] Install frontend and backend dependencies.
+- [ ] Create the backend environment file and configure MongoDB and JWT.
+- [ ] Start the Node backend and Vite frontend.
+- [ ] Configure and start Python for media signing and OTP email.
+- [ ] Open the local frontend URL and test the application.
+
+You can read the source code without configuring every external service. To test the complete application, configure the integrations described later in this README.
 
 <a id="screenshots"></a>
 <img src="docs/assets/headers/screenshots.svg" alt="Screenshots" height="64"/>
