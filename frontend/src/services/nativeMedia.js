@@ -227,8 +227,28 @@ const enqueue = fn =>
         pump();
     });
 
+// downloadFile Android-এ `media/` ফোল্ডার নিজে বানায় না ("open failed: ENOENT"), তাই আগে নিজে বানানো
+let dirReady = null;
+const ensureDir = () => {
+    if (!dirReady) {
+        dirReady = getFs()
+            .mkdir({ path: DIR, directory: DATA, recursive: true })
+            .then(() => true)
+            .catch(e => {
+                // ফোল্ডার আগে থেকেই থাকলে ত্রুটি আসতে পারে, সেটা সমস্যা নয়
+                if (!/exist/i.test(errText(e))) {
+                    logMedia(`mkdir failed: ${errText(e)}`);
+                    dirReady = null;
+                }
+                return true;
+            });
+    }
+    return dirReady;
+};
+
 const downloadOnce = async (url, kind) => {
     const fs = getFs();
+    await ensureDir();
     const file = `${DIR}/${hashUrl(url)}.${extOf(url, kind)}`;
     try {
         await fs.downloadFile({ url, path: file, directory: DATA, recursive: true });
