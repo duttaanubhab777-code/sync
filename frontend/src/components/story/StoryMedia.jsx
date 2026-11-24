@@ -81,7 +81,6 @@ function TextStory({ story, paused, onProgress, onDone }) {
             <div className="sync-sv-backdrop" aria-hidden="true">
                 <i className="sync-sv-orb o1" />
                 <i className="sync-sv-orb o2" />
-                <i className="sync-sv-orb o3" />
             </div>
             <div className="sync-sv-media">
                 <div
@@ -191,7 +190,6 @@ function VideoStory({
 }) {
     const [src, save, onSrcError] = useLocalMedia(story.media.url, "video");
     const vref = useRef(null);
-    const canvasRef = useRef(null);
     const timeRef = useRef(null);
     const [ready, setReady] = useState(false);
     const [buffering, setBuffering] = useState(true);
@@ -259,26 +257,6 @@ function VideoStory({
         return () => cancelAnimationFrame(raf);
     }, [paused, failed, cbs]);
 
-    // ভিডিওর রঙে ঝাপসা আলো (ambient glow)
-    useEffect(() => {
-        if (!ready || paused || failed) return undefined;
-        const cv = canvasRef.current;
-        const ctx = cv?.getContext?.("2d");
-        if (!ctx) return undefined;
-        const draw = () => {
-            const v = vref.current;
-            if (!v || v.readyState < 2) return;
-            try {
-                ctx.drawImage(v, 0, 0, cv.width, cv.height);
-            } catch {
-                /* ignore */
-            }
-        };
-        draw();
-        const id = setInterval(draw, 220);
-        return () => clearInterval(id);
-    }, [ready, paused, failed]);
-
     const handleError = () => {
         errCount.current += 1;
         if (errCount.current >= 3) setFailed(true);
@@ -287,14 +265,6 @@ function VideoStory({
 
     return (
         <>
-            <div className="sync-sv-backdrop" aria-hidden="true">
-                <canvas
-                    ref={canvasRef}
-                    className={`sync-sv-ambient ${ready ? "on" : ""}`}
-                    width={24}
-                    height={42}
-                />
-            </div>
             <div className="sync-sv-media">
                 <div className="sync-sv-stack">
                     <div
