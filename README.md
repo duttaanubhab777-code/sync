@@ -471,42 +471,132 @@ sync/
 └── README.md
 ```
 
+
+### Where should I look for a change?
+
+| If you want to change... | Start here |
+| --- | --- |
+| Login, registration or password reset screens | frontend/src/pages/ and frontend/src/components/ |
+| Chat layout, message composer or attachments | frontend/src/pages/ChatPage.jsx and frontend/src/components/chat/ |
+| Stories and story playback | frontend/src/pages/StoriesPage.jsx and frontend/src/components/story/ |
+| Client-side API calls | frontend/src/services/api.js |
+| Live events and connection handling | frontend/src/services/socket.js and node-backend/src/socket/ |
+| Background uploads and retry queue | frontend/src/services/outbox.js and frontend/src/hooks/useUploadQueue.js |
+| Image/video preparation | frontend/src/utils/ and frontend/src/services/media.js |
+| Database structure | node-backend/src/models/ |
+| API request handling | node-backend/src/routes/ and node-backend/src/controllers/ |
+| Authentication and permissions | node-backend/src/middlewares/, node-backend/src/utils/ and auth.controller.js |
+| Cloudinary cleanup | node-backend/src/services/cloudinaryCleanup.service.js |
+| Push notifications | node-backend/src/services/push.service.js |
+| Media signing or OTP email | python-service/routes/ and python-service/services/ |
+| Android native behaviour | mobile/ and .github/workflows/android-apk.yml |
+| API contract | docs/API.md |
+| Hosting instructions | docs/PYTHONANYWHERE_DEPLOYMENT_GUIDE.md and this README |
+
+### How the backend is organised
+
+The Node backend follows a layered structure. A route defines the URL and HTTP method. A controller handles the request and response. A service contains reusable application operations. A model describes how data is stored in MongoDB. Middleware runs before a controller to check authentication, validate requests or apply rate limits. Utilities contain shared helper functions.
+
+~~~text
+Browser request
+      |
+      v
+Express route
+      |
+      v
+Middleware (authentication / validation)
+      |
+      v
+Controller
+      |
+      +------> Service / utility
+      |
+      v
+Mongoose model
+      |
+      v
+MongoDB
+      |
+      v
+JSON response to browser
+~~~
+
+Not every endpoint uses every layer, but keeping these responsibilities separate makes the code easier to test and maintain.
 <a id="getting-started"></a>
 <img src="docs/assets/headers/getting-started.svg" alt="Getting Started" height="64"/>
 
 ### Prerequisites
 
+- Git
 - Node.js **20.19+** and npm
 - MongoDB Atlas database (or a compatible MongoDB instance)
 - Python **3.10+** and pip (for the Flask service)
 - Cloudinary account for media uploads
 - Gmail account with an App Password for signup OTP email (when testing the mail relay)
 
+Check your installed versions:
+
+~~~bash
+git --version
+node --version
+npm --version
+python --version
+~~~
+
+On some Windows installations, use `py --version` instead of `python --version`.
+
 ### 1. Clone the repository
 
-```bash
+Open a terminal (PowerShell, Windows Terminal, macOS Terminal or Linux shell), then run:
+
+~~~bash
 git clone https://github.com/duttaanubhab777-code/sync.git
 cd sync
-```
+~~~
 
-### 2. Install Node dependencies
+This creates a local folder named sync. Run the remaining root-level commands from that folder. If Git asks you to authenticate, follow GitHub current sign-in instructions. Never put a GitHub password or access token directly into a command that may be saved in shell history.
 
-From the repository root:
+### 2. Install Node.js dependencies
 
-```bash
-npm run install:backend
+Run these commands from the repository root:
+
+~~~bash
 npm run install:frontend
-```
+npm run install:backend
+~~~
+
+The first command installs React/Vite client dependencies. The second installs Express/Socket.IO server dependencies. The project keeps these packages in separate folders, so running npm install only at the repository root is not the intended installation method.
+
+If installation fails, check your Node.js version, internet connection and the first error printed by npm.
 
 ### 3. Configure the Node backend
 
-Create the backend environment file:
+Create a private environment file from the safe example template.
 
-```bash
+**macOS / Linux / Git Bash:**
+
+~~~bash
 cp node-backend/.env.example node-backend/.env
-```
+~~~
 
-Fill in the required values described in [Configuration](#configuration). For a local frontend dev server, set `FRONTEND_URL=http://localhost:5173`.
+**Windows PowerShell:**
+
+~~~powershell
+Copy-Item node-backend/.env.example node-backend/.env
+~~~
+
+Open node-backend/.env in a text editor and configure at least:
+
+- PORT=5000
+- NODE_ENV=development
+- MONGODB_URI — your MongoDB connection string.
+- JWT_SECRET — a long, private random value. Use the same value in the Python service.
+- FRONTEND_URL=http://localhost:5173 — the local Vite origin.
+- CLOUDINARY_CLOUD_NAME — required for validating uploaded media URLs.
+- PYTHON_SERVICE_URL=http://127.0.0.1:5001 — when running Python locally.
+- MAIL_RELAY_SECRET — when testing OTP email through Python.
+
+The remaining integrations are explained in Configuration. Do not paste real credentials into GitHub, screenshots, issues or public messages.
 
 ### 4. Start the Node backend and frontend
 
