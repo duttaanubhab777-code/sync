@@ -8,6 +8,7 @@ import "./index.css";
 import "./styles/native-app.css";
 import { initViewportHeight } from "./utils/viewport.js";
 import { requestPersistentStorage } from "./services/wallpaperCache.js";
+import { hasNativeStore } from "./services/nativeMedia.js";
 
 // স্ক্রিন উচ্চতা (--app-h) সবার আগে সেট হয়, যাতে পুরনো WebView-তেও লেআউট ও স্ক্রল ঠিক থাকে
 initViewportHeight();
@@ -108,6 +109,21 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
                 updateViaCache: "none"
             })
             .catch(() => {});
-    if (document.readyState === "complete") register();
-    else window.addEventListener("load", register, { once: true });
+    // APK + Filesystem প্লাগিন থাকলে service worker-কে জানানো, যাতে একই ছবি/ভিডিও দুবার সেভ না হয়
+    const tellWorker = () =>
+        navigator.serviceWorker.ready
+            .then(reg =>
+                (reg.active || navigator.serviceWorker.controller)?.postMessage({
+                    type: hasNativeStore() ? "NATIVE_STORE" : "NO_NATIVE_STORE"
+                })
+            )
+            .catch(() => {});
+    if (document.readyState === "complete") register().then(tellWorker);
+    else {
+        window.addEventListener(
+            "load",
+            () => register().then(tellWorker),
+            { once: true }
+        );
+    }
 }

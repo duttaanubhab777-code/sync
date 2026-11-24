@@ -338,7 +338,7 @@ function useScrub(core, { live = false } = {}) {
    ========================================================================== */
 export function VoicePlayer({ src: remoteSrc, duration: knownDuration }) {
     // APK-তে ফোনে সেভ করা ফাইল থেকে চলে (নেট লাগে না); waveform আসল URL থেকেই বানানো, যাতে বদলে না যায়
-    const [src] = useLocalMedia(remoteSrc, "audio");
+    const [src, , dropBadLocal] = useLocalMedia(remoteSrc, "audio");
     const core = useMediaCore(knownDuration);
     const { trackRef, scrub, handlers } = useScrub(core);
     const bars = useMemo(() => makeBars(remoteSrc), [remoteSrc]);
@@ -364,7 +364,16 @@ export function VoicePlayer({ src: remoteSrc, duration: knownDuration }) {
                 scrub !== null ? "is-scrubbing" : ""
             } ${core.error ? "has-error" : ""}`}
         >
-            <audio ref={core.ref} src={src} {...core.mediaProps} />
+            <audio
+                ref={core.ref}
+                src={src}
+                {...core.mediaProps}
+                onError={e => {
+                    // ফোনের সেভ করা ফাইল চলেনি হলে সরাসরি URL-এ ফেরা; নইলে আগের মতো error দেখানো
+                    if (src && src !== remoteSrc) dropBadLocal();
+                    else core.mediaProps.onError?.(e);
+                }}
+            />
 
             <button
                 type="button"
@@ -440,7 +449,7 @@ export function VoicePlayer({ src: remoteSrc, duration: knownDuration }) {
    ========================================================================== */
 export function VideoPlayer({ src: remoteSrc, duration: knownDuration, width, height }) {
     // APK-তে Wi-Fi হলে অটো সেভ, মোবাইল ডেটায় প্লে চাপলে সেভ; সেভ থাকলে নেট ছাড়াই চলে
-    const [src, saveVideo] = useLocalMedia(remoteSrc, "video");
+    const [src, saveVideo, dropBadLocal] = useLocalMedia(remoteSrc, "video");
     const core = useMediaCore(knownDuration);
     const { trackRef, scrub, handlers } = useScrub(core, { live: true });
     const wrapRef = useRef(null);
@@ -544,6 +553,10 @@ export function VideoPlayer({ src: remoteSrc, duration: knownDuration, width, he
                 onPlay={e => {
                     core.mediaProps.onPlay?.(e);
                     saveVideo();
+                }}
+                onError={e => {
+                    if (src && src !== remoteSrc) dropBadLocal();
+                    else core.mediaProps.onError?.(e);
                 }}
             />
 

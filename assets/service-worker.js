@@ -4,7 +4,7 @@
 // - HTML: network-first (৪ সেকেন্ডের বেশি লাগলে cached shell), তাই ধীর নেটে অ্যাপ আটকে থাকে না
 // - Cloudinary ছবি (প্রোফাইল ছবি, চ্যাটের ছবি, স্টোরি ছবি, wallpaper): একবার নামলে ডিভাইসে থাকে (সংখ্যার সীমা নেই)
 // - /api ও /socket.io কখনো cache হয় না
-// - ভিডিও/অডিও cache হয় না (বড় ফাইল + Range request), সেগুলো ব্রাউজারের নিজস্ব cache চালায়
+// - Cloudinary ভিডিও/ভয়েস: পুরো ফাইল একবার নেমে ডিভাইসে থাকে; Range (seek) রিকোয়েস্ট cache থেকেই মেটানো হয়
 //
 // গুরুত্বপূর্ণ: নিচের "স্থায়ী" cache (images, wallpapers) ভার্সন বাড়ালেও মোছা হয় না।
 // শুধু shell/assets পুরনো ভার্সন মোছা হয়। ইউজার নিজে ব্রাউজার/অ্যাপ ডেটা মুছলে তবেই ছবি যায়।
@@ -12,7 +12,8 @@ const VERSION = "v6";
 const SHELL_CACHE = `sync-shell-${VERSION}`;
 const ASSET_CACHE = `sync-assets-${VERSION}`;
 const IMAGE_CACHE = "sync-images-v1"; // স্থায়ী
-const PERSISTENT_CACHES = [IMAGE_CACHE, "sync-wallpapers-v1"]; // কখনো মোছা হবে না
+const MEDIA_CACHE = "sync-media-v1"; // স্থায়ী (ভিডিও/ভয়েস)
+const PERSISTENT_CACHES = [IMAGE_CACHE, MEDIA_CACHE, "sync-wallpapers-v1", "sync-meta-v1"]; // কখনো মোছা হবে না
 // ছবির সংখ্যার সীমা নেই (WhatsApp-এর মতো সব সেভ থাকে)। শুধু ডিভাইসের স্টোরেজ quota-র
 // এই অংশ ভরলে তবেই সবচেয়ে পুরনো ছবিগুলো সরানো হয়, যাতে ব্রাউজার পুরো cache একসাথে না মোছে।
 const QUOTA_LIMIT = 0.8;
@@ -61,9 +62,39 @@ self.addEventListener("activate", event => {
     );
 });
 
-// Android APK-তে ছবি/ভিডিও ফোনের Data স্টোরেজে ফাইল হিসেবে সেভ হয় (nativeMedia.js), তাই সেখানে
-// এখানে আবার cache করা হয় না (দুবার জায়গা নিত)। PWA/ওয়েবসাইটে এই cache-ই ব্যবহার হয়।
-const IN_APK = /SyncApp\//.test((self.navigator && self.navigator.userAgent) || "");
+// Android APK-তে প্লাগিন থাকলে ছবি/ভিডিও ফোনের Data স্টোরেজে ফাইল হিসেবে সেভ হয় (nativeMedia.js)।
+// তখন পেজ আমাদের জানায় (NATIVE_STORE মেসেজ) আর এখানে আবার cache করা হয় না (দুবার জায়গা নিত)।
+// প্লাগিন না থাকলে (পুরনো APK) বা PWA/ওয়েবসাইটে এই cache-ই কাজ করে।
+const NATIVE_FLAG = "/__native_store__";
+const META_CACHE = "sync-meta-v1";
+let nativeStore = null;
+const hasNativeStore = async () => {
+    if (nativeStore === null) {
+        try {
+            const c = await caches.open(META_CACHE);
+            nativeStore = Boolean(await c.match(NATIVE_FLAG));
+        } catch {
+            nativeStore = false;
+        }
+    }
+    return nativeStore;
+};
+self.addEventListener("message", event => {
+    const type = event.data && event.data.type;
+    if (type !== "NATIVE_STORE" && type !== "NO_NATIVE_STORE") return;
+    const on = type === "NATIVE_STORE";
+    nativeStore = on;
+    event.waitUntil(
+        caches
+            .open(META_CACHE)
+            .then(c =>
+                on
+                    ? c.put(NATIVE_FLAG, new Response("1"))
+                    : c.delete(NATIVE_FLAG)
+            )
+            .catch(() => {})
+    );
+});
 
 const isCloudinaryImage = url =>
     url.hostname === "res.cloudinary.com" && url.pathname.includes("/image/");
@@ -82,18 +113,107 @@ const trimImages = async () => {
     if (trimming) return;
     trimming = true;
     try {
-        const cache = await caches.open(IMAGE_CACHE);
-        // কোটা ভরা থাকলে পুরনো থেকে ৫০টা করে সরানো, যতক্ষণ না জায়গা হয়
+        // কোটা ভরা থাকলে আগে পুরনো ভিডিও, তারপর পুরনো ছবি সরানো (৫০টা করে), যতক্ষণ না জায়গা হয়
         while (await overQuota()) {
-            const keys = await cache.keys();
-            if (!keys.length) break;
-            await Promise.all(keys.slice(0, TRIM_BATCH).map(k => cache.delete(k)));
+            let removed = 0;
+            for (const name of [MEDIA_CACHE, IMAGE_CACHE]) {
+                const cache = await caches.open(name);
+                const keys = await cache.keys();
+                if (!keys.length) continue;
+                const batch = keys.slice(0, TRIM_BATCH);
+                await Promise.all(batch.map(k => cache.delete(k)));
+                removed += batch.length;
+                break;
+            }
+            if (!removed) break;
         }
     } catch {
         /* ignore */
     } finally {
         trimming = false;
     }
+};
+
+const isCloudinaryMedia = url =>
+    url.hostname === "res.cloudinary.com" && url.pathname.includes("/video/");
+
+// cache-এ থাকা পূর্ণ ফাইল থেকে Range রিকোয়েস্টের উত্তর (ভিডিও seek/স্ট্রিমের জন্য দরকার)
+const serveRange = async (request, cached) => {
+    const range = request.headers.get("range");
+    if (!range) return cached;
+    const m = /bytes=(\d*)-(\d*)/.exec(range);
+    if (!m) return cached;
+    const blob = await cached.blob();
+    const size = blob.size;
+    let start = m[1] === "" ? Math.max(0, size - Number(m[2])) : Number(m[1]);
+    let end = m[1] === "" || m[2] === "" ? size - 1 : Number(m[2]);
+    end = Math.min(end, size - 1);
+    if (start > end || start >= size) {
+        return new Response(null, {
+            status: 416,
+            headers: { "Content-Range": `bytes */${size}` }
+        });
+    }
+    return new Response(blob.slice(start, end + 1), {
+        status: 206,
+        headers: {
+            "Content-Type": cached.headers.get("Content-Type") || "video/mp4",
+            "Content-Range": `bytes ${start}-${end}/${size}`,
+            "Content-Length": String(end - start + 1),
+            "Accept-Ranges": "bytes"
+        }
+    });
+};
+
+const inflightMedia = new Map();
+const fetchFullMedia = url => {
+    if (inflightMedia.has(url)) return inflightMedia.get(url);
+    const job = (async () => {
+        try {
+            const res = await fetch(url, { mode: "cors", credentials: "omit" });
+            if (!res || res.status !== 200) return;
+            const cache = await caches.open(MEDIA_CACHE);
+            await cache.put(url, res);
+            await trimImages();
+        } catch {
+            /* ignore */
+        } finally {
+            inflightMedia.delete(url);
+        }
+    })();
+    inflightMedia.set(url, job);
+    return job;
+};
+
+const mediaResponse = async (event, request) => {
+    const cache = await caches.open(MEDIA_CACHE);
+    const cached = await cache.match(request.url);
+    if (cached) return serveRange(request, cached);
+    if (!request.headers.has("range")) {
+        // পুরো ফাইল চাওয়া হলে (যেমন আগে-নামানো): একবারই নামিয়ে ব্রাউজারকে দেওয়া ও cache-এ রাখা
+        try {
+            const res = await fetch(request.url, {
+                mode: "cors",
+                credentials: "omit"
+            });
+            if (res && res.status === 200) {
+                const copy = res.clone();
+                event.waitUntil(
+                    cache
+                        .put(request.url, copy)
+                        .then(trimImages)
+                        .catch(() => {})
+                );
+            }
+            return res;
+        } catch {
+            return fetch(request);
+        }
+    }
+    // প্লেয়ার Range চাইছে: এখনকার প্লে নেট থেকেই চলুক, পাশাপাশি পুরো ফাইল cache করা শুরু
+    // (পরের বার নেট লাগবে না)
+    event.waitUntil(fetchFullMedia(request.url));
+    return fetch(request);
 };
 
 const imageResponse = async request => {
@@ -128,9 +248,21 @@ self.addEventListener("fetch", event => {
     const url = new URL(request.url);
 
     // Cloudinary ছবি: ডিভাইসে সেভ, cache-first
-    if (!IN_APK && isCloudinaryImage(url) && request.destination !== "video") {
+    if (isCloudinaryImage(url)) {
         if (request.headers.has("range")) return;
-        event.respondWith(imageResponse(request));
+        event.respondWith(
+            hasNativeStore().then(native =>
+                native ? fetch(request) : imageResponse(request)
+            )
+        );
+        return;
+    }
+    if (isCloudinaryMedia(url)) {
+        event.respondWith(
+            hasNativeStore().then(native =>
+                native ? fetch(request) : mediaResponse(event, request)
+            )
+        );
         return;
     }
 

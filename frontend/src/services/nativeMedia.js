@@ -122,6 +122,9 @@ const dropEntry = async (url, deleteFile = true) => {
     }
 };
 
+// ফোনের ফাইল চালাতে না পারলে (নষ্ট/URL কাজ করছে না) তালিকা থেকে বাদ দেওয়া, যাতে সরাসরি URL-এ ফিরে যায়
+export const dropLocalMedia = url => dropEntry(url, true);
+
 // ডিভাইসে সেভ করা ফাইল (থাকলে) — নেটে যায় না। না থাকলে বা নষ্ট হলে "" ফেরত।
 export const lookupLocalMedia = async url => {
     const fs = getFs();
@@ -245,7 +248,7 @@ if (typeof window !== "undefined") {
 // - PWA/ওয়েবসাইট (বা পুরনো APK): সরাসরি url (service worker cache করে)
 // - APK: আগে ডিভাইসের সেভ করা ফাইল খোঁজে (কয়েক ms) — থাকলে সেটাই, নেট লাগে না।
 //   না থাকলে url দেখায় আর সেভ করে রাখে, পরের বার ফাইল থেকে চলে।
-// ফেরত: [src, saveNow] — ভিডিওতে মোবাইল ডেটায় প্লে চাপলে saveNow() ডাকলে সেভ শুরু হয়।
+// ফেরত: [src, saveNow, onError] — ভিডিওতে মোবাইল ডেটায় প্লে চাপলে saveNow() ডাকলে সেভ শুরু হয়।
 export const useLocalMedia = (url, kind = "image") => {
     const native = hasNativeStore();
     const [state, setState] = useState({ url: "", src: "" });
@@ -272,7 +275,44 @@ export const useLocalMedia = (url, kind = "image") => {
         if (native && url) ensureLocalMedia(url, kind);
     }, [native, url, kind]);
 
-    if (!url) return ["", saveNow];
-    if (!native) return [url, saveNow];
-    return [state.url === url ? state.src : peekLocalMedia(url), saveNow];
+    // সেভ করা ফাইল চলল না: তালিকা থেকে বাদ দিয়ে সরাসরি URL দেখানো (ছবি/ভিডিও ভাঙা দেখাবে না)
+    const onError = useCallback(() => {
+        if (!native || !url) return;
+        dropLocalMedia(url).finally(() => setState({ url, src: url }));
+    }, [native, url]);
+
+    if (!url) return ["", saveNow, onError];
+    if (!native) return [url, saveNow, onError];
+    return [state.url === url ? state.src : peekLocalMedia(url), saveNow, onError];
+};
+
+// ---------- আগে থেকে নামিয়ে রাখা (যেমন স্টোরি তালিকা আসা মাত্র) ----------
+// খুললে তাৎক্ষণিক দেখায়, দ্বিতীয়বার নেট লাগে না।
+// - APK: ফোনের Data স্টোরেজে ফাইল হিসেবে সেভ
+// - PWA/ওয়েবসাইট: fetch করলে service worker নিজে cache-এ রেখে দেয়
+// Data Saver চালু থাকলে কিছু নামায় না; ভিডিও শুধু Wi-Fi/ইথারনেটে (বা ডেস্কটপে যেখানে ধরন জানা যায় না)।
+const prefetched = new Set();
+export const prefetchMedia = items => {
+    try {
+        const conn = navigator.connection;
+        if (conn && conn.saveData) return;
+        const unknown = !conn || !conn.type;
+        const videoOk = onUnmetered() || (!hasNativeStore() && unknown);
+        for (const item of items || []) {
+            const url = item && item.url;
+            const kind = (item && item.kind) || "image";
+            if (!url || !/^https?:\/\//i.test(url) || prefetched.has(url)) continue;
+            if (kind === "video" && !videoOk) continue;
+            prefetched.add(url);
+            if (hasNativeStore()) {
+                ensureLocalMedia(url, kind);
+            } else {
+                fetch(url, { mode: "cors", credentials: "omit" })
+                    .then(r => r.blob())
+                    .catch(() => prefetched.delete(url));
+            }
+        }
+    } catch {
+        /* ignore */
+    }
 };

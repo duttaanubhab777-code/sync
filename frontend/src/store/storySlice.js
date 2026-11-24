@@ -1,12 +1,27 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { api, extractErrorMessage } from "../services/api.js";
+import { prefetchMedia } from "../services/nativeMedia.js";
 
 export const fetchStories = createAsyncThunk(
     "story/fetchStories",
     async (_, { rejectWithValue }) => {
         try {
             const res = await api.get("/api/v1/stories");
-            return res.data?.data || [];
+            const groups = res.data?.data || [];
+            // স্টোরির ছবি/ভিডিও আগেভাগেই ডিভাইসে নামিয়ে রাখা, যাতে খুললে সাথে সাথে চলে
+            const items = [];
+            for (const g of Array.isArray(groups) ? groups : []) {
+                for (const st of g.stories || []) {
+                    if (st?.media?.url && (st.type === "image" || st.type === "video")) {
+                        items.push({
+                            url: st.media.url,
+                            kind: st.type === "video" ? "video" : "story"
+                        });
+                    }
+                }
+            }
+            prefetchMedia(items);
+            return groups;
         } catch (err) {
             return rejectWithValue(
                 extractErrorMessage(err, "Failed to load stories")
