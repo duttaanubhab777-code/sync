@@ -340,7 +340,7 @@ You can read the source code without configuring every external service. To test
 - Sound feedback, animated interface elements and consistent Sync branding
 
 <a id="contact"></a>
-<img src="docs/assets/headers/contact.svg" alt="Contact Sync" height="64"/>
+### Contact Sync
 
 The public Contact page allows visitors to submit a name, email address, subject and message without signing in. The form sends submissions to the separately hosted Email Sender service.
 
