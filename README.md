@@ -773,6 +773,127 @@ Additional message endpoints include `GET /api/v1/messages/:id/info` (sender-onl
 
 The detailed request/response contract is maintained in [`docs/API.md`](docs/API.md).
 
+### Development workflow
+
+Use this workflow when making a change:
+1. Pull the latest changes from the branch you are working on.
+2. Create a focused feature branch for a larger change.
+3. Read the existing page, component, route, controller or service before editing it.
+4. Keep UI, API validation, business logic and database operations in their appropriate layers.
+5. Update API documentation when a route or response changes.
+6. Run relevant tests and builds before opening a pull request.
+7. Review the final diff. Do not include environment files, credentials, build output or unrelated files.
+
+### Run checks before submitting changes
+
+Build the production frontend and install backend dependencies from the repository root:
+
+~~~bash
+npm run build
+~~~
+
+Run the Node backend test suite:
+
+~~~bash
+npm --prefix node-backend test
+~~~
+
+Run the Python service tests:
+
+~~~bash
+cd python-service
+python -m unittest discover -s tests -v
+cd ..
+~~~
+
+Build only the frontend:
+
+~~~bash
+npm run build:frontend
+~~~
+
+A successful build does not verify database connectivity, email delivery, media uploads or push notifications. Perform a manual smoke test for the feature you changed.
+
+### Troubleshooting
+
+| Problem | What to check |
+| --- | --- |
+| node or npm is not recognised | Install Node.js 20.19+ and reopen the terminal |
+| Dependency installation fails | Check Node version, network access and the first error printed by npm |
+| Backend exits immediately | Confirm node-backend/.env exists and required values are present |
+| MongoDB connection fails | Check MONGODB_URI, database network access rules and database credentials |
+| Browser reports a CORS error | Check FRONTEND_URL, Python ALLOWED_ORIGINS and the actual browser origin |
+| Frontend loads but API requests fail | Confirm Node is running and the Vite proxy points to the correct port |
+| Socket.IO does not connect | Check backend URL, proxy configuration, authentication token and browser console |
+| Media signing fails | Check Python health, matching JWT secrets and Cloudinary configuration |
+| Media uploads but remote deletion fails | Configure the Node Cloudinary API key and secret; database deletion can still succeed without remote cleanup credentials |
+| Signup OTP email is not delivered | Check Gmail App Password, matching MAIL_RELAY_SECRET, Python health and Render logs |
+| Push notifications do not arrive | Check browser permission/VAPID settings or Firebase service-account configuration and Android permissions |
+| Android app opens an offline page | Check internet access and whether the hosted web service is responding |
+| Local changes do not appear | Check the active branch, terminal errors, browser cache and whether the relevant service was restarted |
+
+Read terminal output and hosting logs first. Remove personal data, tokens, email addresses and secret values before sharing logs publicly.
+
+### Contributing
+
+Contributions should keep the project understandable and maintainable.
+
+- Prefer small, focused changes over unrelated edits in one commit.
+- Follow the existing JavaScript ES module and React component patterns.
+- Keep routes, controllers, services, models and validators separated by responsibility.
+- Validate incoming API data on the server; never rely only on frontend validation.
+- Avoid adding a dependency when an existing project library can do the job.
+- Keep layouts responsive and test both mobile and desktop sizes.
+- Add or update tests for changed backend behaviour.
+- Update the relevant documentation when setup, configuration, API behaviour or deployment steps change.
+- Never commit .env, config.py, private keys, tokens, local databases or generated build folders.
+
+Suggested commit message style:
+
+~~~text
+feat: add conversation search filters
+fix: preserve composer focus after sending
+docs: improve local development guide
+refactor: simplify media upload handling
+test: cover refresh token rotation
+~~~
+
+### Frequently asked questions
+
+**Do I need to run every service to open the frontend?**
+
+No. You can start the frontend independently, but features that call the backend will not work until Node is running. Media signing and OTP email also need the Python service and external configuration.
+
+**Does Sync store uploaded images and videos in MongoDB?**
+
+No. Media files are uploaded directly to Cloudinary. MongoDB stores application records and media references or metadata.
+
+**Why are there two backend services?**
+
+Node handles the main application API and real-time messaging. The smaller Python service handles Cloudinary upload signing and protected OTP email delivery.
+
+**Does the Android app contain a separate frontend?**
+
+The Capacitor Android shell loads the live Sync web application and adds native Android capabilities. Web frontend and Node backend changes normally deploy through the web service. Changes to native Android code, permissions or plugins require a new APK build.
+
+**Is Sync end-to-end encrypted?**
+
+No. Sync is not presented as an end-to-end encrypted messenger. Review the security notice below and do not use it for highly sensitive conversations.
+
+**Where can I find complete endpoint documentation?**
+
+See docs/API.md, which documents the Node REST API and Python service endpoints.
+
+### Additional project guides
+
+- [API reference](docs/API.md)
+- [Python service README](python-service/README.md)
+- [PythonAnywhere deployment guide](docs/PYTHONANYWHERE_DEPLOYMENT_GUIDE.md)
+- [Signup OTP and mail relay setup](docs/OTP_AND_MAIL_RELAY_SETUP_GUIDE.md)
+- [Contact page setup](docs/CONTACT_PAGE_SETUP.md)
+- [Android release notification setup](docs/APP_UPDATE_NOTIFICATION.md)
+- [Android wrapper and APK workflow](mobile/README.md)
+- [Screenshot asset guidelines](docs/screenshots/README.md)
 <a id="security"></a>
 <img src="docs/assets/headers/security.svg" alt="Security" height="64"/>
 
