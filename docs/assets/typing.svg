@@ -1,12 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 50" width="700" height="50" role="img" aria-label="Sync highlights">
-<g transform="translate(30 0)"><clipPath id="c0"><rect x="0" y="0" height="50" width="0"><animate attributeName="width" values="0;0;640;640;0" keyTimes="0;0.000;0.138;0.237;0.250" dur="12.8s" repeatCount="indefinite"/></rect></clipPath>
-<g clip-path="url(#c0)"><text x="0" y="34" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Arial, sans-serif" font-size="26" fill="#4ade80" font-weight="600">Real-time one-to-one &amp; group chat</text></g>
-<clipPath id="c1"><rect x="0" y="0" height="50" width="0"><animate attributeName="width" values="0;0;640;640;0" keyTimes="0;0.250;0.388;0.487;0.500" dur="12.8s" repeatCount="indefinite"/></rect></clipPath>
-<g clip-path="url(#c1)"><text x="0" y="34" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Arial, sans-serif" font-size="26" fill="#4ade80" font-weight="600">24-hour Stories with view receipts</text></g>
-<clipPath id="c2"><rect x="0" y="0" height="50" width="0"><animate attributeName="width" values="0;0;640;640;0" keyTimes="0;0.500;0.637;0.738;0.750" dur="12.8s" repeatCount="indefinite"/></rect></clipPath>
-<g clip-path="url(#c2)"><text x="0" y="34" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Arial, sans-serif" font-size="26" fill="#4ade80" font-weight="600">Push notifications &amp; installable PWA</text></g>
-<clipPath id="c3"><rect x="0" y="0" height="50" width="0"><animate attributeName="width" values="0;0;640;640;0" keyTimes="0;0.750;0.887;0.988;1.000" dur="12.8s" repeatCount="indefinite"/></rect></clipPath>
-<g clip-path="url(#c3)"><text x="0" y="34" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Arial, sans-serif" font-size="26" fill="#4ade80" font-weight="600">Super Admin control center &amp; moderation</text></g>
-</g>
-<rect x="0" y="12" width="6" height="26" rx="3" fill="#22e57d"><animate attributeName="opacity" values="1;0.1;1" dur="1s" repeatCount="indefinite"/></rect>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 50" width="700" height="50" role="img" aria-label="Sync product highlights">
+<defs><linearGradient id="typeGlow" x1="0" x2="1"><stop offset="0" stop-color="#4ade80"/><stop offset=".55" stop-color="#22d3ee"/><stop offset="1" stop-color="#a78bfa"/></linearGradient></defs>
+<g transform="translate(30 0)" font-family="Segoe UI, Inter, system-ui, Arial, sans-serif" font-size="25" font-weight="650" fill="url(#typeGlow)">
+<clipPath id="line0"><rect width="0" height="50"><animate attributeName="width" values="0;0;640;640;0" keyTimes="0;0;.138;.237;.25" dur="16s" repeatCount="indefinite"/></rect></clipPath><text x="0" y="34" clip-path="url(#line0)">Background uploads that survive app restarts</text>
+<clipPath id="line1"><rect width="0" height="50"><animate attributeName="width" values="0;0;640;640;0" keyTimes=".25;.25;.388;.487;.5" dur="16s" repeatCount="indefinite"/></rect></clipPath><text x="0" y="34" clip-path="url(#line1)">A buttery-smooth, gesture-rich Stories player</text>
+<clipPath id="line2"><rect width="0" height="50"><animate attributeName="width" values="0;0;640;640;0" keyTimes=".5;.5;.638;.737;.75" dur="16s" repeatCount="indefinite"/></rect></clipPath><text x="0" y="34" clip-path="url(#line2)">QR profiles, scan-to-chat and native sharing</text>
+<clipPath id="line3"><rect width="0" height="50"><animate attributeName="width" values="0;0;640;640;0" keyTimes=".75;.75;.888;.987;1" dur="16s" repeatCount="indefinite"/></rect></clipPath><text x="0" y="34" clip-path="url(#line3)">Offline-first media storage across web and Android</text></g>
+<rect x="0" y="12" width="6" height="26" rx="3" fill="#4ade80"><animate attributeName="opacity" values="1;.18;1" dur="1.1s" repeatCount="indefinite"/><animate attributeName="y" values="12;9;12" dur="1.1s" repeatCount="indefinite"/></rect></svg>
