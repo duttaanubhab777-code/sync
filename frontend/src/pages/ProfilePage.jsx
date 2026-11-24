@@ -19,6 +19,7 @@ import {
 import Avatar from "../components/Avatar.jsx";
 import SyncLogo from "../components/SyncLogo.jsx";
 import ChangePasswordCard from "../components/ChangePasswordCard.jsx";
+import SavedMediaCard from "../components/SavedMediaCard.jsx";
 import EnableNotifications from "../components/notifications/EnableNotifications.jsx";
 import useSignOut from "../hooks/useSignOut.js";
 import {
@@ -304,6 +305,8 @@ export default function ProfilePage() {
                 </div>
 
                 <ChangePasswordCard email={user?.email || ""} />
+
+                <SavedMediaCard />
 
                 <div className="sync-profile-card sync-signout-card">
                     <div>
