@@ -12,6 +12,7 @@ import {
     dequeuePendingMessage,
     enqueuePendingMessage,
     fetchConversations,
+    hydratePendingQueue,
     markMessageFailed,
     receiveNewMessage,
     removeConversation,
@@ -34,6 +35,91 @@ const typingTimers = new Map();
 
 export const getSocket = () => socket;
 
+// ---- অফলাইনে পাঠানো মেসেজের queue ডিভাইসে রাখা (অ্যাপ বন্ধ/রিলোড হলেও হারাবে না) ----
+const PENDING_KEY = "sync_pending_queue_v1";
+
+const persistPendingQueue = () => {
+    try {
+        const state = store.getState();
+        const userId = state.auth.user?._id;
+        const queue = state.chat.pendingQueue || [];
+        if (!userId || queue.length === 0) {
+            localStorage.removeItem(PENDING_KEY);
+            return;
+        }
+        localStorage.setItem(PENDING_KEY, JSON.stringify({ userId, queue }));
+    } catch {
+        /* storage ভরা/বন্ধ: মেমোরির queue দিয়েই চলবে */
+    }
+};
+
+export const clearPersistedPendingQueue = () => {
+    try {
+        localStorage.removeItem(PENDING_KEY);
+    } catch {
+        /* ignore */
+    }
+};
+
+const loadPersistedPendingQueue = () => {
+    try {
+        const raw = localStorage.getItem(PENDING_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        const userId = store.getState().auth.user?._id;
+        if (!userId || String(data?.userId) !== String(userId)) return;
+        if (Array.isArray(data.queue) && data.queue.length > 0) {
+            store.dispatch(hydratePendingQueue(data.queue));
+        }
+    } catch {
+        /* নষ্ট ডেটা উপেক্ষা */
+    }
+};
+
+// ack-এর জন্য সময়সীমা সহ emit: নেট মাঝপথে গেলে ack কখনো আসত না, মেসেজ চিরকাল "sending" থাকত
+export const emitWithAck = (event, payload, timeoutMs = 20000) =>
+    new Promise(resolve => {
+        if (!socket || !socket.connected) {
+            return resolve({ ok: false, error: "OFFLINE", retryable: true });
+        }
+        socket.timeout(timeoutMs).emit(event, payload, (err, ack) => {
+            if (err) return resolve({ ok: false, error: "TIMEOUT", retryable: true });
+            resolve(ack || { ok: false, error: "NO_ACK", retryable: true });
+        });
+    });
+
+// সার্ভার যে ব্যর্থতায় আবার চেষ্টা করা অর্থহীন (যেমন ব্লক, সদস্য নয়, ভুল ডেটা)
+const PERMANENT_SEND_ERRORS = new Set([
+    "INVALID_PAYLOAD",
+    "FORBIDDEN_NOT_MEMBER",
+    "ONLY_ADMINS_CAN_MESSAGE",
+    "BLOCKED",
+    "EMPTY_MESSAGE",
+    "INVALID_LOCATION",
+    "INVALID_CONTACT",
+    "INVALID_MEDIA_URL",
+    "MESSAGE_TOO_LONG",
+    "INVALID_REPLY"
+]);
+export const isPermanentSendError = code => PERMANENT_SEND_ERRORS.has(String(code || ""));
+
+let networkListenersAttached = false;
+// নেট ফিরলে বা অ্যাপ সামনে এলে অপেক্ষা না করে সাথে সাথে socket জোড়া লাগানো
+const attachNetworkListeners = () => {
+    if (networkListenersAttached) return;
+    networkListenersAttached = true;
+    const reconnectNow = () => {
+        if (socket && !socket.connected) {
+            socket.auth = { token: getStoredToken() };
+            socket.connect();
+        }
+    };
+    window.addEventListener("online", reconnectNow);
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") reconnectNow();
+    });
+};
+
 export const connectSocket = () => {
     const token = getStoredToken();
     if (!token) return null;
@@ -54,13 +140,19 @@ export const connectSocket = () => {
         transports: ["websocket", "polling"],
         reconnection: true,
         reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000
+        reconnectionDelayMax: 5000,
+        reconnectionAttempts: Infinity,
+        timeout: 15000
     });
+
+    loadPersistedPendingQueue();
+    attachNetworkListeners();
 
     socket.on("connect", () => {
         store.dispatch(setSocketStatus({ connected: true, reconnecting: false }));
         store.dispatch(syncMissedMessages());
         flushPendingQueue();
+        window.dispatchEvent(new CustomEvent("sync:socket-connect"));
     });
 
     socket.on("disconnect", () => {
@@ -322,42 +414,48 @@ export const sendSocketMessage = payload => {
         replyTo: replyToMessage?._id || null
     };
 
-    if (!socket || !socket.connected) {
+    const queueForLater = () => {
         store.dispatch(enqueuePendingMessage(wirePayload));
-        return Promise.resolve({ ok: false, queued: true });
+        persistPendingQueue();
+        return { ok: false, queued: true };
+    };
+
+    if (!socket || !socket.connected) {
+        return Promise.resolve(queueForLater());
     }
 
-    return new Promise(resolve => {
-        socket.emit("message:send", wirePayload, ack => {
-            if (ack?.ok && ack.message) {
-                store.dispatch(
-                    confirmMessageSent({
-                        clientMsgId,
-                        message: ack.message
-                    })
-                );
-                store.dispatch(dequeuePendingMessage(clientMsgId));
-                resolve(ack);
-            } else {
-                store.dispatch(
-                    markMessageFailed({
-                        conversationId,
-                        clientMsgId,
-                        error: ack?.error || "SEND_ERROR"
-                    })
-                );
-                playSound("error");
-                resolve(ack || { ok: false, error: "SEND_ERROR" });
-            }
-        });
+    return emitWithAck("message:send", wirePayload).then(ack => {
+        if (ack?.ok && ack.message) {
+            store.dispatch(confirmMessageSent({ clientMsgId, message: ack.message }));
+            store.dispatch(dequeuePendingMessage(clientMsgId));
+            persistPendingQueue();
+            return ack;
+        }
+        // নেট সমস্যা/টাইমআউট: ব্যর্থ না দেখিয়ে queue-তে রাখা, নেট এলে নিজে যাবে
+        if (ack?.retryable || !isPermanentSendError(ack?.error)) {
+            return queueForLater();
+        }
+        store.dispatch(
+            markMessageFailed({
+                conversationId,
+                clientMsgId,
+                error: ack?.error || "SEND_ERROR"
+            })
+        );
+        playSound("error");
+        return ack;
     });
 };
 
-export const flushPendingQueue = () => {
-    if (!socket || !socket.connected) return;
-    const queue = store.getState().chat.pendingQueue || [];
-    for (const item of queue) {
-        socket.emit("message:send", item, ack => {
+let flushing = false;
+export const flushPendingQueue = async () => {
+    if (flushing || !socket || !socket.connected) return;
+    flushing = true;
+    try {
+        const queue = [...(store.getState().chat.pendingQueue || [])];
+        for (const item of queue) {
+            if (!socket || !socket.connected) break;
+            const ack = await emitWithAck("message:send", item);
             if (ack?.ok && ack.message) {
                 store.dispatch(
                     confirmMessageSent({
@@ -366,8 +464,22 @@ export const flushPendingQueue = () => {
                     })
                 );
                 store.dispatch(dequeuePendingMessage(item.clientMsgId));
+            } else if (!ack?.retryable && isPermanentSendError(ack?.error)) {
+                store.dispatch(
+                    markMessageFailed({
+                        conversationId: item.conversationId,
+                        clientMsgId: item.clientMsgId,
+                        error: ack?.error || "SEND_ERROR"
+                    })
+                );
+                store.dispatch(dequeuePendingMessage(item.clientMsgId));
+            } else if (ack?.retryable) {
+                break; // নেট আবার গেছে; পরের বার connect হলে আবার চলবে
             }
-        });
+        }
+    } finally {
+        flushing = false;
+        persistPendingQueue();
     }
 };
 

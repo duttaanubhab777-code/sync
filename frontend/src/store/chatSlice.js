@@ -310,6 +310,38 @@ const chatSlice = createSlice({
                 state.pendingQueue.push(payload);
             }
         },
+        hydratePendingQueue(state, action) {
+            for (const item of action.payload || []) {
+                if (
+                    item?.clientMsgId &&
+                    !state.pendingQueue.some(p => p.clientMsgId === item.clientMsgId)
+                ) {
+                    state.pendingQueue.push(item);
+                }
+            }
+        },
+        // ব্যর্থ মেসেজ আবার "পাঠানো হচ্ছে" অবস্থায় (Retry চাপলে)
+        markMessageRetrying(state, action) {
+            const { conversationId, clientMsgId } = action.payload;
+            const bucket = ensureConvBucket(state, conversationId);
+            const msg = bucket.items.find(m => m.clientMsgId === clientMsgId);
+            if (msg) {
+                msg.optimistic = true;
+                msg.failed = false;
+                msg.errorCode = null;
+            }
+        },
+        // বাতিল/মুছে ফেলা আপলোড-মেসেজ চ্যাট থেকে সরানো
+        removeLocalMessage(state, action) {
+            const { conversationId, clientMsgId } = action.payload;
+            const bucket = state.messagesByConv[String(conversationId)];
+            if (bucket) {
+                bucket.items = bucket.items.filter(m => m.clientMsgId !== clientMsgId);
+            }
+            state.pendingQueue = state.pendingQueue.filter(
+                p => p.clientMsgId !== clientMsgId
+            );
+        },
         dequeuePendingMessage(state, action) {
             const clientMsgId = action.payload;
             state.pendingQueue = state.pendingQueue.filter(
@@ -327,6 +359,13 @@ const chatSlice = createSlice({
             );
             if (idx !== -1) {
                 bucket.items[idx] = { ...message, optimistic: false, failed: false };
+                // sync/socket আগেই একই মেসেজ এনে থাকলে দ্বিতীয় কপি সরানো
+                bucket.items = bucket.items.filter(
+                    (m, i) =>
+                        i === idx ||
+                        (String(m._id) !== String(message._id) &&
+                            !(m.clientMsgId && m.clientMsgId === clientMsgId))
+                );
             } else {
                 bucket.items.push(message);
             }
@@ -665,7 +704,17 @@ const chatSlice = createSlice({
                     );
                     bucket.items = [...older, ...bucket.items];
                 } else {
-                    bucket.items = messages;
+                    // চ্যাট আবার খুললে/রিফ্রেশে যেসব মেসেজ এখনো আপলোড বা পাঠানো চলছে সেগুলো হারাবে না
+                    const serverClientIds = new Set(
+                        messages.map(m => m.clientMsgId).filter(Boolean)
+                    );
+                    const keep = bucket.items.filter(
+                        m =>
+                            (m.optimistic || m.failed) &&
+                            m.clientMsgId &&
+                            !serverClientIds.has(m.clientMsgId)
+                    );
+                    bucket.items = keep.length ? [...messages, ...keep] : messages;
                 }
 
              })
@@ -683,7 +732,9 @@ const chatSlice = createSlice({
                     const bucket = state.messagesByConv[convId];
                     if (bucket) {
                         const idx = bucket.items.findIndex(
-                            x => String(x._id) === String(m._id)
+                            x =>
+                                String(x._id) === String(m._id) ||
+                                (x.clientMsgId && x.clientMsgId === m.clientMsgId)
                         );
                         if (idx === -1) bucket.items.push(m);
                         else bucket.items[idx] = m;
@@ -722,6 +773,9 @@ export const {
     addOptimisticMessage,
     enqueuePendingMessage,
     dequeuePendingMessage,
+    hydratePendingQueue,
+    markMessageRetrying,
+    removeLocalMessage,
     confirmMessageSent,
     markMessageFailed,
     receiveNewMessage,

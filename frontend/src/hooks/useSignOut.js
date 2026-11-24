@@ -3,7 +3,8 @@ import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { logoutUser } from "../store/authSlice.js";
 import { resetChatState } from "../store/chatSlice.js";
-import { disconnectSocket } from "../services/socket.js";
+import { clearPersistedPendingQueue, disconnectSocket } from "../services/socket.js";
+import { resetOutbox } from "../services/outbox.js";
 import { clearAppBadge } from "../services/appBadge.js";
 import { unsubscribeDevicePush } from "../components/notifications/EnableNotifications.jsx";
 
@@ -15,6 +16,8 @@ export default function useSignOut() {
     return useCallback(async () => {
         await unsubscribeDevicePush();
         disconnectSocket();
+        clearPersistedPendingQueue();
+        await resetOutbox();
         clearAppBadge();
         dispatch(resetChatState());
         await dispatch(logoutUser());

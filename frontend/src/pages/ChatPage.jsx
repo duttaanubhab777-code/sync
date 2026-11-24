@@ -58,15 +58,13 @@ import {
     emitTypingStop,
     sendSocketMessage
 } from "../services/socket.js";
-import {
-    detectMessageTypeFromFile,
-    uploadMediaToCloudinary
-} from "../services/media.js";
+import { enqueueMediaMessage } from "../services/outbox.js";
+import UploadBubbleOverlay from "../components/chat/UploadBubbleOverlay.jsx";
+import CompressingCard from "../components/chat/CompressingCard.jsx";
 import { playSound } from "../services/sounds.js";
 import MoreMenu from "../components/MoreMenu.jsx";
 import QrCodeModal from "../components/QrCodeModal.jsx";
 import ChatFab from "../components/ChatFab.jsx";
-import UploadProgressCard from "../components/UploadProgressCard.jsx";
 import ChatWallpaperLayer from "../components/ChatWallpaperLayer.jsx";
 import { useAppUpdates, isAndroidApp } from "../services/appUpdate.js";
 import { pushBackHandler, goBackOr } from "../services/backNavigation.js";
@@ -253,13 +251,7 @@ export default function ChatPage() {
     const [showInfoDrawer, setShowInfoDrawer] = useState(false);
 
     const [draftText, setDraftText] = useState("");
-    const [uploadingMedia, setUploadingMedia] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState(0);
-    const [uploadInfo, setUploadInfo] = useState(null);
-    // ভিডিও compress চলাকালীন "Send original" চাপলে আসল ফাইলই আপলোড হয়
-    const compressAbortRef = useRef(null);
-    // আপলোড শেষে কার্ড একটু (✓ Done) দেখিয়ে তারপর সরে যায়
-    const uploadInfoTimerRef = useRef(null);
+    const uploadingMedia = false; // আপলোড এখন composer আটকায় না: ইউজার লিখতে/পাঠাতে থাকতে পারে
     const convListRef = useRef(null);
     const { hasUpdate } = useAppUpdates({ autoLoad: isAndroidApp });
     const composerInputRef = useRef(null);
@@ -528,111 +520,36 @@ export default function ChatPage() {
         }
     };
 
-    // এক বা একাধিক ফাইল একটা একটা করে আপলোড ও পাঠানো; কোনোটা ব্যর্থ হলে বাকিগুলো চলবে
+    // এক বা একাধিক ফাইল background queue-তে দেওয়া। সাথে সাথে চ্যাটে মেসেজ বসে যায় (প্রিভিউ সহ)
+    // আর আপলোড/পাঠানো পেজের বাইরে চলে: চ্যাট ছেড়ে গেলে, অ্যাপ minimize করলে বা নেট কেটে গেলেও থামে না।
     // options.asDocument = true হলে (Document বোতাম থেকে) কোনো compress হবে না, আসল ফাইলই যাবে
-    const handleFilesSelected = async (selectedFiles, options = {}) => {
+    const handleFilesSelected = (selectedFiles, options = {}) => {
         const files = Array.from(selectedFiles || []).filter(Boolean);
         if (files.length === 0 || !activeConversationId || !canSendInActive) return;
 
         const targetConvId = activeConversationId;
         let pendingCaption = draftText.trim();
         let pendingReply = replyingTo;
-        const failures = [];
-
-        clearTimeout(uploadInfoTimerRef.current);
-        setUploadingMedia(true);
-        setUploadProgress(0);
         setComposerError("");
 
-        try {
-            for (let i = 0; i < files.length; i += 1) {
-                const file = files[i];
-                const displayName =
-                    files.length > 1
-                        ? `(${i + 1}/${files.length}) ${file.name}`
-                        : file.name;
-
-                setUploadProgress(0);
-                setUploadInfo({
-                    name: displayName,
-                    size: file.size,
-                    file,
-                    phase: "preparing"
-                });
-                const abortCtrl = new AbortController();
-                compressAbortRef.current = abortCtrl;
-
-                try {
-                    const media = await uploadMediaToCloudinary(
-                        file,
-                        (pct, info) => {
-                            setUploadProgress(pct);
-                            setUploadInfo({
-                                name: displayName,
-                                size: file.size,
-                                file,
-                                ...info
-                            });
-                        },
-                        {
-                            compress: !options?.asDocument,
-                            compressSignal: abortCtrl.signal
-                        }
-                    );
-                    const msgType = detectMessageTypeFromFile(file);
-
-                    const replyForThis = pendingReply;
-                    if (replyForThis) {
-                        pendingReply = null;
-                        dispatch(
-                            setReplyTo({
-                                conversationId: targetConvId,
-                                message: null
-                            })
-                        );
-                    }
-                    const captionForThis = pendingCaption;
-                    if (captionForThis) {
-                        pendingCaption = "";
-                        setDraftText("");
-                    }
-
-                    const ack = await sendSocketMessage({
-                        conversationId: targetConvId,
-                        clientMsgId: generateClientMsgId(),
-                        type: msgType,
-                        text: captionForThis,
-                        media,
-                        replyToMessage: replyForThis
-                    });
-                    if (ack && !ack.ok && !ack.queued) {
-                        failures.push(`${file.name}: ${ack.error || "Send failed"}`);
-                    }
-                } catch (err) {
-                    failures.push(
-                        `${file.name}: ${err?.message || "Upload failed"}`
-                    );
-                }
+        for (const file of files) {
+            const replyForThis = pendingReply;
+            if (replyForThis) {
+                pendingReply = null;
+                dispatch(setReplyTo({ conversationId: targetConvId, message: null }));
             }
-
-            if (failures.length > 0) {
-                setComposerError(
-                    failures.length === 1
-                        ? failures[0]
-                        : `${failures.length} files failed (${failures[0]})`
-                );
+            const captionForThis = pendingCaption;
+            if (captionForThis) {
+                pendingCaption = "";
+                setDraftText("");
             }
-        } finally {
-            compressAbortRef.current = null;
-            setUploadingMedia(false);
-            setUploadProgress(0);
-            if (failures.length === 0) {
-                // সফল হলে ✓ Done অবস্থাটা একটু দেখিয়ে কার্ড সরানো
-                clearTimeout(uploadInfoTimerRef.current);
-                uploadInfoTimerRef.current = setTimeout(() => setUploadInfo(null), 750);
-            } else {
-                setUploadInfo(null);
-            }
+            enqueueMediaMessage({
+                file,
+                conversationId: targetConvId,
+                caption: captionForThis,
+                replyToMessage: replyForThis,
+                asDocument: Boolean(options?.asDocument)
+            });
         }
     };
 
@@ -762,40 +679,17 @@ export default function ChatPage() {
         recRafRef.current = requestAnimationFrame(loop);
     };
 
-    const uploadAndSendVoice = async (audioFile, conversationId, replyTarget) => {
-        setUploadingMedia(true);
-        setUploadProgress(0);
-        try {
-            setUploadInfo({ name: "Voice message", size: audioFile.size });
-            const media = await uploadMediaToCloudinary(
-                audioFile,
-                (pct, info) => {
-                    setUploadProgress(pct);
-                    setUploadInfo({
-                        name: "Voice message",
-                        size: audioFile.size,
-                        ...info
-                    });
-                },
-                { purpose: "voice" }
-            );
-            await sendSocketMessage({
-                conversationId,
-                clientMsgId: generateClientMsgId(),
-                type: "audio",
-                text: "",
-                media,
-                replyToMessage: replyTarget
-            });
-            if (replyTarget) {
-                dispatch(setReplyTo({ conversationId, message: null }));
-            }
-        } catch (err) {
-            setComposerError(err.message || "Voice message upload failed");
-        } finally {
-            setUploadingMedia(false);
-            setUploadProgress(0);
-            setUploadInfo(null);
+    // ভয়েস মেসেজও background queue দিয়ে যায় (নেট গেলে নিজে অপেক্ষা করে আবার পাঠায়)
+    const uploadAndSendVoice = (audioFile, conversationId, replyTarget) => {
+        enqueueMediaMessage({
+            file: audioFile,
+            conversationId,
+            replyToMessage: replyTarget,
+            purpose: "voice",
+            type: "audio"
+        });
+        if (replyTarget) {
+            dispatch(setReplyTo({ conversationId, message: null }));
         }
     };
 
@@ -1600,6 +1494,13 @@ export default function ChatPage() {
                                                     </div>
                                                 )}
 
+                                                {msg.uploadLocal &&
+                                                    (msg.optimistic || msg.failed) && (
+                                                        <UploadBubbleOverlay
+                                                            clientMsgId={msg.clientMsgId}
+                                                        />
+                                                    )}
+
                                                 <div className="sync-msg-meta">
                                                     <span className="sync-msg-time">
                                                         {formatTime(
@@ -1722,16 +1623,7 @@ export default function ChatPage() {
                                 </div>
                             )}
 
-                            {uploadInfo && (
-                                <UploadProgressCard
-                                    info={uploadInfo}
-                                    onSkip={
-                                        uploadingMedia
-                                            ? () => compressAbortRef.current?.abort()
-                                            : undefined
-                                    }
-                                />
-                            )}
+                            <CompressingCard conversationId={activeConversationId} />
 
                             {replyingTo && (
                                 <div className="sync-reply-banner">

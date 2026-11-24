@@ -62,6 +62,9 @@ perms = [
     "android.permission.VIBRATE",
     "android.permission.WAKE_LOCK",
     "android.permission.RECEIVE_BOOT_COMPLETED",
+    # আপলোড চলাকালীন অ্যাপ minimize করলেও OS যেন প্রসেস না মারে (UploadKeepAliveService)
+    "android.permission.FOREGROUND_SERVICE",
+    "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
     # নোটিফিকেশনের "Update Now" দিয়ে নামানো APK ইনস্টল করার জন্য
     "android.permission.REQUEST_INSTALL_PACKAGES",
     # অ্যাপ আইকনের unread badge সংখ্যা (বিভিন্ন কোম্পানির লঞ্চারের জন্য)
@@ -114,6 +117,12 @@ app_extras = """
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- ছবি/ভিডিও আপলোড background-এ চালু রাখার foreground service -->
+        <service
+            android:name=".UploadKeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!-- অ্যাপ আপডেট: নোটিফিকেশনের "Update Now" বাটন -> ডাউনলোড -> ইনস্টল -->
         <receiver
@@ -458,6 +467,16 @@ public class MainActivity extends BridgeActivity {
             BadgeHelper.set(MainActivity.this, 0);
         }
 
+        // আপলোড চলাকালীন foreground service চালু/বন্ধ (ওয়েব অংশের outbox ডাকে)
+        @JavascriptInterface
+        public void setUploadActive(boolean active, String text) {
+            if (active) {
+                UploadKeepAliveService.start(MainActivity.this, text);
+            } else {
+                UploadKeepAliveService.stop(MainActivity.this);
+            }
+        }
+
         @JavascriptInterface
         public void setActiveChat(String conversationId) {
             String clean = conversationId != null ? conversationId.trim() : "";
@@ -466,6 +485,131 @@ public class MainActivity extends BridgeActivity {
                 SyncMessagingService.clearConversationNotifications(MainActivity.this, clean);
             }
         }
+    }
+}
+JAVA
+
+cat > "$JAVA_DIR/UploadKeepAliveService.java" <<'JAVA'
+package com.sync.chat;
+
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.app.Service;
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.ServiceInfo;
+import android.os.Build;
+import android.os.IBinder;
+import android.os.PowerManager;
+import androidx.core.app.NotificationCompat;
+
+// ছবি/ভিডিও আপলোড চলাকালীন চালু থাকে। অ্যাপ minimize বা স্ক্রিন অফ করলেও Android প্রসেসটা মেরে ফেলে না,
+// তাই WebView-এর আপলোড (ওয়েব অংশের outbox) মাঝপথে থামে না। আপলোড শেষ হলে ওয়েব অংশ এটা বন্ধ করে দেয়।
+public class UploadKeepAliveService extends Service {
+    private static final String CHANNEL_ID = "sync_upload_v1";
+    private static final int NOTIF_ID = 7421;
+    private PowerManager.WakeLock wakeLock;
+
+    public static void start(Context ctx, String text) {
+        try {
+            Intent i = new Intent(ctx, UploadKeepAliveService.class);
+            i.putExtra("text", text == null ? "" : text);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ctx.startForegroundService(i);
+            } else {
+                ctx.startService(i);
+            }
+        } catch (Exception ignored) {
+            // অ্যাপ ব্যাকগ্রাউন্ডে থাকলে Android 12+ শুরু করতে দেয় না; তখন সাধারণ আপলোডই চলবে
+        }
+    }
+
+    public static void stop(Context ctx) {
+        try {
+            ctx.stopService(new Intent(ctx, UploadKeepAliveService.class));
+        } catch (Exception ignored) {
+        }
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        String text = intent != null ? intent.getStringExtra("text") : null;
+        if (text == null || text.isEmpty()) text = "Sending…";
+        ensureChannel();
+
+        Intent open = getPackageManager().getLaunchIntentForPackage(getPackageName());
+        PendingIntent content = null;
+        if (open != null) {
+            open.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            content = PendingIntent.getActivity(
+                this, 0, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        }
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_sync)
+            .setContentTitle("Sync")
+            .setContentText(text)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setProgress(0, 0, true);
+        if (content != null) builder.setContentIntent(content);
+        Notification notification = builder.build();
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+            } else {
+                startForeground(NOTIF_ID, notification);
+            }
+        } catch (Exception e) {
+            stopSelf();
+            return START_NOT_STICKY;
+        }
+
+        acquireWakeLock();
+        return START_NOT_STICKY;
+    }
+
+    private void ensureChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm == null || nm.getNotificationChannel(CHANNEL_ID) != null) return;
+        NotificationChannel ch = new NotificationChannel(
+            CHANNEL_ID, "Uploads", NotificationManager.IMPORTANCE_LOW);
+        ch.setDescription("Shows while photos and videos are being sent");
+        ch.setShowBadge(false);
+        nm.createNotificationChannel(ch);
+    }
+
+    private void acquireWakeLock() {
+        try {
+            if (wakeLock != null && wakeLock.isHeld()) return;
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            if (pm == null) return;
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "sync:upload");
+            wakeLock.setReferenceCounted(false);
+            wakeLock.acquire(30 * 60 * 1000L); // সর্বোচ্চ ৩০ মিনিট; আটকে থাকলেও ব্যাটারি শেষ করবে না
+        } catch (Exception ignored) {
+        }
+    }
+
+    @Override
+    public void onDestroy() {
+        try {
+            if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+        } catch (Exception ignored) {
+        }
+        wakeLock = null;
+        super.onDestroy();
+    }
+
+    @Override
+    public IBinder onBind(Intent intent) {
+        return null;
     }
 }
 JAVA

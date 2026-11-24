@@ -52,8 +52,11 @@ export default function UploadProgressCard({ info, onSkip, className = "" }) {
     const isCompress = phase === "compressing";
     const isPrepare = phase === "preparing";
     const isFinalizing = phase === "processing";
+    // নেট নেই / আবার চেষ্টা চলছে: error নয়, নিজে থেকে চালিয়ে যাবে
+    const isWaiting = phase === "waiting";
+    const waitOffline = isWaiting && info.waitReason === "offline";
     const compressPct = Number.isFinite(info.compressPct) ? info.compressPct : null;
-    const indeterminate = isPrepare || (isCompress && compressPct === null);
+    const indeterminate = isPrepare || (isCompress && compressPct === null) || isWaiting;
 
     let pct = 0;
     if (isCompress) pct = compressPct ?? 0;
@@ -68,6 +71,7 @@ export default function UploadProgressCard({ info, onSkip, className = "" }) {
     const noun = kind === "video" ? "video" : kind === "image" ? "photo" : kind === "audio" ? "audio" : "file";
     let title;
     if (isDone) title = "Done";
+    else if (isWaiting) title = waitOffline ? "Waiting for network" : "Retrying";
     else if (isCompress) title = info.compressRetry > 0 ? `Shrinking ${noun} more` : `Compressing ${noun}`;
     else if (isPrepare) title = "Getting ready";
     else if (isFinalizing) title = "Finalizing";
@@ -83,7 +87,10 @@ export default function UploadProgressCard({ info, onSkip, className = "" }) {
     // নিচের ছোট লাইনের বাঁ ও ডান পাশ
     let metaLeft = "";
     let metaRight = "";
-    if (isCompress) {
+    if (isWaiting) {
+        metaLeft = waitOffline ? "Will continue when you're back online" : "Reconnecting…";
+        metaRight = "";
+    } else if (isCompress) {
         metaLeft = formatBytes(info.originalSize || info.size) || "";
         if (Number.isFinite(info.compressDuration) && info.compressDuration > 0) {
             metaLeft = `${formatClock(info.compressCurrent)} / ${formatClock(info.compressDuration)}`;

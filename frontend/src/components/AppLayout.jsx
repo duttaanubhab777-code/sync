@@ -23,6 +23,7 @@ import { forceLogout } from "../store/authSlice.js";
 import { fetchConversations, resetChatState } from "../store/chatSlice.js";
 import { fetchStories } from "../store/storySlice.js";
 import { connectSocket, disconnectSocket } from "../services/socket.js";
+import { startOutbox, resetOutbox } from "../services/outbox.js";
 import { isPlatformAdmin } from "../App.jsx";
 import { loadWallpapers } from "../services/wallpaper.js";
 import { clearAppBadge } from "../services/appBadge.js";
@@ -80,6 +81,8 @@ export default function AppLayout() {
         dispatch(fetchStories());
         loadWallpapers(); // wallpaper তালিকা আনা + সব ছবি ডিভাইসে নামিয়ে রাখা
         connectSocket();
+        // আগের অসমাপ্ত আপলোড (অ্যাপ বন্ধ/ক্র্যাশের আগের) আবার চালু
+        startOutbox();
 
         return () => {
             disconnectSocket();
@@ -89,6 +92,7 @@ export default function AppLayout() {
     useEffect(() => {
         const handleUnauthorized = () => {
             disconnectSocket();
+            resetOutbox();
             clearAppBadge();
             dispatch(resetChatState());
             dispatch(forceLogout());
