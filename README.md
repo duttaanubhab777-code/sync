@@ -30,6 +30,7 @@
 <p>
   <a href="#overview">Overview</a> ·
   <a href="#features">Features</a> ·
+  <a href="#motion-showcase">Motion</a> ·
   <a href="#architecture">Architecture</a> ·
   <a href="#project-structure">Structure</a> ·
   <a href="#getting-started">Setup</a> ·
