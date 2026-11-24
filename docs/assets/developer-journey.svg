@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 220" width="1000" height="220" role="img" aria-label="Beginner developer journey for Sync">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#071b16"/><stop offset="1" stop-color="#111827"/></linearGradient>
+  <linearGradient id="journey" x1="0" x2="1"><stop stop-color="#4ade80"/><stop offset=".52" stop-color="#22d3ee"/><stop offset="1" stop-color="#a78bfa"/></linearGradient>
+  <filter id="glow"><feGaussianBlur stdDeviation="5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<rect width="1000" height="220" rx="22" fill="url(#bg)" stroke="#29443b"/>
+<text x="42" y="42" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="14" font-weight="700" fill="#e2e8f0" letter-spacing="2">YOUR FIRST CONTRIBUTION</text>
+<path d="M130 112 H870" fill="none" stroke="#334155" stroke-width="4" stroke-linecap="round"/>
+<path d="M130 112 H870" fill="none" stroke="url(#journey)" stroke-width="3" stroke-linecap="round" stroke-dasharray="10 12"><animate attributeName="stroke-dashoffset" from="0" to="-110" dur="5s" repeatCount="indefinite"/></path>
+<g font-family="Inter,Segoe UI,Arial,sans-serif" text-anchor="middle">
+<g><circle cx="130" cy="112" r="21" fill="#123b2b" stroke="#4ade80" stroke-width="2"/><text x="130" y="118" font-size="17" fill="#bbf7d0">1</text><text x="130" y="158" font-size="13" font-weight="650" fill="#f8fafc">Explore</text><text x="130" y="178" font-size="10" fill="#94a3b8">Read the code</text></g>
+<g><circle cx="315" cy="112" r="21" fill="#12313a" stroke="#22d3ee" stroke-width="2"/><text x="315" y="118" font-size="17" fill="#cffafe">2</text><text x="315" y="158" font-size="13" font-weight="650" fill="#f8fafc">Configure</text><text x="315" y="178" font-size="10" fill="#94a3b8">Add local settings</text></g>
+<g><circle cx="500" cy="112" r="21" fill="#1d3150" stroke="#60a5fa" stroke-width="2"/><text x="500" y="118" font-size="17" fill="#dbeafe">3</text><text x="500" y="158" font-size="13" font-weight="650" fill="#f8fafc">Run</text><text x="500" y="178" font-size="10" fill="#94a3b8">Start each service</text></g>
+<g><circle cx="685" cy="112" r="21" fill="#29234c" stroke="#a78bfa" stroke-width="2"/><text x="685" y="118" font-size="17" fill="#ede9fe">4</text><text x="685" y="158" font-size="13" font-weight="650" fill="#f8fafc">Test</text><text x="685" y="178" font-size="10" fill="#94a3b8">Check the behaviour</text></g>
+<g><circle cx="870" cy="112" r="21" fill="#3b2345" stroke="#e879f9" stroke-width="2"/><text x="870" y="118" font-size="17" fill="#fae8ff">5</text><text x="870" y="158" font-size="13" font-weight="650" fill="#f8fafc">Contribute</text><text x="870" y="178" font-size="10" fill="#94a3b8">Submit a focused change</text></g>
+</g>
+<circle r="6" fill="#f0fdfa" filter="url(#glow)"><animateMotion dur="6s" repeatCount="indefinite" path="M130 112 H870"/></circle>
+<text x="500" y="207" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="9" fill="#64748b" letter-spacing="1.4">LEARN ONE LAYER AT A TIME — YOU DO NOT NEED TO MASTER THE WHOLE STACK ON DAY ONE</text>
+</svg>
