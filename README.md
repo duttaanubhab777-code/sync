@@ -176,6 +176,8 @@ You can read the source code without configuring every external service. To test
 
 <img src="docs/assets/flow-loop.svg" alt="Animated background upload and offline media flow" width="100%"/>
 
+<img src="docs/assets/developer-journey.svg" alt="Animated beginner developer journey" width="100%"/>
+
 <sub>Lightweight SVG motion — no JavaScript, external animation runtime or video embed required.</sub>
 
 </div>
