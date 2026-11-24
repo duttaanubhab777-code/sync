@@ -647,6 +647,17 @@ python app.py
 
 The Flask service listens on `http://127.0.0.1:5001` by default. Set `PYTHON_SERVICE_URL` in the Node backend to the service URL and add the local frontend origin to Python's `ALLOWED_ORIGINS`.
 
+**Windows note:** In PowerShell, activate the environment with `.venv\\Scripts\\Activate.ps1`. If the `python` command is unavailable, use `py -3.10` when creating the environment. If script activation is restricted, use the environment interpreter directly instead of changing system-wide security settings.
+
+Before starting the service, run its configuration check and automated tests:
+
+```bash
+python verify_install.py
+python -m unittest discover -s tests -v
+```
+
+Keep the Python terminal open while testing media uploads and signup email. Use `deactivate` to leave the virtual environment when finished.
+
 <a id="configuration"></a>
 <img src="docs/assets/headers/configuration.svg" alt="Configuration" height="64"/>
 
