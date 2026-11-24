@@ -1,4 +1,10 @@
 import { useEffect, useState } from "react";
+import {
+    ensureLocalMedia,
+    hasNativeStore,
+    lookupLocalMedia,
+    pruneLocalMedia
+} from "./nativeMedia.js";
 
 // Wallpaper ছবি ডিভাইসে স্থায়ীভাবে জমিয়ে রাখা (Android অ্যাপ + PWA + ওয়েবসাইট — সব জায়গায় একই কোড)।
 //
@@ -57,6 +63,50 @@ const download = async url => {
     throw lastErr;
 };
 
+// ব্রাউজার/WebView যেন low-storage হলেও আমাদের cache নিজে থেকে মুছে না ফেলে
+let persistAsked = false;
+export const requestPersistentStorage = () => {
+    if (persistAsked) return;
+    persistAsked = true;
+    try {
+        if (navigator.storage && navigator.storage.persist) {
+            navigator.storage.persist().catch(() => {});
+        }
+    } catch {
+        /* ignore */
+    }
+};
+
+// শুধু ডিভাইসে সেভ করা কপি খোঁজে (নেটে যায় না)। না থাকলে "" ফেরত।
+export const lookupStoredWallpaper = async url => {
+    if (!url) return "";
+    const hit = mem.get(url);
+    if (hit) return hit;
+    // APK: ফোনের Data স্টোরেজে ফাইল হিসেবে সেভ (Cache Storage নয়)
+    if (hasNativeStore()) {
+        const local = await lookupLocalMedia(url);
+        if (local) mem.set(url, local);
+        return local;
+    }
+    if (!hasCacheApi()) return "";
+    try {
+        const cache = await caches.open(CACHE_NAME);
+        const stored = await cache.match(url);
+        if (!stored) return "";
+        const objectUrl = await fromResponse(stored);
+        mem.set(url, objectUrl);
+        return objectUrl;
+    } catch {
+        try {
+            const cache = await caches.open(CACHE_NAME);
+            await cache.delete(url);
+        } catch {
+            /* ignore */
+        }
+        return "";
+    }
+};
+
 // ডিভাইসে সেভ করা কপি (থাকলে) দেয়; না থাকলে নামিয়ে সেভ করে। ব্যর্থ হলে "" ফেরত।
 export const resolveWallpaper = url => {
     if (!url) return Promise.resolve("");
@@ -66,6 +116,11 @@ export const resolveWallpaper = url => {
 
     const job = (async () => {
         try {
+            if (hasNativeStore()) {
+                const local = await ensureLocalMedia(url, "wallpaper");
+                if (local) mem.set(url, local);
+                return local;
+            }
             if (hasCacheApi()) {
                 try {
                     const cache = await caches.open(CACHE_NAME);
@@ -103,9 +158,13 @@ export const pruneWallpaperCache = async keepUrls => {
     const keep = keepUrls instanceof Set ? keepUrls : new Set(keepUrls);
     for (const [url, objectUrl] of mem.entries()) {
         if (!keep.has(url)) {
-            URL.revokeObjectURL(objectUrl);
+            if (objectUrl.startsWith("blob:")) URL.revokeObjectURL(objectUrl);
             mem.delete(url);
         }
+    }
+    if (hasNativeStore()) {
+        await pruneLocalMedia("wallpaper", keep);
+        return;
     }
     if (!hasCacheApi()) return;
     try {
@@ -139,25 +198,33 @@ export const prefetchWallpapers = async urls => {
     await Promise.all([worker(), worker()]);
 };
 
-// React hook: ছবির URL দিলে এখনই (সিঙ্ক্রোনাসলি) দেখানোর মতো src দেয়।
-// - মেমোরিতে সেভ করা কপি থাকলে সেটা (blob) — একদম তাৎক্ষণিক
-// - না থাকলে সরাসরি URL (ব্রাউজারের HTTP cache থেকে দ্রুত আসে) — কখনোই "খালি" অপেক্ষা নেই
-// ব্যাকগ্রাউন্ডে ছবিটা ডিভাইসে সেভ হয়ে যায়, যাতে পরের বার blob দিয়ে চলে।
+// React hook: ছবির URL দিলে দেখানোর মতো src দেয়।
+// - মেমোরিতে থাকলে blob (একদম তাৎক্ষণিক)
+// - না থাকলে আগে ডিভাইসের সেভ করা কপি খোঁজে (কয়েক ms, নেট লাগে না) — পেলে সেটাই দেখায়
+// - ডিভাইসে একেবারেই না থাকলে তবেই নেট থেকে URL দেখায় আর ব্যাকগ্রাউন্ডে সেভ করে রাখে
+// আগে অ্যাপ খুললেই সরাসরি URL দেখানো হতো, তাই প্রতিবার নতুন করে নামত। এখন আর হয় না।
 export const useCachedWallpaper = url => {
     const [resolved, setResolved] = useState({ url: "", src: "" });
     const [attempt, setAttempt] = useState(0);
 
     const hit = peekCachedWallpaper(url);
-    const src = !url ? "" : hit || (resolved.url === url ? resolved.src : url);
+    const src = !url ? "" : hit || (resolved.url === url ? resolved.src : "");
 
     useEffect(() => {
         if (!url || peekCachedWallpaper(url)) return undefined;
         let cancelled = false;
-        resolveWallpaper(url).then(local => {
-            if (cancelled || !local) return;
-            // সরাসরি URL-এ যা দেখানো হচ্ছে সেটাই থাকে (ঝলক এড়াতে); পরের বার blob ব্যবহার হবে
+        requestPersistentStorage();
+        (async () => {
+            const stored = await lookupStoredWallpaper(url);
+            if (cancelled) return;
+            if (stored) {
+                setResolved({ url, src: stored });
+                return;
+            }
+            // ডিভাইসে নেই: নেট থেকে দেখাও, সাথে সাথে সেভ করো
             setResolved({ url, src: url });
-        });
+            resolveWallpaper(url);
+        })();
         return () => {
             cancelled = true;
         };
@@ -168,6 +235,7 @@ export const useCachedWallpaper = url => {
         if (!url || peekCachedWallpaper(url)) return undefined;
         const retry = () => {
             if (document.visibilityState === "hidden") return;
+            if (peekCachedWallpaper(url)) return;
             setAttempt(n => n + 1);
         };
         const timer = setTimeout(retry, 8000);

@@ -99,6 +99,8 @@ app.use(
                     "ws:",
                     "wss:",
                     "https://api.cloudinary.com",
+                    // wallpaper/ছবি ডিভাইসে সেভ করতে fetch() লাগে; এটি না থাকলে CSP ব্লক করে বারবার নামাতে হতো
+                    "https://res.cloudinary.com",
                     ...(pythonOrigin ? [pythonOrigin] : []),
                     ...(emailSenderOrigin ? [emailSenderOrigin] : [])
                 ],

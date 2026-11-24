@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocalMedia } from "../services/nativeMedia.js";
 import {
     AlertCircle,
     Loader2,
@@ -335,10 +336,12 @@ function useScrub(core, { live = false } = {}) {
 /* ==========================================================================
    Voice message player
    ========================================================================== */
-export function VoicePlayer({ src, duration: knownDuration }) {
+export function VoicePlayer({ src: remoteSrc, duration: knownDuration }) {
+    // APK-তে ফোনে সেভ করা ফাইল থেকে চলে (নেট লাগে না); waveform আসল URL থেকেই বানানো, যাতে বদলে না যায়
+    const [src] = useLocalMedia(remoteSrc, "audio");
     const core = useMediaCore(knownDuration);
     const { trackRef, scrub, handlers } = useScrub(core);
-    const bars = useMemo(() => makeBars(src), [src]);
+    const bars = useMemo(() => makeBars(remoteSrc), [remoteSrc]);
 
     const total = core.duration;
     const ratio =
@@ -435,7 +438,9 @@ export function VoicePlayer({ src, duration: knownDuration }) {
 /* ==========================================================================
    Video player
    ========================================================================== */
-export function VideoPlayer({ src, duration: knownDuration, width, height }) {
+export function VideoPlayer({ src: remoteSrc, duration: knownDuration, width, height }) {
+    // APK-তে Wi-Fi হলে অটো সেভ, মোবাইল ডেটায় প্লে চাপলে সেভ; সেভ থাকলে নেট ছাড়াই চলে
+    const [src, saveVideo] = useLocalMedia(remoteSrc, "video");
     const core = useMediaCore(knownDuration);
     const { trackRef, scrub, handlers } = useScrub(core, { live: true });
     const wrapRef = useRef(null);
@@ -536,6 +541,10 @@ export function VideoPlayer({ src, duration: knownDuration, width, height }) {
                 playsInline
                 muted={muted}
                 {...core.mediaProps}
+                onPlay={e => {
+                    core.mediaProps.onPlay?.(e);
+                    saveVideo();
+                }}
             />
 
             <div className="sync-vp-shade" />

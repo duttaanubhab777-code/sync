@@ -36,6 +36,7 @@ import {
     formatTime,
     generateClientMsgId
 } from "../utils/format.js";
+import { LocalImg, LocalVideo } from "../components/LocalImg.jsx";
 
 const STORY_COLORS = [
     "#0F4C3A",
@@ -619,8 +620,9 @@ export default function StoriesPage() {
                             {activeStory.type === "image" &&
                                 activeStory.media?.url && (
                                     <div className="sync-story-media-wrap">
-                                        <img
-                                            src={activeStory.media.url}
+                                        <LocalImg
+                                            url={activeStory.media.url}
+                                            kind="story"
                                             alt={activeStory.caption || "story"}
                                         />
                                         {activeStory.caption && (
@@ -634,8 +636,8 @@ export default function StoriesPage() {
                             {activeStory.type === "video" &&
                                 activeStory.media?.url && (
                                     <div className="sync-story-media-wrap">
-                                        <video
-                                            src={activeStory.media.url}
+                                        <LocalVideo
+                                            url={activeStory.media.url}
                                             controls
                                             autoPlay
                                         />

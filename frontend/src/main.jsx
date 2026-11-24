@@ -7,6 +7,7 @@ import App from "./App.jsx";
 import "./index.css";
 import "./styles/native-app.css";
 import { initViewportHeight } from "./utils/viewport.js";
+import { requestPersistentStorage } from "./services/wallpaperCache.js";
 
 // স্ক্রিন উচ্চতা (--app-h) সবার আগে সেট হয়, যাতে পুরনো WebView-তেও লেআউট ও স্ক্রল ঠিক থাকে
 initViewportHeight();
@@ -94,3 +95,19 @@ const hideNativeSplash = () => {
     }
 };
 requestAnimationFrame(() => requestAnimationFrame(hideNativeSplash));
+
+// ডিভাইসে ছবি/অ্যাপ ফাইল স্থায়ীভাবে রাখা (Android অ্যাপ + PWA + ওয়েবসাইট):
+// - service worker শুরুতেই চালু হয়, তাই notification চালু না করলেও অ্যাপ ফাইল ও ছবি (প্রোফাইল, চ্যাট, স্টোরি, wallpaper) cache হয়
+// - persistent storage চাওয়া হয়, যাতে ফোনে জায়গা কম হলেও cache নিজে থেকে মুছে না যায়
+requestPersistentStorage();
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+    const register = () =>
+        navigator.serviceWorker
+            .register("/service-worker.js", {
+                scope: "/",
+                updateViaCache: "none"
+            })
+            .catch(() => {});
+    if (document.readyState === "complete") register();
+    else window.addEventListener("load", register, { once: true });
+}

@@ -76,6 +76,7 @@ import {
     formatTime,
     generateClientMsgId
 } from "../utils/format.js";
+import { LocalImg } from "../components/LocalImg.jsx";
 
 const MESSAGE_URL_REGEX = /https?:\/\/[^\s<>"']+/gi;
 
@@ -1409,8 +1410,8 @@ export default function ChatPage() {
                                                     msg.type === "image" &&
                                                     msg.media?.url && (
                                                         <div className="sync-msg-media-img">
-                                                            <img
-                                                                src={
+                                                            <LocalImg
+                                                                url={
                                                                     msg.media
                                                                         .url
                                                                 }
@@ -1865,7 +1866,7 @@ export default function ChatPage() {
                     >
                         <X size={24} />
                     </button>
-                    <img src={lightboxUrl} alt="Full view" />
+                    <LocalImg url={lightboxUrl} alt="Full view" />
                 </div>
             )}
 

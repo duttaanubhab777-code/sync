@@ -140,7 +140,7 @@ export default function EnableNotifications() {
 
             setState("working");
             const registration = await navigator.serviceWorker.register(
-                "/sw.js",
+                "/service-worker.js",
                 { scope: "/", updateViaCache: "none" }
             );
             registration.update().catch(() => {});
