@@ -85,6 +85,19 @@ The interface is responsive and installable as a Progressive Web App. The reposi
 
 </div>
 
+<a id="motion-showcase"></a>
+<img src="docs/assets/headers/features.svg" alt="Product motion showcase" height="64"/>
+
+<div align="center">
+
+<img src="docs/assets/feature-loop.svg" alt="Animated Sync feature highlights" width="100%"/>
+
+<img src="docs/assets/flow-loop.svg" alt="Animated background upload and offline media flow" width="100%"/>
+
+<sub>Lightweight SVG motion — no JavaScript, external animation runtime or video embed required.</sub>
+
+</div>
+
 <a id="features"></a>
 <img src="docs/assets/headers/features.svg" alt="Features" height="64"/>
 
@@ -120,6 +133,13 @@ The interface is responsive and installable as a Progressive Web App. The reposi
 - Share contact cards through the browser Contact Picker where supported, with a manual-entry fallback; recipients can copy or call shared numbers
 - Document cards preserve filenames, show file types and sizes, and provide direct downloads
 - Select and send multiple files sequentially, with per-file upload progress, speed/ETA feedback and independent failure handling
+- Background upload outbox: choose media, leave the chat or switch pages, and let uploads continue independently of the current screen
+- Persist queued files and job state in IndexedDB so pending uploads can resume after a reload or app restart; the Android app uses a foreground service while uploads are active
+- Automatic offline waiting, reconnect resume, stalled-request recovery, fresh upload signatures and bounded retry handling instead of immediately failing on unstable networks
+- Large uploads use resumable chunked transfer (6 MB chunks for files above the chunk threshold), while duplicate-send protection uses stable client message IDs
+- Client-side video compression with adaptive resolution/bitrate profiles, estimated output-size checks and lower-bitrate retries; users can choose **Send original** while compression is running
+- Video compression avoids re-encoding already-light clips and safely falls back to the original file when compression is unsupported, cancelled or does not reduce the size
+- Animated upload cards show a media thumbnail, compression/upload phase, progress ring, transfer speed, estimated time, size reduction and completion state
 - Compress eligible chat, story and group images in the browser before upload (up to 1600 px, WebP with JPEG fallback); small files, GIF/SVG and images that do not shrink are left unchanged
 - Document uploads bypass image compression; if compression fails, the original image is uploaded
 - Upload feedback distinguishes compression, preparation, transfer and server processing, and reports original/compressed sizes
@@ -148,6 +168,11 @@ The interface is responsive and installable as a Progressive Web App. The reposi
 - Emoji reactions, reaction summaries and live reaction updates
 - Reply to a story directly into the relevant conversation
 - Duplicate-submission protection for story creation
+- Full-screen story player with smooth segmented progress, automatic advance and pause/resume support
+- Tap navigation, press-and-hold pause, swipe-to-dismiss, swipe-between-authors and swipe-up viewer access; desktop keyboard shortcuts are also supported
+- Custom video controls with buffering feedback, elapsed time, mute and pause controls
+- Photo stories use a subtle Ken Burns zoom and loading shimmer; text stories reveal progressively over animated gradient backgrounds
+- Preload upcoming story media to reduce transition delays
 - Expired story media is removed from Cloudinary by the background cleanup process before the expired database records are swept
 
 ### Media storage & cleanup
@@ -156,6 +181,10 @@ The interface is responsive and installable as a Progressive Web App. The reposi
 - Check whether another message, profile, group or content record still references an asset before deleting it
 - Retry transient Cloudinary deletion failures and invalidate the CDN cache after successful removal
 - Sweep expired story and notice media before the delayed MongoDB TTL cleanup removes their records; the sweeper runs periodically in the Node service
+- Persistent browser/PWA media caching keeps Cloudinary images, voice notes and videos available locally; cached video/audio supports byte-range playback and seeking
+- Android APK stores downloaded chat media, stories, voice notes and wallpapers in the app private filesystem, avoiding repeat downloads after app restarts
+- Story media can be prefetched when the feed loads; video prefetch is restricted to Wi-Fi/ethernet and respects Data Saver
+- Storage-aware cache trimming prioritizes older videos before images when browser storage approaches its configured quota
 - Configure `CLOUDINARY_API_KEY` and `CLOUDINARY_API_SECRET` on the Node backend to enable remote deletion; without them, database deletion still works but remote files remain in Cloudinary
 
 ### Notifications
@@ -175,6 +204,10 @@ The interface is responsive and installable as a Progressive Web App. The reposi
 - Admin-managed wallpaper library with a platform default and individual user preferences; users can follow the current admin default or select a personal wallpaper
 - Wallpaper picker keeps the preview and save controls visible while the wallpaper gallery scrolls, and automatically brings the current selection into view
 - Preview supports brightness adjustment before saving; wallpaper thumbnails use the app's image cache
+- Organised wallpaper categories with a required category for every wallpaper; the built-in **Super Hero** category stays pinned first
+- Admins can create, rename and delete categories, inspect total/per-category counts, bulk-select wallpapers and move them between categories
+- Existing uncategorised wallpapers are migrated into an **Uncategorized** category; categories containing wallpapers cannot be deleted
+- The user picker presents category tabs with counts and keeps the platform default wallpaper available in every category
 
 ### Interface & mobile interaction
 
@@ -201,6 +234,7 @@ The interface is responsive and installable as a Progressive Web App. The reposi
 - Private chat text and story captions are not exposed in the admin media moderation view
 - Responsive analytics dashboard with role-aware navigation and consistent SVG media filters
 - Administrative deletion flows use the shared confirmation dialog; media cleanup removes eligible Cloudinary assets when no other record references them
+- Wallpaper category administration includes category creation, rename/delete safeguards, bulk selection and bulk moves
 
 ### Contact, updates & app experience
 
@@ -216,6 +250,9 @@ The interface is responsive and installable as a Progressive Web App. The reposi
 - Branded animated splash screens and an offline/retry experience for unavailable networks or a sleeping web service
 - Android notification channels with custom Sync sounds, native badge support and notification-to-chat navigation
 - Native Android Contacts permission handling through the Capacitor Contacts plugin
+- Branded personal QR cards with profile links, copy/share/save actions and a camera-based QR scanner with gallery-image import
+- QR links use the public /u/:username route to open a profile and start a direct chat; Android App Links support deep-link handoff into the APK
+- Android profile Storage card reports locally saved media totals and per-type counts, offers a storage-clear action and exposes expandable diagnostics
 - Sound feedback, animated interface elements and consistent Sync branding
 
 <a id="contact"></a>
@@ -264,7 +301,7 @@ The public Contact page allows visitors to submit a name, email address, subject
 1. The authenticated browser requests a signature from the Flask service at `/api/v1/media/sign`.
 2. Flask verifies the Node-issued access token and validates the requested upload purpose.
 3. Flask signs the Cloudinary upload parameters locally and returns the short-lived signature.
-4. The browser uploads the file directly to Cloudinary and reports upload progress.
+4. The client prepares the media (image/video compression where applicable), then uploads directly to Cloudinary; large files use chunked transfer and the persistent outbox can resume after temporary network loss.
 5. The browser sends the resulting media metadata/URL to the Node API or Socket.IO layer.
 6. Node validates that the media URL belongs to the configured Cloudinary account before storing the message/story.
 
@@ -315,11 +352,11 @@ sync/
 │   └── PYTHONANYWHERE_DEPLOYMENT_GUIDE.md
 ├── frontend/
 │   └── src/
-│       ├── components/           # Layout, dialogs, media players, notifications
+│       ├── components/           # Layout, dialogs, upload cards, story/media players, notifications
 │       │   └── chat/             # Attachment sheet, location, contact, document and message-action components
 │       ├── hooks/                # App badge, contact matching, sign-out and shared UI hooks
 │       ├── pages/                # Auth, chats, stories, profile, admin, contact, updates
-│       ├── services/             # API, Socket.IO, media, previews, sounds, app badges, contact mail
+│       ├── services/             # API, Socket.IO, background outbox, persistent media, QR, wallpapers, previews and notifications
 │       ├── store/                # Redux Toolkit slices
 │       ├── styles/
 │       └── utils/
