@@ -28,13 +28,14 @@ const uploadWithProgress = (url, formData, fileSize, onProgress) =>
             const pct = Math.min(100, Math.floor(shown));
             const remaining = Math.max(0, total - loaded);
             onProgress(pct, {
+                precise: Math.min(100, shown), // দশমিকসহ: বার/রিং মসৃণ চলার জন্য
                 loaded: Math.min(loaded, total),
                 total,
                 speed,
                 eta: speed > 1024 ? Math.ceil(remaining / speed) : null,
                 phase
             });
-            lastEmitted = pct;
+            lastEmitted = shown;
         };
 
         const timer = setInterval(() => {
@@ -48,7 +49,7 @@ const uploadWithProgress = (url, formData, fileSize, onProgress) =>
             } else if (sendDone && shown < 99) {
                 shown = Math.min(99, shown + 0.4); // Cloudinary প্রসেস করছে
             }
-            if (Math.floor(shown) !== lastEmitted) {
+            if (Math.abs(shown - lastEmitted) >= 0.25) {
                 emit(sendDone ? "processing" : "uploading");
             }
         }, 100);
@@ -87,10 +88,26 @@ const uploadWithProgress = (url, formData, fileSize, onProgress) =>
                 body = null;
             }
             if (xhr.status >= 200 && xhr.status < 300 && body) {
-                shown = 100;
-                loaded = total;
-                emit("done");
-                resolve(body);
+                const finish = () => {
+                    shown = 100;
+                    loaded = total;
+                    emit("done");
+                    resolve(body);
+                };
+                // ছোট ফাইলে (ছবি) বার হঠাৎ ১০০%-এ লাফায়; তাই বাকি পথটুকু দ্রুত গড়িয়ে তারপর "done"
+                if (shown >= 96) {
+                    finish();
+                } else {
+                    const ramp = setInterval(() => {
+                        shown = Math.min(100, shown + Math.max((100 - shown) * 0.45, 1.5));
+                        if (shown >= 99.5) {
+                            clearInterval(ramp);
+                            finish();
+                        } else {
+                            emit("processing");
+                        }
+                    }, 40);
+                }
             } else {
                 reject(
                     new Error(
@@ -162,7 +179,8 @@ const fetchUploadSignature = async options => {
 
 // options.purpose (ঐচ্ছিক): "chat" (ডিফল্ট) | "voice" | "avatar" | "story" | "group"
 // Python সার্ভিস এটা দেখে Cloudinary folder ঠিক করে। না দিলে আগের মতোই sync/chat।
-// options.compress === true হলে ছবি আপলোডের আগে ফোনেই ছোট করা হয় (WhatsApp-এর মতো)।
+// options.compress === true হলে ছবি/ভিডিও আপলোডের আগে ফোনেই ছোট করা হয় (WhatsApp-এর মতো)।
+// options.compressSignal (AbortSignal, ঐচ্ছিক): abort করলে ভিডিও compress থামে, আসল ফাইলই আপলোড হয়।
 //
 // onProgress(percent, info) এর info.phase এখন:
 //   "compressing" -> ফোনে ছোট করা হচ্ছে (info.compressPct থাকলে ০–১০০, না থাকলে অনির্দিষ্ট)
@@ -174,9 +192,13 @@ export const uploadMediaToCloudinary = async (file, onProgress, options = {}) =>
 
     const originalSize = file.size;
     let compressedSize = file.size;
+    // ছবি/ভিডিও compress হবে কি না (UI-তে "Step 1 of 2" দেখানোর জন্য)
+    const originalKind = detectMessageTypeFromFile(file);
+    const willCompress =
+        options?.compress === true && (originalKind === "image" || originalKind === "video");
     const report = (pct, info) => {
         if (typeof onProgress !== "function") return;
-        onProgress(pct, { originalSize, compressedSize, ...info });
+        onProgress(pct, { originalSize, compressedSize, willCompress, ...info });
     };
 
     // signature আনা আর compress একসাথে চলে, তাই compress-এর সময়টা আলাদা করে অপেক্ষা যোগ করে না
@@ -186,8 +208,16 @@ export const uploadMediaToCloudinary = async (file, onProgress, options = {}) =>
     if (options?.compress === true) {
         report(0, { phase: "compressing", total: originalSize });
         file = await compressMediaFile(file, {
-            onProgress: compressPct =>
-                report(0, { phase: "compressing", total: originalSize, compressPct })
+            signal: options?.compressSignal,
+            onProgress: (compressPct, detail) =>
+                report(0, {
+                    phase: "compressing",
+                    total: originalSize,
+                    compressPct,
+                    compressCurrent: detail?.current,
+                    compressDuration: detail?.duration,
+                    compressRetry: detail?.retry || 0
+                })
         });
         compressedSize = file.size;
     } else {

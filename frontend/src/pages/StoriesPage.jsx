@@ -17,6 +17,7 @@ import {
 import Avatar from "../components/Avatar.jsx";
 import SyncBrandBar from "../components/SyncBrandBar.jsx";
 import MoreMenu from "../components/MoreMenu.jsx";
+import UploadProgressCard from "../components/UploadProgressCard.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import {
     createNewStory,
@@ -88,6 +89,8 @@ export default function StoriesPage() {
     const [uploadProgress, setUploadProgress] = useState(0);
     // compress / upload-এর ধাপ ও সাইজ (original → compressed) দেখানোর জন্য
     const [uploadInfo, setUploadInfo] = useState(null);
+    // ভিডিও compress চলাকালীন "Send original" চাপলে আসল ফাইলই আপলোড হয়
+    const compressAbortRef = useRef(null);
     const [createError, setCreateError] = useState("");
     // Share Story একবার ট্যাপেই সাথে সাথে lock: state async বলে আলাদা ref দিয়ে সিঙ্ক্রোনাস গার্ড
     const [submitting, setSubmitting] = useState(false);
@@ -198,13 +201,30 @@ export default function StoriesPage() {
                     setCreateError("Please select an image or video");
                     return;
                 }
+                const abortCtrl = new AbortController();
+                compressAbortRef.current = abortCtrl;
+                setUploadInfo({
+                    file: mediaFile,
+                    name: mediaFile.name,
+                    size: mediaFile.size,
+                    phase: "preparing"
+                });
                 const media = await uploadMediaToCloudinary(
                     mediaFile,
                     (pct, info) => {
                         setUploadProgress(pct);
-                        setUploadInfo(info || null);
+                        setUploadInfo({
+                            file: mediaFile,
+                            name: mediaFile.name,
+                            size: mediaFile.size,
+                            ...info
+                        });
                     },
-                    { purpose: "story", compress: true }
+                    {
+                        purpose: "story",
+                        compress: true,
+                        compressSignal: abortCtrl.signal
+                    }
                 );
                 const detectedType = mediaFile.type.startsWith("video/")
                     ? "video"
@@ -1008,40 +1028,14 @@ export default function StoriesPage() {
                                             }
                                         />
                                     </div>
-                                    {(uploadInfo?.phase === "compressing" ||
-                                        uploadInfo?.phase === "preparing") && (
-                                        <div className="sync-progress-bar">
-                                            {uploadInfo?.phase === "compressing" &&
-                                            Number.isFinite(uploadInfo?.compressPct) ? (
-                                                <div
-                                                    style={{
-                                                        width: `${Math.round(uploadInfo.compressPct)}%`
-                                                    }}
-                                                />
-                                            ) : (
-                                                <div className="sync-progress-indeterminate" />
-                                            )}
-                                        </div>
+                                    {submitting && uploadInfo && (
+                                        <UploadProgressCard
+                                            info={uploadInfo}
+                                            onSkip={() =>
+                                                compressAbortRef.current?.abort()
+                                            }
+                                        />
                                     )}
-                                    {uploadProgress > 0 &&
-                                        uploadProgress < 100 && (
-                                            <div className="sync-progress-bar">
-                                                <div
-                                                    style={{
-                                                        width: `${uploadProgress}%`
-                                                    }}
-                                                />
-                                            </div>
-                                        )}
-                                    {uploadInfo?.compressedSize <
-                                        uploadInfo?.originalSize &&
-                                        uploadInfo?.phase !== "compressing" && (
-                                            <div className="sync-upload-saved">
-                                                Compressed{" "}
-                                                {formatBytes(uploadInfo.originalSize)}{" "}
-                                                → {formatBytes(uploadInfo.compressedSize)}
-                                            </div>
-                                        )}
                                 </>
                             )}
 

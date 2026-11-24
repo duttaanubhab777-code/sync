@@ -66,6 +66,7 @@ import { playSound } from "../services/sounds.js";
 import MoreMenu from "../components/MoreMenu.jsx";
 import QrCodeModal from "../components/QrCodeModal.jsx";
 import ChatFab from "../components/ChatFab.jsx";
+import UploadProgressCard from "../components/UploadProgressCard.jsx";
 import ChatWallpaperLayer from "../components/ChatWallpaperLayer.jsx";
 import { useAppUpdates, isAndroidApp } from "../services/appUpdate.js";
 import { pushBackHandler, goBackOr } from "../services/backNavigation.js";
@@ -168,27 +169,6 @@ function StatusTick({ status, optimistic, failed }) {
     );
 }
 
-const formatSpeed = bps => {
-    if (!bps || bps < 1) return "";
-    if (bps < 1024 * 1024) return `${(bps / 1024).toFixed(0)} KB/s`;
-    return `${(bps / (1024 * 1024)).toFixed(1)} MB/s`;
-};
-
-const formatEta = seconds => {
-    if (seconds == null) return "";
-    if (seconds < 60) return `${Math.max(1, seconds)}s left`;
-    return `${Math.floor(seconds / 60)}m ${seconds % 60}s left`;
-};
-
-// compress-এর ফল: "4.2 MB → 310 KB (93% smaller)"; ছোট না হলে খালি
-const formatCompressSaving = info => {
-    const before = Number(info?.originalSize);
-    const after = Number(info?.compressedSize);
-    if (!before || !after || after >= before) return "";
-    const pct = Math.round((1 - after / before) * 100);
-    return `${formatBytes(before)} → ${formatBytes(after)} (${pct}% smaller)`;
-};
-
 const formatReplySnippet = target => {
     if (!target) return "";
     if (target.deletedForEveryone) return "This message was deleted";
@@ -276,6 +256,10 @@ export default function ChatPage() {
     const [uploadingMedia, setUploadingMedia] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploadInfo, setUploadInfo] = useState(null);
+    // ভিডিও compress চলাকালীন "Send original" চাপলে আসল ফাইলই আপলোড হয়
+    const compressAbortRef = useRef(null);
+    // আপলোড শেষে কার্ড একটু (✓ Done) দেখিয়ে তারপর সরে যায়
+    const uploadInfoTimerRef = useRef(null);
     const convListRef = useRef(null);
     const { hasUpdate } = useAppUpdates({ autoLoad: isAndroidApp });
     const composerInputRef = useRef(null);
@@ -555,6 +539,7 @@ export default function ChatPage() {
         let pendingReply = replyingTo;
         const failures = [];
 
+        clearTimeout(uploadInfoTimerRef.current);
         setUploadingMedia(true);
         setUploadProgress(0);
         setComposerError("");
@@ -568,7 +553,14 @@ export default function ChatPage() {
                         : file.name;
 
                 setUploadProgress(0);
-                setUploadInfo({ name: displayName, size: file.size });
+                setUploadInfo({
+                    name: displayName,
+                    size: file.size,
+                    file,
+                    phase: "preparing"
+                });
+                const abortCtrl = new AbortController();
+                compressAbortRef.current = abortCtrl;
 
                 try {
                     const media = await uploadMediaToCloudinary(
@@ -578,10 +570,14 @@ export default function ChatPage() {
                             setUploadInfo({
                                 name: displayName,
                                 size: file.size,
+                                file,
                                 ...info
                             });
                         },
-                        { compress: !options?.asDocument }
+                        {
+                            compress: !options?.asDocument,
+                            compressSignal: abortCtrl.signal
+                        }
                     );
                     const msgType = detectMessageTypeFromFile(file);
 
@@ -627,9 +623,16 @@ export default function ChatPage() {
                 );
             }
         } finally {
+            compressAbortRef.current = null;
             setUploadingMedia(false);
             setUploadProgress(0);
-            setUploadInfo(null);
+            if (failures.length === 0) {
+                // সফল হলে ✓ Done অবস্থাটা একটু দেখিয়ে কার্ড সরানো
+                clearTimeout(uploadInfoTimerRef.current);
+                uploadInfoTimerRef.current = setTimeout(() => setUploadInfo(null), 750);
+            } else {
+                setUploadInfo(null);
+            }
         }
     };
 
@@ -1719,93 +1722,16 @@ export default function ChatPage() {
                                 </div>
                             )}
 
-                            {uploadingMedia && (() => {
-                                const phase = uploadInfo?.phase;
-                                const busyBeforeUpload =
-                                    phase === "compressing" || phase === "preparing";
-                                const compressPct = Number.isFinite(uploadInfo?.compressPct)
-                                    ? Math.round(uploadInfo.compressPct)
-                                    : null;
-                                const indeterminate =
-                                    phase === "preparing" ||
-                                    (phase === "compressing" && compressPct === null);
-                                const barPct =
-                                    phase === "compressing" && compressPct !== null
-                                        ? compressPct
-                                        : busyBeforeUpload
-                                          ? 0
-                                          : uploadProgress;
-                                const label =
-                                    phase === "compressing"
-                                        ? "Compressing"
-                                        : phase === "preparing"
-                                          ? "Preparing"
-                                          : phase === "processing"
-                                            ? "Finalizing"
-                                            : "Uploading";
-                                const saving = busyBeforeUpload
-                                    ? ""
-                                    : formatCompressSaving(uploadInfo);
-                                return (
-                                    <div className="sync-composer-banner uploading">
-                                        <div className="sync-upload-top">
-                                            <Loader2 size={15} className="spin" />
-                                            <span className="sync-upload-name">
-                                                {label} {uploadInfo?.name || "file"}
-                                            </span>
-                                            <strong className="sync-upload-pct">
-                                                {busyBeforeUpload
-                                                    ? compressPct !== null
-                                                        ? `${compressPct}%`
-                                                        : ""
-                                                    : `${uploadProgress}%`}
-                                            </strong>
-                                        </div>
-                                        <div
-                                            className="sync-upload-bar"
-                                            role="progressbar"
-                                            aria-valuemin={0}
-                                            aria-valuemax={100}
-                                            aria-valuenow={indeterminate ? undefined : barPct}
-                                        >
-                                            <div
-                                                className={`sync-upload-fill${
-                                                    indeterminate ? " indeterminate" : ""
-                                                }`}
-                                                style={
-                                                    indeterminate
-                                                        ? undefined
-                                                        : { width: `${barPct}%` }
-                                                }
-                                            />
-                                        </div>
-                                        {saving && (
-                                            <div className="sync-upload-saved">
-                                                Compressed {saving}
-                                            </div>
-                                        )}
-                                        <div className="sync-upload-meta">
-                                            <span>
-                                                {busyBeforeUpload
-                                                    ? formatBytes(uploadInfo?.originalSize || uploadInfo?.size) || ""
-                                                    : `${formatBytes(uploadInfo?.loaded || 0) || "0 B"} / ${
-                                                          formatBytes(uploadInfo?.total || uploadInfo?.size) || ""
-                                                      }`}
-                                            </span>
-                                            <span>
-                                                {busyBeforeUpload
-                                                    ? ""
-                                                    : [
-                                                          formatSpeed(uploadInfo?.speed),
-                                                          formatEta(uploadInfo?.eta)
-                                                      ]
-                                                          .filter(Boolean)
-                                                          .join(" · ")}
-                                            </span>
-                                        </div>
-                                    </div>
-                                );
-                            })()}
+                            {uploadInfo && (
+                                <UploadProgressCard
+                                    info={uploadInfo}
+                                    onSkip={
+                                        uploadingMedia
+                                            ? () => compressAbortRef.current?.abort()
+                                            : undefined
+                                    }
+                                />
+                            )}
 
                             {replyingTo && (
                                 <div className="sync-reply-banner">
