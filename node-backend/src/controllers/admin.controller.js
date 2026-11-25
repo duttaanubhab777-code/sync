@@ -336,7 +336,7 @@ export const deleteUserByAdmin = asyncHandler(async (req, res) => {
     io?.to(`user:${id}`).emit("user:blocked");
     io?.in(`user:${id}`).disconnectSockets(true);
 
-    const cleanup = await permanentlyDeleteUserData(target);
+    const cleanup = await permanentlyDeleteUserData(target, req.user._id);
 
     // Remove deleted direct chats from the other participant's live chat list.
     for (const conversation of cleanup.directConversations) {
