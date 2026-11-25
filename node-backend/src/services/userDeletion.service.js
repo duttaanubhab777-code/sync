@@ -399,7 +399,10 @@ export const sweepOrphanedUserData = async () => {
             if (group.groupIcon) groupMediaUrls.push(group.groupIcon);
             continue;
         }
-        if (staleRefs.size === 0) continue;
+        const hasOrphanMessage = orphanMessages.some(
+            message => asId(message.conversationId) === asId(group._id)
+        );
+        if (staleRefs.size === 0 && !hasOrphanMessage) continue;
 
         const remainingAdmins = (group.admins || []).filter(
             admin => !orphanSet.has(asId(admin))
@@ -422,9 +425,11 @@ export const sweepOrphanedUserData = async () => {
                 createdBy: remainingAdmins[0] || remainingMembers[0]
             };
         }
-        await Conversation.updateOne({ _id: group._id }, update, {
-            timestamps: false
-        });
+        if (staleRefs.size > 0) {
+            await Conversation.updateOne({ _id: group._id }, update, {
+                timestamps: false
+            });
+        }
         survivingGroups.push(group);
     }
 
