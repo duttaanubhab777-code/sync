@@ -126,7 +126,6 @@ export const permanentlyDeleteUserData = async user => {
             {
                 $pull: {
                     reactions: { user: user._id },
-                    "poll.options.$[].votes": user._id,
                     seenBy: { user: user._id },
                     deliveredTo: { user: user._id }
                 }
@@ -138,6 +137,13 @@ export const permanentlyDeleteUserData = async user => {
                 "storyReply.authorId": user._id
             },
             { $unset: { storyReply: "" } }
+        );
+        await Message.updateMany(
+            {
+                ...remainingMessageFilter,
+                "poll.options.votes": user._id
+            },
+            { $pull: { "poll.options.$[].votes": user._id } }
         );
 
         if (deletedMessageIds.length) {
