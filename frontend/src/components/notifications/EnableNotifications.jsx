@@ -63,7 +63,7 @@ export default function EnableNotifications() {
     const location = useLocation();
     const userId = useSelector(state => state.auth.user?._id);
     const [state, setState] = useState("idle");
-    const listenersBoundRef = useRef(false);
+    const listenersPromiseRef = useRef(null);
 
     // ১. Android Native FCM রেজিস্ট্রেশন ও টোকেন সিঙ্ক
     const syncNativePush = useCallback(async (askPermission = true) => {
@@ -71,6 +71,10 @@ export default function EnableNotifications() {
         if (!pushPlugin) return false;
 
         try {
+            // register() ডাকার আগেই registration লিসেনার বসানো নিশ্চিত করা (নইলে টোকেন মিস হতে পারে)
+            if (listenersPromiseRef.current) {
+                await listenersPromiseRef.current;
+            }
             let perm = await pushPlugin.checkPermissions();
             if (
                 (perm?.receive === "prompt" ||
@@ -153,11 +157,25 @@ export default function EnableNotifications() {
                 return;
             }
 
+            const expectedKey = decodeBase64Url(config.publicKey);
             let subscription = await registration.pushManager.getSubscription();
+            // আগের সাবস্ক্রিপশনের VAPID key বদলে গিয়ে থাকলে পুরনোটা সরিয়ে নতুন করে সাবস্ক্রাইব করা
+            if (subscription?.options?.applicationServerKey) {
+                const existingKey = new Uint8Array(
+                    subscription.options.applicationServerKey
+                );
+                const keyMatches =
+                    existingKey.length === expectedKey.length &&
+                    existingKey.every((b, i) => b === expectedKey[i]);
+                if (!keyMatches) {
+                    await subscription.unsubscribe().catch(() => {});
+                    subscription = null;
+                }
+            }
             if (!subscription) {
                 subscription = await registration.pushManager.subscribe({
                     userVisibleOnly: true,
-                    applicationServerKey: decodeBase64Url(config.publicKey)
+                    applicationServerKey: expectedKey
                 });
             }
 
@@ -186,14 +204,13 @@ export default function EnableNotifications() {
     useEffect(() => {
         if (!userId) return;
         const pushPlugin = getNativePushPlugin();
-        if (!pushPlugin || listenersBoundRef.current) return;
-        listenersBoundRef.current = true;
+        if (!pushPlugin) return;
 
         let regHandle = null;
         let errHandle = null;
         let actionHandle = null;
 
-        (async () => {
+        const ready = (async () => {
             try {
                 regHandle = await pushPlugin.addListener(
                     "registration",
@@ -244,9 +261,12 @@ export default function EnableNotifications() {
                 console.error("[Sync native push listener error]", e);
             }
         })();
+        listenersPromiseRef.current = ready;
 
         return () => {
-            listenersBoundRef.current = false;
+            if (listenersPromiseRef.current === ready) {
+                listenersPromiseRef.current = null;
+            }
             regHandle?.remove?.();
             errHandle?.remove?.();
             actionHandle?.remove?.();

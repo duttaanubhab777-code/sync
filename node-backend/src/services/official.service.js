@@ -2,12 +2,15 @@ import { randomBytes } from "node:crypto";
 import { User } from "../models/user.model.js";
 import { Conversation } from "../models/conversation.model.js";
 import { Message } from "../models/message.model.js";
+import { Notification } from "../models/notification.model.js";
 import {
     POPULATE_MEMBERS,
     serializeConversation,
     emitToUsers,
-    joinConversationRoom
+    joinConversationRoom,
+    getTotalUnread
 } from "./conversation.service.js";
+import { sendPushToUser } from "./push.service.js";
 import { idOf } from "../utils/helpers.js";
 
 /*
@@ -329,6 +332,36 @@ export const sendWelcomeMessage = async (user, io) => {
             conversation: serializeConversation(fresh, userId)
         });
     }
+
+    // ওয়েলকাম মেসেজের জন্যও Notification ও Push পাঠানো
+    const welcomePreview = `Hello ${firstName(user.fullName)} 👋 Welcome to Sync!`;
+    const notifData = {
+        conversationId: String(conv._id),
+        messageId: String(msg._id),
+        url: `/chats/${conv._id}`
+    };
+    await Notification.create({
+        recipient: user._id,
+        actor: sync._id,
+        type: "message",
+        title: "Sync",
+        body: welcomePreview,
+        data: notifData
+    }).catch(err => console.error("[Welcome Notification]", err.message));
+
+    const badgeCount = await getTotalUnread(userId).catch(() => 1);
+    await sendPushToUser(userId, {
+        type: "message",
+        title: "Sync",
+        body: welcomePreview,
+        messageText: welcomePreview,
+        senderName: "Sync",
+        icon: "/icons/icon-192.png",
+        tag: `conversation-${conv._id}`,
+        data: notifData,
+        badgeCount,
+        chatUnread: 1
+    }).catch(err => console.error("[Welcome Push]", err.message));
 };
 
 // নতুন অ্যাকাউন্ট হলে যা যা করতে হয়: গ্রুপে যোগ + welcome মেসেজ (একটা ব্যর্থ হলে আরেকটা আটকায় না, signup-ও আটকায় না)

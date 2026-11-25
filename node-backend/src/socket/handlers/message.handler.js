@@ -137,16 +137,22 @@ async function notifyRecipients({
         .lean()
         .catch(() => null);
 
-    await Promise.allSettled(
+    const safeTitle = String(title || "Sync").slice(0, 120);
+    const safeBody = String(body || "New message").slice(0, 240);
+
+    const results = await Promise.allSettled(
         recipients.map(async recipientId => {
+            // Notification.create কোনো কারণে ব্যর্থ হলেও যেন Push Notification বন্ধ না হয়
             await Notification.create({
                 recipient: recipientId,
                 actor: senderId,
                 type: isGroup ? "group_message" : "message",
-                title,
-                body,
+                title: safeTitle,
+                body: safeBody,
                 data
-            });
+            }).catch(err =>
+                console.error("[Notification.create]", err.message)
+            );
 
             // অ্যাপ আইকনের badge: মোট না-পড়া (badgeCount) ও এই চ্যাটের না-পড়া (chatUnread)
             const badgeCount = await getTotalUnread(recipientId).catch(
@@ -173,6 +179,15 @@ async function notifyRecipients({
             });
         })
     );
+
+    for (const r of results) {
+        if (r.status === "rejected") {
+            console.error(
+                "[Message notify recipient]",
+                r.reason?.message || r.reason
+            );
+        }
+    }
 }
 
 export const registerMessageHandlers = (io, socket) => {
