@@ -363,7 +363,9 @@ export const sweepOrphanedUserData = async () => {
             ).lean()
         ).map(user => asId(user._id))
     );
-    const orphanIds = [...candidateIds].filter(id => !validIds.has(id));
+    const orphanIds = [...candidateIds].filter(
+        id => /^[a-f0-9]{24}$/i.test(id) && !validIds.has(id)
+    );
     const orphanSet = new Set(orphanIds);
 
     const orphanDirect = directRows.filter(conversation =>
@@ -524,8 +526,8 @@ export const sweepOrphanedUserData = async () => {
     const [messageResult, conversationResult, storyResult] = await Promise.all([
         deletedMessageIds.length ? Message.deleteMany(messagesToRemove) : Promise.resolve({ deletedCount: 0 }),
         Conversation.deleteMany({ _id: { $in: [...orphanDirectIds, ...emptyGroups] } }),
-        orphanIds.length
-            ? Story.deleteMany({ author: { $in: orphanIds } })
+        orphanStories.length
+            ? Story.deleteMany({ _id: { $in: orphanStories.map(story => story._id) } })
             : Promise.resolve({ deletedCount: 0 })
     ]);
 
