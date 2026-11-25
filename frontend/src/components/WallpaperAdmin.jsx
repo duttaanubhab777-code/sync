@@ -3,18 +3,24 @@ import {
     Check,
     CheckCircle2,
     Circle,
+    FolderInput,
     Image as ImageIcon,
+    ImagePlus,
+    Layers,
     Loader2,
     Pencil,
     Plus,
     RefreshCw,
+    Search,
     Star,
     Tag,
     Trash2,
     Upload,
+    Users,
     X
 } from "lucide-react";
 import ConfirmDialog from "./ConfirmDialog.jsx";
+import SyncSelect from "./ui/SyncSelect.jsx";
 import { WallpaperPreview, CachedImg } from "./WallpaperPicker.jsx";
 import { api, extractErrorMessage } from "../services/api.js";
 import { uploadMediaToCloudinary } from "../services/media.js";
@@ -65,6 +71,9 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
     const [uploading, setUploading] = useState(false);
     const [pct, setPct] = useState(0);
 
+    const [dragOver, setDragOver] = useState(false);
+    const [query, setQuery] = useState("");
+
     // ---- তালিকার অ্যাকশন ----
     const [busyId, setBusyId] = useState(null);
     const [renameId, setRenameId] = useState(null);
@@ -108,9 +117,18 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
         if (fileRef.current) fileRef.current.value = "";
     };
 
-    const handlePick = async e => {
-        const picked = e.target.files?.[0];
+    const handlePick = e => processFile(e.target.files?.[0], e.target);
+
+    const handleDrop = e => {
+        e.preventDefault();
+        setDragOver(false);
+        if (uploading) return;
+        processFile(e.dataTransfer?.files?.[0], fileRef.current);
+    };
+
+    const processFile = async (picked, input) => {
         if (!picked) return;
+        const e = { target: input || { value: "" } };
 
         if (!OK_TYPES.includes(picked.type)) {
             flashError("Please choose a JPG, PNG or WebP image");
@@ -277,7 +295,10 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
     const effectiveUploadCat =
         categories.some(c => c._id === uploadCat) ? uploadCat : categories[0]?._id || "";
 
-    const shownItems = items.filter(i => i.category === activeFilter);
+    const q = query.trim().toLowerCase();
+    const shownItems = items.filter(
+        i => i.category === activeFilter && (!q || String(i.name).toLowerCase().includes(q))
+    );
 
     const addCategory = async e => {
         e.preventDefault();
@@ -377,78 +398,141 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
 
     const defaultItem = items.find(i => i.isDefault);
 
+    const catOptions = categories.map(c => ({
+        value: c._id,
+        label: c.name,
+        count: c.count
+    }));
+    const moveOptions = categories
+        .filter(c => c._id !== activeFilter)
+        .map(c => ({ value: c._id, label: c.name, count: c.count }));
+    const maxCount = Math.max(1, ...categories.map(c => c.count || 0));
+
     return (
-        <section className="sync-admin-section">
-            <div className="sync-admin-notices-layout">
+        <section className="sync-admin-section wpa">
+            {/* ---------- উপরের সারাংশ ---------- */}
+            <div className="wpa-stats">
+                <div className="wpa-stat" style={{ "--i": 0 }}>
+                    <span className="wpa-stat-ico"><ImageIcon size={20} /></span>
+                    <div>
+                        <strong>{items.length}</strong>
+                        <small>Wallpapers</small>
+                    </div>
+                </div>
+                <div className="wpa-stat" style={{ "--i": 1 }}>
+                    <span className="wpa-stat-ico"><Layers size={20} /></span>
+                    <div>
+                        <strong>{categories.length}</strong>
+                        <small>Categories</small>
+                    </div>
+                </div>
+                <div className="wpa-stat" style={{ "--i": 2 }}>
+                    <span className="wpa-stat-ico"><Users size={20} /></span>
+                    <div>
+                        <strong>{followingDefault}</strong>
+                        <small>Follow default</small>
+                    </div>
+                </div>
+                <div className="wpa-stat is-default" style={{ "--i": 3 }}>
+                    <span className="wpa-stat-ico"><Star size={20} /></span>
+                    <div>
+                        <strong title={defaultItem?.name || ""}>
+                            {defaultItem ? defaultItem.name : "Not set"}
+                        </strong>
+                        <small>Default wallpaper</small>
+                    </div>
+                </div>
+            </div>
+
+            <div className="wpa-top">
                 {/* ---------- নতুন wallpaper ---------- */}
-                <form className="sync-profile-card" onSubmit={handleSubmit}>
-                    <h3>
-                        <ImageIcon size={18} /> Add Chat Wallpaper
-                    </h3>
-                    <p className="sync-muted">
-                        Upload a wallpaper (for example from Pinterest) and give
-                        it a name. Users will see the name and can pick it as
-                        their chat background.
-                    </p>
-
-                    <div className="sync-wp-admin-form">
-                        <div className="sync-wp-admin-preview">
-                            <WallpaperPreview url={localUrl} />
+                <form className="wpa-card wpa-upload" onSubmit={handleSubmit}>
+                    <header className="wpa-card-head">
+                        <span className="wpa-card-ico"><ImagePlus size={19} /></span>
+                        <div>
+                            <h3>Add chat wallpaper</h3>
+                            <p>Upload a portrait image and give it a name. Users see the name and can pick it as their chat background.</p>
                         </div>
+                    </header>
 
-                        <div className="sync-wp-admin-fields">
-                            <div className="sync-field">
-                                <label>Image *</label>
-                                <div className="sync-notice-upload-row">
+                    <div className="wpa-upload-grid">
+                        <label
+                            className={`wpa-drop ${dragOver ? "is-over" : ""} ${file ? "has-file" : ""}`}
+                            onDragOver={e => {
+                                e.preventDefault();
+                                setDragOver(true);
+                            }}
+                            onDragLeave={() => setDragOver(false)}
+                            onDrop={handleDrop}
+                        >
+                            <WallpaperPreview url={localUrl} />
+                            {!file && (
+                                <span className="wpa-drop-hint">
+                                    <Upload size={22} />
+                                    <b>Tap to choose</b>
+                                    <small>or drop an image here</small>
+                                </span>
+                            )}
+                            <input
+                                ref={fileRef}
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp,image/avif"
+                                hidden
+                                onClick={e => {
+                                    e.target.value = "";
+                                }}
+                                onChange={handlePick}
+                                disabled={uploading}
+                            />
+                        </label>
+
+                        <div className="wpa-fields">
+                            <div className="wpa-field">
+                                <span className="wpa-label">Image</span>
+                                <div className="wpa-file-row">
                                     <label className="sync-btn secondary sm">
                                         <Upload size={15} />
-                                        <span>
-                                            {file ? "Change image" : "Choose image"}
-                                        </span>
+                                        <span>{file ? "Change image" : "Choose image"}</span>
                                         <input
-                                            ref={fileRef}
                                             type="file"
                                             accept="image/jpeg,image/png,image/webp,image/avif"
                                             hidden
+                                            onClick={e => {
+                                                e.target.value = "";
+                                            }}
                                             onChange={handlePick}
                                             disabled={uploading}
                                         />
                                     </label>
                                     {file && !uploading && (
-                                        <button
-                                            type="button"
-                                            className="sync-btn danger xs"
-                                            onClick={resetForm}
-                                        >
+                                        <button type="button" className="sync-btn danger xs" onClick={resetForm}>
                                             <X size={14} /> Remove
                                         </button>
                                     )}
                                 </div>
                                 {dims && (
-                                    <small className="sync-wp-meta">
-                                        {dims.width} × {dims.height}px ·{" "}
-                                        {(file.size / 1024 / 1024).toFixed(1)} MB
-                                    </small>
+                                    <div className="wpa-meta">
+                                        <span>{dims.width} × {dims.height}px</span>
+                                        <span>{(file.size / 1024 / 1024).toFixed(1)} MB</span>
+                                    </div>
                                 )}
                                 {lowRes && (
-                                    <small className="sync-wp-warn">
-                                        This image is small and may look blurry
-                                        on phones. A portrait image around
-                                        1080 × 1920 works best.
-                                    </small>
+                                    <p className="wpa-warn">
+                                        This image is small and may look blurry on phones. A portrait image around 1080 × 1920 works best.
+                                    </p>
                                 )}
                                 {landscape && !lowRes && (
-                                    <small className="sync-wp-warn">
-                                        This is a landscape image. On phones
-                                        the sides will be cropped. A portrait
-                                        image fits better.
-                                    </small>
+                                    <p className="wpa-warn">
+                                        This is a landscape image. On phones the sides will be cropped. A portrait image fits better.
+                                    </p>
                                 )}
                             </div>
 
-                            <div className="sync-field">
-                                <label>Wallpaper name *</label>
+                            <div className="wpa-field">
+                                <label className="wpa-label" htmlFor="wpa-name">Wallpaper name</label>
                                 <input
+                                    id="wpa-name"
+                                    className="wpa-input"
                                     type="text"
                                     maxLength={40}
                                     placeholder="e.g. Midnight Forest"
@@ -459,43 +543,36 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
                                 />
                             </div>
 
-                            <div className="sync-field">
-                                <label>Category *</label>
-                                <select
-                                    className="sync-wp-select"
+                            <div className="wpa-field">
+                                <span className="wpa-label">Category</span>
+                                <SyncSelect
+                                    title="Choose category"
+                                    icon={Tag}
                                     value={effectiveUploadCat}
-                                    onChange={e => setUploadCat(e.target.value)}
-                                    disabled={uploading}
-                                    required
-                                >
-                                    {categories.map(c => (
-                                        <option key={c._id} value={c._id}>
-                                            {c.name}
-                                        </option>
-                                    ))}
-                                </select>
+                                    onChange={setUploadCat}
+                                    options={catOptions}
+                                    placeholder="Add a category first"
+                                    disabled={uploading || categories.length === 0}
+                                />
                             </div>
 
-                            <label className="sync-wp-check-row">
+                            <label className={`wpa-switch-row ${makeDefault ? "is-on" : ""}`}>
                                 <input
                                     type="checkbox"
                                     checked={makeDefault}
                                     onChange={e => setMakeDefault(e.target.checked)}
                                     disabled={uploading}
                                 />
-                                <span>
+                                <span className="wpa-switch" aria-hidden="true"><i /></span>
+                                <span className="wpa-switch-text">
                                     Make this the default wallpaper
-                                    <em>
-                                        Only users on “Default” will switch to
-                                        it. Users who picked their own keep
-                                        theirs.
-                                    </em>
+                                    <em>Only users on “Default” will switch to it. Users who picked their own keep theirs.</em>
                                 </span>
                             </label>
 
                             {uploading && (
                                 <div
-                                    className="sync-wp-progress"
+                                    className="wpa-progress"
                                     role="progressbar"
                                     aria-valuenow={pct}
                                     aria-valuemin={0}
@@ -507,19 +584,17 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
 
                             <button
                                 type="submit"
-                                className="sync-btn primary"
+                                className="sync-btn primary lg wpa-submit"
                                 disabled={uploading || !file || !name.trim()}
                             >
                                 {uploading ? (
                                     <>
-                                        <Loader2 size={16} className="spin" />{" "}
-                                        {pct < 100
-                                            ? `Uploading ${pct}%...`
-                                            : "Saving..."}
+                                        <Loader2 size={17} className="spin" />{" "}
+                                        {pct < 100 ? `Uploading ${pct}%...` : "Saving..."}
                                     </>
                                 ) : (
                                     <>
-                                        <Upload size={16} /> Add wallpaper
+                                        <Upload size={17} /> Add wallpaper
                                     </>
                                 )}
                             </button>
@@ -528,20 +603,18 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
                 </form>
 
                 {/* ---------- ক্যাটাগরি ---------- */}
-                <div className="sync-profile-card">
-                    <h3>
-                        <Tag size={18} /> Categories
-                    </h3>
-                    <p className="sync-muted">
-                        Total {items.length} wallpaper{items.length === 1 ? "" : "s"}
-                        {" · "}
-                        {categories.length} categor{categories.length === 1 ? "y" : "ies"}
-                        . Every wallpaper must have a category. New categories are
-                        always added at the end.
-                    </p>
+                <div className="wpa-card wpa-cats">
+                    <header className="wpa-card-head">
+                        <span className="wpa-card-ico"><Tag size={19} /></span>
+                        <div>
+                            <h3>Categories</h3>
+                            <p>Every wallpaper needs a category. New categories are always added at the end.</p>
+                        </div>
+                    </header>
 
-                    <form className="sync-wp-cat-add" onSubmit={addCategory}>
+                    <form className="wpa-cat-add" onSubmit={addCategory}>
                         <input
+                            className="wpa-input"
                             type="text"
                             maxLength={30}
                             placeholder="New category name"
@@ -551,59 +624,48 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
                         />
                         <button
                             type="submit"
-                            className="sync-btn primary sm"
+                            className="sync-btn primary"
                             disabled={catBusy === "add" || !newCatName.trim()}
                         >
-                            {catBusy === "add" ? (
-                                <Loader2 size={15} className="spin" />
-                            ) : (
-                                <Plus size={15} />
-                            )}{" "}
-                            Add
+                            {catBusy === "add" ? <Loader2 size={16} className="spin" /> : <Plus size={16} />} Add
                         </button>
                     </form>
 
-                    <ul className="sync-wp-cat-list">
-                        {categories.map(cat => (
-                            <li key={cat._id}>
+                    <ul className="wpa-cat-list">
+                        {categories.map((cat, i) => (
+                            <li key={cat._id} style={{ "--i": i }}>
                                 {catRenameId === cat._id ? (
                                     <form
-                                        className="sync-wp-rename"
+                                        className="wpa-rename"
                                         onSubmit={e => {
                                             e.preventDefault();
                                             submitCatRename(cat);
                                         }}
                                     >
                                         <input
+                                            className="wpa-input sm"
                                             type="text"
                                             maxLength={30}
                                             value={catRenameValue}
                                             onChange={e => setCatRenameValue(e.target.value)}
                                             autoFocus
                                         />
-                                        <button
-                                            type="submit"
-                                            className="sync-icon-btn"
-                                            aria-label="Save name"
-                                            disabled={catBusy === cat._id}
-                                        >
-                                            <Check size={16} />
+                                        <button type="submit" className="sync-icon-btn" aria-label="Save name" disabled={catBusy === cat._id}>
+                                            <Check size={17} />
                                         </button>
-                                        <button
-                                            type="button"
-                                            className="sync-icon-btn"
-                                            aria-label="Cancel"
-                                            onClick={() => setCatRenameId(null)}
-                                        >
-                                            <X size={16} />
+                                        <button type="button" className="sync-icon-btn" aria-label="Cancel" onClick={() => setCatRenameId(null)}>
+                                            <X size={17} />
                                         </button>
                                     </form>
                                 ) : (
                                     <>
-                                        <span className="sync-wp-cat-name" title={cat.name}>
-                                            {cat.name}
-                                        </span>
-                                        <em className="sync-wp-cat-count">{cat.count}</em>
+                                        <div className="wpa-cat-main">
+                                            <span className="wpa-cat-name" title={cat.name}>{cat.name}</span>
+                                            <span className="wpa-cat-bar" aria-hidden="true">
+                                                <i style={{ transform: `scaleX(${(cat.count || 0) / maxCount})` }} />
+                                            </span>
+                                        </div>
+                                        <em className="wpa-cat-count">{cat.count}</em>
                                         <button
                                             type="button"
                                             className="sync-icon-btn"
@@ -614,9 +676,9 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
                                                 setCatRenameValue(cat.name);
                                             }}
                                         >
-                                            <Pencil size={15} />
+                                            <Pencil size={16} />
                                         </button>
-                                        {!cat.isSystem && (
+                                        {!cat.isSystem ? (
                                             <button
                                                 type="button"
                                                 className="sync-icon-btn danger"
@@ -632,8 +694,10 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
                                                         : setCatToDelete(cat)
                                                 }
                                             >
-                                                <Trash2 size={15} />
+                                                <Trash2 size={16} />
                                             </button>
+                                        ) : (
+                                            <span className="wpa-cat-lock" aria-hidden="true" />
                                         )}
                                     </>
                                 )}
@@ -641,54 +705,52 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
                         ))}
                     </ul>
                 </div>
+            </div>
 
-                {/* ---------- তালিকা ---------- */}
-                <div className="sync-profile-card">
-                    <div className="sync-admin-section-head">
-                        <div>
-                            <h3>Wallpapers (total {items.length})</h3>
-                            <p className="sync-muted">
-                                {defaultItem
-                                    ? `Default: “${defaultItem.name}” · ${followingDefault} user${
-                                          followingDefault === 1 ? "" : "s"
-                                      } follow it`
-                                    : "No default set. Chats use the classic Sync look."}
-                            </p>
-                        </div>
-                        <div className="sync-wp-head-actions">
-                            {defaultItem && (
-                                <button
-                                    type="button"
-                                    className="sync-btn secondary sm"
-                                    onClick={handleClearDefault}
-                                    disabled={busyId === "clear"}
-                                >
-                                    Clear default
-                                </button>
-                            )}
+            {/* ---------- তালিকা ---------- */}
+            <div className="wpa-card wpa-library">
+                <header className="wpa-lib-head">
+                    <div>
+                        <h3>Wallpaper library</h3>
+                        <p>
+                            {defaultItem
+                                ? `Default: “${defaultItem.name}” · ${followingDefault} user${followingDefault === 1 ? "" : "s"} follow it`
+                                : "No default set. Chats use the classic Sync look."}
+                        </p>
+                    </div>
+                    <div className="wpa-lib-actions">
+                        {defaultItem && (
                             <button
                                 type="button"
                                 className="sync-btn secondary sm"
-                                onClick={load}
-                                disabled={loading}
+                                onClick={handleClearDefault}
+                                disabled={busyId === "clear"}
                             >
-                                <RefreshCw
-                                    size={15}
-                                    className={loading ? "spin" : ""}
-                                />
+                                Clear default
                             </button>
-                        </div>
+                        )}
+                        <button
+                            type="button"
+                            className="sync-btn secondary sm"
+                            onClick={load}
+                            disabled={loading}
+                            aria-label="Refresh"
+                        >
+                            <RefreshCw size={15} className={loading ? "spin" : ""} />
+                        </button>
                     </div>
+                </header>
 
-                    {items.length > 0 && (
-                        <div className="sync-wp-cats admin" role="tablist">
+                {items.length > 0 && (
+                    <>
+                        <div className="wpa-tabs" role="tablist">
                             {categories.map(c => (
                                 <button
                                     key={c._id}
                                     type="button"
                                     role="tab"
                                     aria-selected={activeFilter === c._id}
-                                    className={`sync-wp-cat ${activeFilter === c._id ? "is-active" : ""}`}
+                                    className={`wpa-tab ${activeFilter === c._id ? "is-active" : ""}`}
                                     onClick={() => {
                                         setFilterId(c._id);
                                         setSelected(new Set());
@@ -699,202 +761,200 @@ export default function WallpaperAdmin({ flashSuccess, flashError }) {
                                 </button>
                             ))}
                         </div>
-                    )}
 
-                    {items.length > 0 && (
-                        <div className="sync-wp-selectbar">
-                            {!selectMode ? (
+                        <div className="wpa-toolbar">
+                            <label className="wpa-search">
+                                <Search size={16} />
+                                <input
+                                    type="search"
+                                    placeholder="Search in this category"
+                                    value={query}
+                                    onChange={e => setQuery(e.target.value)}
+                                />
+                                {query && (
+                                    <button type="button" aria-label="Clear search" onClick={() => setQuery("")}>
+                                        <X size={14} />
+                                    </button>
+                                )}
+                            </label>
+                            {!selectMode && (
                                 <button
                                     type="button"
-                                    className="sync-btn secondary sm"
+                                    className="sync-btn secondary"
                                     onClick={() => setSelectMode(true)}
                                     disabled={shownItems.length === 0}
                                 >
-                                    <CheckCircle2 size={15} /> Select &amp; move
+                                    <CheckCircle2 size={16} /> Select &amp; move
                                 </button>
-                            ) : (
-                                <>
-                                    <button
-                                        type="button"
-                                        className="sync-btn secondary sm"
-                                        onClick={toggleSelectAll}
-                                    >
-                                        {allShownSelected ? "Clear" : `Select all (${shownItems.length})`}
-                                    </button>
-                                    <select
-                                        className="sync-wp-select"
-                                        value={moveTo}
-                                        onChange={e => setMoveTo(e.target.value)}
-                                        aria-label="Move to category"
-                                    >
-                                        <option value="">Move {selected.size} to...</option>
-                                        {categories
-                                            .filter(c => c._id !== activeFilter)
-                                            .map(c => (
-                                                <option key={c._id} value={c._id}>
-                                                    {c.name}
-                                                </option>
-                                            ))}
-                                    </select>
-                                    <button
-                                        type="button"
-                                        className="sync-btn primary sm"
-                                        onClick={handleMove}
-                                        disabled={moving || selected.size === 0 || !moveTo}
-                                    >
-                                        {moving ? <Loader2 size={15} className="spin" /> : "Move"}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="sync-btn secondary sm"
-                                        onClick={exitSelect}
-                                    >
-                                        Cancel
-                                    </button>
-                                </>
                             )}
                         </div>
-                    )}
+                    </>
+                )}
 
-                    {loading && items.length === 0 ? (
-                        <div className="sync-wp-empty">
-                            <Loader2 size={18} className="spin" /> Loading...
-                        </div>
-                    ) : items.length === 0 ? (
-                        <div className="sync-wp-empty">
-                            No wallpapers yet. Add the first one.
-                        </div>
-                    ) : shownItems.length === 0 ? (
-                        <div className="sync-wp-empty">
-                            No wallpapers in this category yet.
-                        </div>
-                    ) : (
-                        <div className="sync-wp-admin-grid">
-                            {shownItems.map(item => (
-                                <div
+                {loading && items.length === 0 ? (
+                    <div className="wpa-empty">
+                        <Loader2 size={20} className="spin" /> Loading...
+                    </div>
+                ) : items.length === 0 ? (
+                    <div className="wpa-empty">
+                        <ImageIcon size={26} />
+                        <b>No wallpapers yet</b>
+                        <span>Add the first one from the form above.</span>
+                    </div>
+                ) : shownItems.length === 0 ? (
+                    <div className="wpa-empty">
+                        <ImageIcon size={26} />
+                        <b>{q ? "No match found" : "Nothing in this category"}</b>
+                        <span>{q ? "Try a different name." : "Upload one or move some here."}</span>
+                    </div>
+                ) : (
+                    <div className="wpa-grid" key={activeFilter}>
+                        {shownItems.map((item, idx) => {
+                            const picked = selectMode && selected.has(item._id);
+                            return (
+                                <article
                                     key={item._id}
-                                    className={`sync-wp-admin-card ${
-                                        item.isDefault ? "is-default" : ""
-                                    } ${selectMode && selected.has(item._id) ? "is-picked" : ""}`}
+                                    className={`wpa-item ${item.isDefault ? "is-default" : ""} ${picked ? "is-picked" : ""}`}
+                                    style={{ "--i": Math.min(idx, 12) }}
                                 >
                                     <div
-                                        className="sync-wp-thumb"
+                                        className="wpa-thumb"
                                         onClick={selectMode ? () => toggleSelect(item._id) : undefined}
                                         role={selectMode ? "checkbox" : undefined}
-                                        aria-checked={selectMode ? selected.has(item._id) : undefined}
+                                        aria-checked={selectMode ? picked : undefined}
                                     >
-                                        {selectMode && (
-                                            <span className="sync-wp-pick">
-                                                {selected.has(item._id) ? (
-                                                    <CheckCircle2 size={22} />
-                                                ) : (
-                                                    <Circle size={22} />
-                                                )}
-                                            </span>
-                                        )}
-                                        <CachedImg
-                                            url={wallpaperThumbUrl(item.url)}
-                                            alt={item.name}
-                                            />
+                                        <CachedImg url={wallpaperThumbUrl(item.url)} alt={item.name} />
+                                        <span className="wpa-shade" aria-hidden="true" />
                                         {item.isDefault && (
-                                            <span className="sync-wp-default-tag">
+                                            <span className="wpa-badge">
                                                 <Star size={11} /> Default
                                             </span>
                                         )}
+                                        {selectMode && (
+                                            <span className="wpa-pick">
+                                                {picked ? <CheckCircle2 size={24} /> : <Circle size={24} />}
+                                            </span>
+                                        )}
+                                        <span className="wpa-used">
+                                            <Users size={11} /> {item.usedBy}
+                                        </span>
                                     </div>
 
                                     {renameId === item._id ? (
                                         <form
-                                            className="sync-wp-rename"
+                                            className="wpa-rename"
                                             onSubmit={e => {
                                                 e.preventDefault();
                                                 submitRename(item);
                                             }}
                                         >
                                             <input
+                                                className="wpa-input sm"
                                                 type="text"
                                                 maxLength={40}
                                                 value={renameValue}
-                                                onChange={e =>
-                                                    setRenameValue(e.target.value)
-                                                }
+                                                onChange={e => setRenameValue(e.target.value)}
                                                 autoFocus
                                             />
-                                            <button
-                                                type="submit"
-                                                className="sync-icon-btn"
-                                                aria-label="Save name"
-                                                disabled={busyId === item._id}
-                                            >
+                                            <button type="submit" className="sync-icon-btn xs" aria-label="Save name" disabled={busyId === item._id}>
                                                 <Check size={16} />
                                             </button>
-                                            <button
-                                                type="button"
-                                                className="sync-icon-btn"
-                                                aria-label="Cancel"
-                                                onClick={() => setRenameId(null)}
-                                            >
+                                            <button type="button" className="sync-icon-btn xs" aria-label="Cancel" onClick={() => setRenameId(null)}>
                                                 <X size={16} />
                                             </button>
                                         </form>
                                     ) : (
-                                        <div className="sync-wp-admin-info">
-                                            <strong title={item.name}>
-                                                {item.name}
-                                            </strong>
+                                        <div className="wpa-info">
+                                            <strong title={item.name}>{item.name}</strong>
                                             <small>
                                                 {item.usedBy} chose this
-                                                {item.createdBy
-                                                    ? ` · by @${item.createdBy.username}`
-                                                    : ""}
+                                                {item.createdBy ? ` · @${item.createdBy.username}` : ""}
                                             </small>
                                         </div>
                                     )}
 
-                                    <div className="sync-wp-admin-actions">
-                                        {!item.isDefault && (
+                                    {!selectMode && (
+                                        <div className="wpa-actions">
+                                            {item.isDefault ? (
+                                                <span className="wpa-is-default">
+                                                    <Star size={13} /> Default
+                                                </span>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    className="wpa-default-btn"
+                                                    onClick={() => handleMakeDefault(item)}
+                                                    disabled={busyId === item._id}
+                                                >
+                                                    {busyId === item._id ? (
+                                                        <Loader2 size={14} className="spin" />
+                                                    ) : (
+                                                        <Star size={14} />
+                                                    )}
+                                                    Make default
+                                                </button>
+                                            )}
                                             <button
                                                 type="button"
-                                                className="sync-btn secondary xs"
-                                                onClick={() => handleMakeDefault(item)}
-                                                disabled={busyId === item._id}
+                                                className="sync-icon-btn xs"
+                                                aria-label="Rename"
+                                                title="Rename"
+                                                onClick={() => startRename(item)}
                                             >
-                                                {busyId === item._id ? (
-                                                    <Loader2
-                                                        size={13}
-                                                        className="spin"
-                                                    />
-                                                ) : (
-                                                    <Star size={13} />
-                                                )}{" "}
-                                                Make default
+                                                <Pencil size={15} />
                                             </button>
-                                        )}
-                                        <button
-                                            type="button"
-                                            className="sync-icon-btn"
-                                            aria-label="Rename"
-                                            title="Rename"
-                                            onClick={() => startRename(item)}
-                                        >
-                                            <Pencil size={15} />
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="sync-icon-btn danger"
-                                            aria-label="Delete"
-                                            title="Delete"
-                                            onClick={() => setToDelete(item)}
-                                        >
-                                            <Trash2 size={15} />
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
+                                            <button
+                                                type="button"
+                                                className="sync-icon-btn xs danger"
+                                                aria-label="Delete"
+                                                title="Delete"
+                                                onClick={() => setToDelete(item)}
+                                            >
+                                                <Trash2 size={15} />
+                                            </button>
+                                        </div>
+                                    )}
+                                </article>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
+
+            {/* ---------- একসাথে সরানোর ভাসমান বার ---------- */}
+            {selectMode && (
+                <div className="wpa-movebar" role="region" aria-label="Move selected wallpapers">
+                    <div className="wpa-movebar-top">
+                        <strong>
+                            <FolderInput size={17} /> {selected.size} selected
+                        </strong>
+                        <button type="button" className="wpa-link" onClick={toggleSelectAll}>
+                            {allShownSelected ? "Clear all" : `Select all (${shownItems.length})`}
+                        </button>
+                    </div>
+                    <div className="wpa-movebar-row">
+                        <SyncSelect
+                            title="Move to category"
+                            className="is-compact"
+                            value={moveTo}
+                            onChange={setMoveTo}
+                            options={moveOptions}
+                            placeholder="Move to..."
+                        />
+                        <button
+                            type="button"
+                            className="sync-btn primary"
+                            onClick={handleMove}
+                            disabled={moving || selected.size === 0 || !moveTo}
+                        >
+                            {moving ? <Loader2 size={16} className="spin" /> : "Move"}
+                        </button>
+                        <button type="button" className="sync-btn secondary" onClick={exitSelect}>
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {catToDelete && (
                 <ConfirmDialog

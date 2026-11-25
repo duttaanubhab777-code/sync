@@ -39,6 +39,7 @@ import Avatar from "../components/Avatar.jsx";
 import SyncLogo from "../components/SyncLogo.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import WallpaperAdmin from "../components/WallpaperAdmin.jsx";
+import SyncDateTimePicker from "../components/ui/SyncDateTimePicker.jsx";
 import LoginHistoryAdmin from "../components/LoginHistoryAdmin.jsx";
 import {
     formatCountdownHMS,
@@ -1765,12 +1766,12 @@ export default function AdminPage() {
                                         Live Countdown Target Time (Optional —
                                         shows big HH:MM:SS timer)
                                     </label>
-                                    <input
-                                        type="datetime-local"
+                                    <SyncDateTimePicker
                                         value={noticeCountdownTo}
-                                        onChange={e =>
-                                            setNoticeCountdownTo(e.target.value)
-                                        }
+                                        onChange={setNoticeCountdownTo}
+                                        title="Countdown target time"
+                                        placeholder="Pick countdown date & time"
+                                        disablePast
                                     />
                                     <div className="sync-filter-pills mt-2">
                                         <button
