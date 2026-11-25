@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import {
@@ -33,7 +33,10 @@ import {
     MessageSquare,
     TrendingUp,
     Palette,
-    History
+    History,
+    ChevronDown,
+    Check,
+    Lightbulb
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncLogo from "../components/SyncLogo.jsx";
@@ -113,6 +116,172 @@ const DashboardDonut = ({ segments, total }) => {
                     </div>
                 ))}
             </div>
+        </div>
+    );
+};
+
+
+const BROADCAST_TAG_OPTIONS = [
+    {
+        value: "Announcement",
+        description: "Official message for everyone",
+        Icon: Megaphone
+    },
+    {
+        value: "New Feature",
+        description: "Highlight something newly launched",
+        Icon: Sparkles
+    },
+    {
+        value: "Update",
+        description: "Share the latest Sync improvements",
+        Icon: RefreshCw
+    },
+    {
+        value: "Tip",
+        description: "A helpful hint for the community",
+        Icon: Lightbulb
+    }
+];
+
+const BroadcastTagSelect = ({ value, onChange }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const rootRef = useRef(null);
+    const triggerRef = useRef(null);
+    const optionRefs = useRef([]);
+    const selectedIndex = Math.max(
+        0,
+        BROADCAST_TAG_OPTIONS.findIndex(option => option.value === value)
+    );
+    const selectedOption = BROADCAST_TAG_OPTIONS[selectedIndex];
+    const SelectedIcon = selectedOption.Icon;
+
+    useEffect(() => {
+        if (!isOpen) return undefined;
+
+        const handlePointerDown = event => {
+            if (!rootRef.current?.contains(event.target)) {
+                setIsOpen(false);
+            }
+        };
+        const handleKeyDown = event => {
+            if (event.key === "Escape") {
+                setIsOpen(false);
+                triggerRef.current?.focus();
+            }
+        };
+
+        document.addEventListener("pointerdown", handlePointerDown);
+        document.addEventListener("keydown", handleKeyDown);
+        return () => {
+            document.removeEventListener("pointerdown", handlePointerDown);
+            document.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [isOpen]);
+
+    const focusOption = index => {
+        const nextIndex = Math.min(
+            BROADCAST_TAG_OPTIONS.length - 1,
+            Math.max(0, index)
+        );
+        optionRefs.current[nextIndex]?.focus();
+    };
+
+    const handleTriggerKeyDown = event => {
+        if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setIsOpen(true);
+            requestAnimationFrame(() => focusOption(selectedIndex));
+        } else if (event.key === "ArrowUp") {
+            event.preventDefault();
+            setIsOpen(true);
+            requestAnimationFrame(() => focusOption(selectedIndex));
+        }
+    };
+
+    const handleOptionKeyDown = (event, index) => {
+        if (event.key === "ArrowDown") {
+            event.preventDefault();
+            focusOption((index + 1) % BROADCAST_TAG_OPTIONS.length);
+        } else if (event.key === "ArrowUp") {
+            event.preventDefault();
+            focusOption((index - 1 + BROADCAST_TAG_OPTIONS.length) % BROADCAST_TAG_OPTIONS.length);
+        } else if (event.key === "Home") {
+            event.preventDefault();
+            focusOption(0);
+        } else if (event.key === "End") {
+            event.preventDefault();
+            focusOption(BROADCAST_TAG_OPTIONS.length - 1);
+        } else if (event.key === "Escape") {
+            event.preventDefault();
+            setIsOpen(false);
+            triggerRef.current?.focus();
+        }
+    };
+
+    const chooseOption = option => {
+        onChange(option.value);
+        setIsOpen(false);
+        triggerRef.current?.focus();
+    };
+
+    return (
+        <div className={"sync-broadcast-tag-select" + (isOpen ? " is-open" : "")} ref={rootRef}>
+            <button
+                ref={triggerRef}
+                type="button"
+                className="sync-broadcast-tag-trigger"
+                aria-haspopup="listbox"
+                aria-expanded={isOpen}
+                aria-label={"Broadcast tag: " + value}
+                onClick={() => setIsOpen(open => !open)}
+                onKeyDown={handleTriggerKeyDown}
+            >
+                <span className="sync-broadcast-tag-leading-icon">
+                    <SelectedIcon size={17} />
+                </span>
+                <span className="sync-broadcast-tag-trigger-copy">
+                    <strong>{selectedOption.value}</strong>
+                    <small>Broadcast category</small>
+                </span>
+                <ChevronDown size={18} className="sync-broadcast-tag-chevron" />
+            </button>
+
+            {isOpen && (
+                <div className="sync-broadcast-tag-menu" role="listbox" aria-label="Choose broadcast tag">
+                    <div className="sync-broadcast-tag-menu-heading">
+                        <span>CHOOSE A TAG</span>
+                        <span>4 OPTIONS</span>
+                    </div>
+                    {BROADCAST_TAG_OPTIONS.map((option, index) => {
+                        const OptionIcon = option.Icon;
+                        const isSelected = option.value === value;
+                        return (
+                            <button
+                                key={option.value}
+                                ref={element => { optionRefs.current[index] = element; }}
+                                type="button"
+                                role="option"
+                                aria-selected={isSelected}
+                                className={"sync-broadcast-tag-option" + (isSelected ? " is-selected" : "")}
+                                onClick={() => chooseOption(option)}
+                                onKeyDown={event => handleOptionKeyDown(event, index)}
+                            >
+                                <span className="sync-broadcast-tag-option-icon">
+                                    <OptionIcon size={17} />
+                                </span>
+                                <span className="sync-broadcast-tag-option-copy">
+                                    <strong>{option.value}</strong>
+                                    <small>{option.description}</small>
+                                </span>
+                                <span className="sync-broadcast-tag-option-check">
+                                    {isSelected && <Check size={15} strokeWidth={2.8} />}
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
         </div>
     );
 };
@@ -2012,21 +2181,10 @@ export default function AdminPage() {
                             >
                                 <div className="sync-field">
                                     <label>Tag</label>
-                                    <select
+                                    <BroadcastTagSelect
                                         value={broadcastTag}
-                                        onChange={e =>
-                                            setBroadcastTag(e.target.value)
-                                        }
-                                    >
-                                        <option value="Announcement">
-                                            Announcement
-                                        </option>
-                                        <option value="New Feature">
-                                            New Feature
-                                        </option>
-                                        <option value="Update">Update</option>
-                                        <option value="Tip">Tip</option>
-                                    </select>
+                                        onChange={setBroadcastTag}
+                                    />
                                 </div>
                                 <div className="sync-field">
                                     <label>Broadcast Title *</label>
