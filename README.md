@@ -235,7 +235,8 @@ You can read the source code without configuring every external service. To test
 - Sent, delivered and seen states, including group delivery/read information
 - Typing and voice-recording activity indicators
 - Online presence and last-seen information
-- Message deletion and group-level controls
+- Message deletion for everyone, message forwarding, emoji reactions, poll creation/voting (single- or multiple-choice), and message-level pinning
+- Conversation-level pin/mute preferences, pinned-message previews, unread counts, and per-conversation notification controls
 - Group name, description and icon management
 - Group member add/remove, admin promotion/demotion, leave-group flow and optional admin-only messaging
 - Chat search, unread and group filters
@@ -262,6 +263,9 @@ You can read the source code without configuring every external service. To test
 ### Media storage & cleanup
 
 - Remove eligible Cloudinary assets when messages, stories, notices, wallpapers, avatars or group icons are deleted or replaced, and when groups or accounts are removed
+- Permanent Admin/Super Admin account deletion cascades through the deleted account's private conversations and messages, stories, notifications, push subscriptions, notice acknowledgements, password-reset records, block references and related user-owned records
+- In shared groups, account deletion removes the deleted member's messages and user references while preserving messages authored by remaining members; stale group previews, pins, reactions, poll votes, receipts and story replies are repaired
+- A startup orphan-repair sweep checks direct conversations, messages, stories and shared-group references left by older account deletions, then removes eligible Cloudinary assets only after checking that they are no longer referenced
 - Check whether another message, profile, group or content record still references an asset before deleting it
 - Retry transient Cloudinary deletion failures and invalidate the CDN cache after successful removal
 - Sweep expired story and notice media before the delayed MongoDB TTL cleanup removes their records; the sweeper runs periodically in the Node service
@@ -307,8 +311,12 @@ You can read the source code without configuring every external service. To test
 
 ### Admin workspace
 
-- Platform statistics and dashboard overview
-- User listing, blocking/unblocking and account removal
+- Platform statistics and responsive analytics for account roles, user activity, media, conversations, notices and push subscriptions
+- User listing, blocking/unblocking, permanent account removal and recent login history (latest 20 records with IP address and timestamp)
+- Role-aware administration: Super Admin can create Platform Admins and change platform roles; Admin and Super Admin can use permitted moderation tools
+- Official Sync DM Broadcast: send a styled, tagged announcement card to every user's personal Sync conversation, with push-notification delivery and published-notice history
+- Broadcast tags: Announcement, New Feature, Update and Tip
+- Admin-managed notice publishing, acknowledgements, expiry/countdown details and deletion
 - Platform admin creation and role management (Super Admin only)
 - Group listing and administrative group deletion
 - Chat/story media review and moderation
@@ -325,6 +333,8 @@ You can read the source code without configuring every external service. To test
 - Public Contact page at [`/contact`](https://sync-5lfm.onrender.com/contact), with validation, anti-spam field and retry outbox
 - Contact form integration with the separate Email Sender service
 - Android release lookup from GitHub Releases, latest APK download and release history
+- Profile QR cards with copy/share/save actions, QR scanning using the camera or an imported image, and username-based public profile/deep links
+- Chat-level message search and shared-media browsing, plus message forwarding and conversation/message pinning
 - In-app update popup and dedicated Updates page
 - Android-only FCM release notifications with **Update Now** and **Later** actions; Update Now downloads the APK with native progress feedback and opens the Android installer when ready
 - New Android releases are detected through a protected GitHub Actions notification hook and a server-side polling fallback; duplicate notifications are suppressed per build
@@ -436,29 +446,33 @@ sync/
 │   └── PYTHONANYWHERE_DEPLOYMENT_GUIDE.md
 ├── frontend/
 │   └── src/
-│       ├── components/           # Layout, dialogs, upload cards, story/media players, notifications
-│       │   └── chat/             # Attachment sheet, location, contact, document and message-action components
-│       ├── hooks/                # App badge, contact matching, sign-out and shared UI hooks
-│       ├── pages/                # Auth, chats, stories, profile, admin, contact, updates
-│       ├── services/             # API, Socket.IO, background outbox, persistent media, QR, wallpapers, previews and notifications
-│       ├── store/                # Redux Toolkit slices
-│       ├── styles/
-│       └── utils/
+│       ├── components/
+│       │   ├── chat/             # Attachments, polls, forwarding, message actions, location/contact cards
+│       │   ├── notifications/    # Notification permission and enable flow
+│       │   ├── story/            # Story media and playback controls
+│       │   └── ui/               # Shared Sync date/time picker and select controls
+│       ├── hooks/                # Upload queue, contact matching, app badge and sign-out hooks
+│       ├── pages/                # Auth, chats, stories, profile, admin, contact and updates
+│       ├── services/             # API, Socket.IO, outbox, media cache, QR, wallpapers, previews, app updates
+│       ├── store/                # Redux Toolkit auth, chat and story state
+│       ├── styles/               # Feature, responsive, chat, admin, story and native-app styles
+│       └── utils/                # Compression, media, QR, formatting, username and viewport helpers
 ├── node-backend/
 │   └── src/
-│       ├── controllers/          # Auth, chat, admin, story, wallpaper and app updates
-│       ├── db/
-│       ├── middlewares/
-│       ├── models/               # Users, sessions, messages, stories, notices and update state
-│       ├── routes/
-│       ├── services/             # Messaging, push, mail, app updates and Cloudinary cleanup
-│       ├── socket/
-│       │   └── handlers/
-│       ├── utils/
-│       └── validators/
+│       ├── constants.js
+│       ├── controllers/          # Auth, users, conversations, messages, stories, admin, notices, updates
+│       ├── db/                   # MongoDB connection and database preparation
+│       ├── middlewares/          # JWT/role checks, rate limits and request validation
+│       ├── models/               # Users, conversations, messages, stories, notices, notifications, wallpapers
+│       ├── routes/               # Versioned /api/v1 route modules
+│       ├── services/             # Conversation, message, push, official account, app updates, account/media cleanup
+│       ├── socket/               # Authenticated Socket.IO setup and event handlers
+│       ├── utils/                # Tokens, cookies, Cloudinary, attachments, delivery acknowledgements
+│       └── validators/           # Zod auth and chat schemas
 ├── python-service/
-│   ├── routes/                   # Health, media signing and mail relay
+│   ├── routes/                   # Health, media signing and protected mail relay
 │   ├── services/                 # Cloudinary signing and SMTP delivery
+│   ├── settings.py               # Environment/config loading and validation
 │   ├── tests/
 │   ├── app.py
 │   ├── config.example.py
@@ -751,20 +765,20 @@ The Node REST API is versioned under `/api/v1`; unversioned `/api/...` applicati
 | Authentication | `/api/v1/auth` | OTP signup, login, refresh/logout, forgot-password OTP reset, authenticated password change and current user |
 | Users | `/api/v1/users` | User search, contact matching, public profiles, profile updates and block controls |
 | Wallpapers | `/api/v1/wallpapers` | List available wallpapers and save the signed-in user's wallpaper preference |
-| Conversations | `/api/v1/conversations` | Direct/group conversations, members, read state and paginated messages |
+| Conversations | `/api/v1/conversations` | Direct/group conversations, member/admin management, read state, pin/mute preferences, pinned messages and paginated history |
 | Stories | `/api/v1/stories` | Story feed, create, view, viewers, reactions and replies |
 | Notifications | `/api/v1/notifications` | In-app notifications, read state, push config and device subscriptions |
 | Notices | `/api/v1/notices` | Pending notices and acknowledgement |
 | Admin | `/api/v1/admin` | Platform stats, users, roles, media, groups and notices |
 | Link previews | `/api/v1/link-preview` | Fetch metadata for a URL |
 | App updates | `/api/v1/app/updates` | Public Android release metadata/version history and protected GitHub Actions release-notification trigger |
-| Message details & delivery | `/api/v1/messages` | Sender-only Message Info and signed push-delivery acknowledgements |
+| Message operations | `/api/v1/conversations/:id` and `/api/v1/messages` | Paginated history, in-chat search, shared media, forwarding, sender-only Message Info, signed push-delivery acknowledgements and offline sync |
 | Offline sync | `/api/v1/sync` | Recover messages and message updates missed while disconnected |
 | Python service health | `/api/v1/health` | Service health and non-secret runtime configuration status |
 
 ### Real-time events
 
-Socket.IO is attached to the same HTTP server and authenticates connections using the access token.
+Socket.IO is attached to the same HTTP server and authenticates connections using the access token. It supports live message delivery, presence, typing/recording indicators, read and delivery receipts, conversation changes, story activity, official notices and account permission changes.
 
 | Event | Direction / purpose |
 | --- | --- |
@@ -782,7 +796,7 @@ Socket.IO is attached to the same HTTP server and authenticates connections usin
 | `notice:new` / `notice:removed` | Broadcast notice changes |
 | `user:role_updated` / `user:blocked` | Account permission changes |
 
-Additional message endpoints include `GET /api/v1/messages/:id/info` (sender-only delivery/read details) and `POST /api/v1/messages/delivery-ack` (signed acknowledgement from a delivered push notification). Contact discovery uses `POST /api/v1/users/match-contacts`; wallpaper preferences use `GET /api/v1/wallpapers` and `PUT /api/v1/wallpapers/me`. Password recovery uses `POST /api/v1/auth/forgot-password/send-otp` and `POST /api/v1/auth/forgot-password/reset`; authenticated password changes use `POST /api/v1/auth/change-password`. Android update notifications are triggered by the protected `POST /api/v1/app/updates/notify` endpoint.
+Additional message endpoints include `GET /api/v1/conversations/:id/search` (search within a conversation), `GET /api/v1/conversations/:id/media` (shared media), `POST /api/v1/messages/:id/forward` (forward an existing message), `GET /api/v1/messages/:id/info` (sender-only delivery/read details), `POST /api/v1/messages/delivery-ack` (signed acknowledgement from a delivered push notification), and `GET /api/v1/sync` (recover missed message updates). Contact discovery uses `POST /api/v1/users/match-contacts`; wallpaper preferences use `GET /api/v1/wallpapers` and `PUT /api/v1/wallpapers/me`. Password recovery uses `POST /api/v1/auth/forgot-password/send-otp` and `POST /api/v1/auth/forgot-password/reset`; authenticated password changes use `POST /api/v1/auth/change-password`. Android update notifications are triggered by the protected `POST /api/v1/app/updates/notify` endpoint.
 
 The detailed request/response contract is maintained in [`docs/API.md`](docs/API.md).
 
@@ -872,6 +886,18 @@ test: cover refresh token rotation
 ~~~
 
 ### Frequently asked questions
+
+**What happens when an Admin permanently deletes an account?**
+
+The backend runs a cascade cleanup for that account's private conversations, messages, stories and user-linked records. In shared groups, the deleted member's own messages and references are removed while other members' messages remain. Cloudinary assets are deleted only when no remaining application record references them. A startup repair sweep also checks for orphaned data left by older deletions. Remote Cloudinary deletion requires the Node backend's `CLOUDINARY_API_KEY` and `CLOUDINARY_API_SECRET`.
+
+**Does Official Sync Broadcast create a normal notice?**
+
+It sends a styled broadcast card into users' personal Sync conversations. The Admin workspace also has a separate notice publishing workflow with acknowledgement and expiry support.
+
+**Can I search old messages or browse shared media?**
+
+Yes. Each conversation supports message search and a shared-media view. Message actions also include forwarding, reactions, polls and pinning where supported by the conversation permissions.
 
 **Do I need to run every service to open the frontend?**
 
