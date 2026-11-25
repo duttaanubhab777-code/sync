@@ -301,7 +301,15 @@ export const permanentlyDeleteUserData = async (user, replacementAdminId) => {
 // It finds dangling User references, removes orphan DMs/messages/stories, and
 // cleans their Cloudinary assets without touching valid members' group history.
 export const sweepOrphanedUserData = async () => {
-    const [directRows, groups, orphanMessages, orphanStories] = await Promise.all([
+    const [
+        directRows,
+        groups,
+        orphanMessages,
+        orphanStories,
+        notices,
+        wallpapers,
+        categories
+    ] = await Promise.all([
         Conversation.find({ type: "direct" })
             .select("_id members")
             .lean(),
