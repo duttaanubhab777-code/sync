@@ -12,6 +12,7 @@ import {
     Type,
     Loader2,
     Send,
+    Upload,
     Check,
     Pause,
     Play,
