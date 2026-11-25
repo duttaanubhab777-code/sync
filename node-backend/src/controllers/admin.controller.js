@@ -13,6 +13,11 @@ import { getOnlineUserIds, isUserOnline } from "../socket/store.js";
 import { isSuperAdminEmail } from "../utils/superAdmin.js";
 import { emitToUsers, getContactIds } from "../services/conversation.service.js";
 import { cleanupInBackground } from "../services/cloudinaryCleanup.service.js";
+import {
+    onboardNewUser,
+    refreshSyncGroupAdmins,
+    removeUserFromSyncGroup
+} from "../services/official.service.js";
 
 /*
  * নামের গোলমাল এড়াতে:
@@ -24,7 +29,7 @@ import { cleanupInBackground } from "../services/cloudinaryCleanup.service.js";
  */
 
 const ADMIN_USER_FIELDS =
-    "username fullName email phoneNumber avatar role isSuperAdmin isBlocked lastSeen createdAt";
+    "username fullName email phoneNumber avatar role isSuperAdmin isBlocked isOfficial lastSeen createdAt";
 
 const withOnline = u => ({ ...u, online: isUserOnline(u._id) });
 
@@ -32,6 +37,9 @@ const withOnline = u => ({ ...u, online: isUserOnline(u._id) });
 const assertCanManage = (actor, target) => {
     if (String(actor._id) === String(target._id)) {
         throw new ApiError(400, "You cannot do this to your own account");
+    }
+    if (target.isOfficial) {
+        throw new ApiError(403, "The official Sync account cannot be modified");
     }
     if (target.isSuperAdmin || target.role === "superAdmin") {
         throw new ApiError(403, "The Super Admin account cannot be changed");
@@ -61,11 +69,11 @@ export const getStats = asyncHandler(async (_req, res) => {
         activeNotices,
         pushDevices
     ] = await Promise.all([
-        User.countDocuments(),
-        User.countDocuments({ isBlocked: true }),
-        User.countDocuments({ role: { $in: ["admin", "superAdmin"] } }),
-        User.countDocuments({ $or: [{ isSuperAdmin: true }, { role: "superAdmin" }] }),
-        User.countDocuments({ createdAt: { $gte: weekAgo } }),
+        User.countDocuments({ isOfficial: { $ne: true } }),
+        User.countDocuments({ isOfficial: { $ne: true }, isBlocked: true }),
+        User.countDocuments({ isOfficial: { $ne: true }, role: { $in: ["admin", "superAdmin"] } }),
+        User.countDocuments({ isOfficial: { $ne: true }, $or: [{ isSuperAdmin: true }, { role: "superAdmin" }] }),
+        User.countDocuments({ isOfficial: { $ne: true }, createdAt: { $gte: weekAgo } }),
         Conversation.countDocuments({ type: "group" }),
         Conversation.countDocuments({ type: "direct" }),
         Message.estimatedDocumentCount(),
@@ -100,7 +108,7 @@ export const listUsers = asyncHandler(async (req, res) => {
     const page = Math.max(Number(req.query.page) || 1, 1);
     const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 50);
 
-    const query = {};
+    const query = { isOfficial: { $ne: true } };
     if (filter === "admins") query.role = { $in: ["admin", "superAdmin"] };
     if (filter === "blocked") query.isBlocked = true;
     if (search) {
@@ -206,6 +214,10 @@ const setBlocked = blocked =>
             await PushSubscription.deleteMany({ user: id });
         }
 
+        if (target.role === "admin") {
+            await refreshSyncGroupAdmins(req.app.get("io"), [id]);
+        }
+
         const fresh = await User.findById(id).select(ADMIN_USER_FIELDS).lean();
         res.status(200).json(
             new ApiResponse(
@@ -234,6 +246,7 @@ export const setUserRole = asyncHandler(async (req, res) => {
     }
 
     await User.updateOne({ _id: id }, { $set: { role } });
+    await refreshSyncGroupAdmins(req.app.get("io"), [id]);
     const fresh = await User.findById(id).select(ADMIN_USER_FIELDS).lean();
 
     req.app
@@ -298,6 +311,8 @@ export const createAdmin = asyncHandler(async (req, res) => {
         throw err;
     }
 
+    await onboardNewUser(admin, req.app.get("io"));
+
     const fresh = await User.findById(admin._id).select(ADMIN_USER_FIELDS).lean();
     res.status(201).json(
         new ApiResponse(201, withOnline(fresh), "New admin account created")
@@ -323,7 +338,8 @@ export const deleteUserByAdmin = asyncHandler(async (req, res) => {
         PushSubscription.deleteMany({ user: id }),
         Story.deleteMany({ author: id }),
         NoticeAck.deleteMany({ user: id }),
-        User.deleteOne({ _id: id })
+        User.deleteOne({ _id: id }),
+        removeUserFromSyncGroup(id)
     ]);
 
     cleanupInBackground(urlsToDelete);
@@ -485,8 +501,8 @@ export const listGroups = asyncHandler(async (req, res) => {
     if (search) query.groupName = new RegExp(escapeRegex(search), "i");
 
     const groups = await Conversation.find(query)
-        .select("groupName groupIcon members admins createdBy createdAt")
-        .sort({ createdAt: -1 })
+        .select("groupName groupIcon isOfficial members admins createdBy createdAt")
+        .sort({ isOfficial: -1, createdAt: -1 })
         .limit(100)
         .populate("admins", "username fullName")
         .populate("createdBy", "username fullName")
@@ -499,6 +515,7 @@ export const listGroups = asyncHandler(async (req, res) => {
                 id: String(g._id),
                 name: g.groupName,
                 icon: g.groupIcon || "",
+                isOfficial: Boolean(g.isOfficial),
                 memberCount: g.members.length,
                 // এরা শুধু এই গ্রুপের admin, platform admin নয়
                 groupAdmins: (g.admins || []).map(a => ({
@@ -515,12 +532,24 @@ export const listGroups = asyncHandler(async (req, res) => {
     );
 });
 
-// DELETE /api/v1/admin/groups/:id — আপত্তিকর গ্রুপ মুছে ফেলা
+// DELETE /api/v1/admin/groups/:id — আপত্তিকর গ্রুপ মুছে ফেলা (অফিশিয়াল Sync গ্রুপ কেউ মুছতে পারবে না, Super Admin-ও না)
 export const deleteGroupByAdmin = asyncHandler(async (req, res) => {
     const id = assertObjectId(req.params.id, "group id");
-    const conv = await Conversation.findOneAndDelete({
+    const existing = await Conversation.findOne({
         _id: id,
         type: "group"
+    })
+        .select("isOfficial")
+        .lean();
+    if (!existing) throw new ApiError(404, "Group not found");
+    if (existing.isOfficial) {
+        throw new ApiError(403, "The official Sync group cannot be deleted");
+    }
+
+    const conv = await Conversation.findOneAndDelete({
+        _id: id,
+        type: "group",
+        isOfficial: { $ne: true }
     }).lean();
     if (!conv) throw new ApiError(404, "Group not found");
 

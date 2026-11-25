@@ -25,6 +25,7 @@ import {
     sendPasswordResetEmail
 } from "../services/mail.service.js";
 import { getClientIp } from "../utils/clientIp.js";
+import { onboardNewUser } from "../services/official.service.js";
 
 const MAX_DEVICES = 5; // একসাথে সর্বোচ্চ কয়টা ডিভাইসে লগইন থাকবে
 const MAX_LOGIN_HISTORY = 20;
@@ -413,6 +414,9 @@ export const verifyOtp = asyncHandler(async (req, res) => {
         throw err;
     }
 
+    // নতুন ইউজারকে অফিশিয়াল Sync গ্রুপে যোগ ও Sync থেকে personal welcome মেসেজ পাঠানো
+    await onboardNewUser(user, req.app.get("io"));
+
     const tokens = await issueTokens(user);
     setAuthCookies(res, tokens);
     res.status(201).json(
@@ -435,8 +439,8 @@ export const login = asyncHandler(async (req, res) => {
             { phoneNumber: identifier }
         ]
     });
-    // কোনটা ভুল সেটা বলা হয় না (user আছে কিনা জানতে না পারে)
-    if (!user || !(await user.isPasswordCorrect(password))) {
+    // কোনটা ভুল সেটা বলা হয় না (user আছে কিনা জানতে না পারে; অফিশিয়াল সিস্টেম অ্যাকাউন্টেও লগইন বন্ধ)
+    if (!user || user.isOfficial || !(await user.isPasswordCorrect(password))) {
         throw new ApiError(401, "Invalid credentials");
     }
     if (user.isBlocked) {
@@ -495,9 +499,9 @@ export const forgotPasswordSendOtp = asyncHandler(async (req, res) => {
         );
 
     const user = await User.findOne({ email })
-        .select("fullName email isBlocked")
+        .select("fullName email isBlocked isOfficial")
         .lean();
-    if (!user || user.isBlocked) return reply();
+    if (!user || user.isBlocked || user.isOfficial) return reply();
 
     const now = new Date();
     const otp = generateOtp();

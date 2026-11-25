@@ -19,6 +19,15 @@ const conversationSchema = new Schema(
             type: String
         },
 
+        // অফিশিয়াল Sync গ্রুপ চেনার জন্য (কেউ মুছতে বা ছাড়তে পারবে না)
+        isOfficial: {
+            type: Boolean,
+            default: false
+        },
+        systemKey: {
+            type: String
+        },
+
         //whatsapp group style feature
 
         groupName: {
@@ -84,6 +93,12 @@ conversationSchema.index(
     { unique: true, partialFilterExpression: { pairKey: { $type: "string" } } }
 );
 
+// অফিশিয়াল সিস্টেম গ্রুপ যেন কখনো ডুপ্লিকেট না হয়
+conversationSchema.index(
+    { systemKey: 1 },
+    { unique: true, partialFilterExpression: { systemKey: { $type: "string" } } }
+);
+
 const idOf = v => String(v?._id ?? v);
 
 conversationSchema.pre("validate", function () {
@@ -117,8 +132,8 @@ conversationSchema.pre("validate", function () {
     // ---------- group ----------
     this.pairKey = undefined;
 
-    // বানানেওয়ালা অবশ্যই member হবে
-    if (this.createdBy && !seen.has(idOf(this.createdBy))) {
+    // অফিশিয়াল গ্রুপের createdBy সিস্টেম অ্যাকাউন্ট হওয়ায় তাকে সদস্য করা হয় না
+    if (!this.isOfficial && this.createdBy && !seen.has(idOf(this.createdBy))) {
         this.members.push(this.createdBy);
         seen.add(idOf(this.createdBy));
     }
@@ -126,7 +141,7 @@ conversationSchema.pre("validate", function () {
     if (!this.groupName?.trim()) {
         this.invalidate("groupName", "Group name is required");
     }
-    if (this.members.length < 2) {
+    if (!this.isOfficial && this.members.length < 2) {
         this.invalidate("members", "A group must have at least 2 members");
     }
 
@@ -139,8 +154,8 @@ conversationSchema.pre("validate", function () {
         return true;
     });
 
-    // group-এ অন্তত একজন admin সবসময় থাকবে (সবাই চলে গেলে সবচেয়ে পুরনো member admin হবে)
-    if (this.admins.length === 0 && this.members.length > 0) {
+    // সাধারণ group-এ অন্তত একজন admin সবসময় থাকবে (অফিশিয়াল গ্রুপের admin তালিকা platform role থেকে আসে)
+    if (!this.isOfficial && this.admins.length === 0 && this.members.length > 0) {
         const creatorIsMember =
             this.createdBy && seen.has(idOf(this.createdBy));
         this.admins = [creatorIsMember ? this.createdBy : this.members[0]];

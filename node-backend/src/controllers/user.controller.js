@@ -43,6 +43,7 @@ export const searchUsers = asyncHandler(async (req, res) => {
     const users = await User.find({
         _id: { $nin: exclude },
         isBlocked: false,
+        isOfficial: { $ne: true },
         $or: or
     })
         .select(PUBLIC_USER_FIELDS)
@@ -91,6 +92,7 @@ export const matchContacts = asyncHandler(async (req, res) => {
     const users = await User.find({
         _id: { $nin: exclude },
         isBlocked: false,
+        isOfficial: { $ne: true },
         phoneNumber: { $in: phones }
     })
         .select(`${PUBLIC_USER_FIELDS} phoneNumber`)
@@ -166,7 +168,7 @@ export const getUserProfile = asyncHandler(async (req, res) => {
         pairKey,
         members: req.user._id
     });
-    if (hasDirectChat || id === String(req.user._id)) {
+    if (!user.isOfficial && (hasDirectChat || id === String(req.user._id))) {
         const full = await User.findById(id)
             .select("email phoneNumber")
             .lean();
@@ -218,8 +220,12 @@ export const blockUser = asyncHandler(async (req, res) => {
     if (id === String(req.user._id)) {
         throw new ApiError(400, "You cannot block yourself");
     }
-    if (!(await User.exists({ _id: id }))) {
+    const target = await User.findById(id).select("isOfficial").lean();
+    if (!target) {
         throw new ApiError(404, "User not found");
+    }
+    if (target.isOfficial) {
+        throw new ApiError(403, "You cannot block the official Sync account");
     }
     await User.updateOne(
         { _id: req.user._id },

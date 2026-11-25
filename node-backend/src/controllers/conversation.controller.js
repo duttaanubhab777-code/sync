@@ -132,7 +132,8 @@ export const createGroup = asyncHandler(async (req, res) => {
     }
     const found = await User.countDocuments({
         _id: { $in: others },
-        isBlocked: false
+        isBlocked: false,
+        isOfficial: { $ne: true }
     });
     if (found !== others.length) {
         throw new ApiError(400, "Some users were not found");
@@ -177,12 +178,23 @@ export const updateGroup = asyncHandler(async (req, res) => {
 
     const { groupName, groupDescription, groupIcon, onlyAdminCanMessage } =
         req.body;
-    if (groupIcon !== undefined) checkIcon(groupIcon);
+    if (conv.isOfficial) {
+        if (
+            (groupName !== undefined && groupName !== conv.groupName) ||
+            (groupIcon !== undefined && groupIcon !== conv.groupIcon)
+        ) {
+            throw new ApiError(
+                403,
+                "Official Sync group name and logo cannot be changed"
+            );
+        }
+    }
+    if (!conv.isOfficial && groupIcon !== undefined) checkIcon(groupIcon);
 
-    if (groupName !== undefined) conv.groupName = groupName;
+    if (!conv.isOfficial && groupName !== undefined) conv.groupName = groupName;
     if (groupDescription !== undefined) conv.groupDescription = groupDescription;
     const oldGroupIcon = conv.groupIcon;
-    if (groupIcon !== undefined) conv.groupIcon = groupIcon;
+    if (!conv.isOfficial && groupIcon !== undefined) conv.groupIcon = groupIcon;
     if (onlyAdminCanMessage !== undefined) {
         conv.onlyAdminCanMessage = onlyAdminCanMessage;
     }
@@ -203,6 +215,12 @@ export const updateMembers = asyncHandler(async (req, res) => {
     const io = req.app.get("io");
     const conv = await loadMemberConversation(req.params.id, me);
     requireGroupAdmin(conv, me);
+    if (conv.isOfficial) {
+        throw new ApiError(
+            403,
+            "Members and admins of the official Sync group are managed automatically"
+        );
+    }
 
     const { action } = req.body;
     const target = String(req.body.targetUserId);
@@ -289,6 +307,9 @@ export const leaveGroup = asyncHandler(async (req, res) => {
     const conv = await loadMemberConversation(req.params.id, me);
     if (conv.type !== "group") {
         throw new ApiError(400, "You can only leave a group");
+    }
+    if (conv.isOfficial) {
+        throw new ApiError(403, "You cannot leave the official Sync group");
     }
 
     const conversationId = conv._id;

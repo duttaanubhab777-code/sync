@@ -29,6 +29,11 @@ const messageSchema = new Schema(
             maxlength: 4000,
             default: ""
         },
+        // অফিশিয়াল ওয়েলকাম মেসেজের স্পেশাল কার্ড প্যালেট দেখানোর জন্য
+        card: {
+            kind: { type: String, enum: ["welcome"] },
+            name: { type: String, trim: true, maxlength: 100 }
+        },
         media: {
             url: { type: String },
             publicId: { type: String },

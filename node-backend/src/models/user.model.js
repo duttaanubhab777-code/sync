@@ -86,6 +86,12 @@ const userSchema = new mongoose.Schema(
             type: Boolean,
             default: false
         },
+        // Sync-এর অফিশিয়াল সিস্টেম অ্যাকাউন্ট (লগইন করা যায় না, ভেরিফায়েড ব্যাজ থাকে)
+        isOfficial: {
+            type: Boolean,
+            default: false,
+            index: true
+        },
 
         // ইউজারের বেছে নেওয়া chat wallpaper (Wallpaper-এর _id)।
         // null মানে কিছু বাছেনি, তাই admin-এর default wallpaper-ই দেখবে (default বদলালে সাথে সাথে বদলাবে)।

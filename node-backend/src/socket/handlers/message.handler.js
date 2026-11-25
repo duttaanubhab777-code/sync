@@ -29,7 +29,7 @@ const MAX_TEXT = 4000;
 const RATE_WINDOW_MS = 10_000;
 const RATE_MAX = 20;
 
-const POPULATE_SENDER = { path: "sender", select: "username fullName avatar" };
+const POPULATE_SENDER = { path: "sender", select: "username fullName avatar isOfficial" };
 const POPULATE_REPLY = {
     path: "replyTo",
     select: "text type sender media.url media.fileName location contact deletedForEveryone"
@@ -232,17 +232,26 @@ export const registerMessageHandlers = (io, socket) => {
             if (!conv.canSendMessage(userId)) {
                 return ack?.({ ok: false, error: "ONLY_ADMINS_CAN_MESSAGE" });
             }
-            // direct চ্যাটে কেউ কাউকে block করে থাকলে মেসেজ যাবে না
+            // direct চ্যাটে কেউ কাউকে block করে থাকলে বা অফিশিয়াল Sync অ্যাকাউন্ট হলে মেসেজ যাবে না
             if (conv.type === "direct") {
                 const partnerId = conv.members
                     .map(m => m.toString())
                     .find(id => id !== userId);
-                const blocked = await User.exists({
-                    $or: [
-                        { _id: userId, blockedUser: partnerId },
-                        { _id: partnerId, blockedUser: userId }
-                    ]
-                });
+                const partner = await User.findById(partnerId)
+                    .select("isOfficial blockedUser")
+                    .lean();
+                if (partner?.isOfficial) {
+                    return ack?.({
+                        ok: false,
+                        error: "OFFICIAL_ACCOUNT_READ_ONLY"
+                    });
+                }
+                const blocked =
+                    partner?.blockedUser?.some(b => String(b) === userId) ||
+                    (await User.exists({
+                        _id: userId,
+                        blockedUser: partnerId
+                    }));
                 if (blocked) return ack?.({ ok: false, error: "BLOCKED" });
             }
 

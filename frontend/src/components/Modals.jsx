@@ -20,6 +20,7 @@ import {
     UserRound
 } from "lucide-react";
 import Avatar from "./Avatar.jsx";
+import VerifiedBadge from "./VerifiedBadge.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
 import ContactMatches from "./ContactMatches.jsx";
 import useContactMatches from "../hooks/useContactMatches.js";
@@ -604,9 +605,11 @@ export function ChatInfoDrawer({ conversation, onClose }) {
     };
 
     const partner = partnerProfile || conversation.partner || {};
-    const partnerOnline = Boolean(
-        onlineUsers[String(partner._id)] ?? partner.online
-    );
+    const isOfficialGroup = isGroup && Boolean(conversation.isOfficial);
+    const isOfficialAccount = !isGroup && Boolean(partner.isOfficial);
+    const partnerOnline = isOfficialAccount
+        ? false
+        : Boolean(onlineUsers[String(partner._id)] ?? partner.online);
 
     return (
         <aside className="sync-info-drawer">
@@ -632,10 +635,10 @@ export function ChatInfoDrawer({ conversation, onClose }) {
                         }
                         size={84}
                         isGroup={isGroup}
-                        showOnline={!isGroup}
+                        showOnline={!isGroup && !isOfficialAccount}
                         online={partnerOnline}
                     />
-                    {isGroup && isAdmin && (
+                    {isGroup && isAdmin && !isOfficialGroup && (
                         <label className="sync-btn secondary sm mt-2">
                             <Camera size={14} />
                             <span>Change Icon</span>
@@ -647,19 +650,31 @@ export function ChatInfoDrawer({ conversation, onClose }) {
                             />
                         </label>
                     )}
-                    <h3 className="sync-drawer-title">
-                        {isGroup
-                            ? conversation.groupName
-                            : partner.fullName || "Unknown User"}
+                    <h3 className="sync-drawer-title sync-name-with-badge">
+                        <span className="sync-name-text">
+                            {isGroup
+                                ? conversation.groupName
+                                : partner.fullName || "Unknown User"}
+                        </span>
+                        {isOfficialGroup && (
+                            <VerifiedBadge variant="group" size={18} />
+                        )}
+                        {isOfficialAccount && (
+                            <VerifiedBadge variant="official" size={18} />
+                        )}
                     </h3>
                     <p className="sync-drawer-subtitle">
                         {isGroup
-                            ? `Group · ${(conversation.members || []).length} members`
-                            : `@${partner.username || ""} · ${
-                                  partnerOnline
-                                      ? "Online"
-                                      : formatLastSeen(partner.lastSeen)
-                              }`}
+                            ? `${
+                                  isOfficialGroup ? "Official Group" : "Group"
+                              } · ${(conversation.members || []).length} members`
+                            : isOfficialAccount
+                              ? `@${partner.username || "sync"} · Official Account`
+                              : `@${partner.username || ""} · ${
+                                    partnerOnline
+                                        ? "Online"
+                                        : formatLastSeen(partner.lastSeen)
+                                }`}
                     </p>
                 </div>
 
@@ -693,24 +708,30 @@ export function ChatInfoDrawer({ conversation, onClose }) {
                                         </span>
                                     </div>
                                 </div>
-                                <div className="sync-detail-row">
-                                    <Phone size={18} />
-                                    <div className="sync-detail-text">
-                                        <small>Phone</small>
-                                        <span>
-                                            {partner.phoneNumber
-                                                ? `+91 ${partner.phoneNumber}`
-                                                : "—"}
-                                        </span>
-                                    </div>
-                                </div>
-                                <div className="sync-detail-row">
-                                    <Mail size={18} />
-                                    <div className="sync-detail-text">
-                                        <small>Email</small>
-                                        <span>{partner.email || "—"}</span>
-                                    </div>
-                                </div>
+                                {!isOfficialAccount && (
+                                    <>
+                                        <div className="sync-detail-row">
+                                            <Phone size={18} />
+                                            <div className="sync-detail-text">
+                                                <small>Phone</small>
+                                                <span>
+                                                    {partner.phoneNumber
+                                                        ? `+91 ${partner.phoneNumber}`
+                                                        : "—"}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="sync-detail-row">
+                                            <Mail size={18} />
+                                            <div className="sync-detail-text">
+                                                <small>Email</small>
+                                                <span>
+                                                    {partner.email || "—"}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </div>
 
@@ -721,24 +742,40 @@ export function ChatInfoDrawer({ conversation, onClose }) {
                             </p>
                         </div>
 
-                        <div className="sync-drawer-section">
-                            <button
-                                type="button"
-                                className={`sync-btn full ${
-                                    partnerProfile?.blockedByMe
-                                        ? "secondary"
-                                        : "danger"
-                                }`}
-                                onClick={handleToggleBlock}
-                            >
-                                <Ban size={16} />
-                                <span>
-                                    {partnerProfile?.blockedByMe
-                                        ? "Unblock User"
-                                        : "Block User"}
-                                </span>
-                            </button>
-                        </div>
+                        {isOfficialAccount ? (
+                            <div className="sync-drawer-section">
+                                <div className="sync-official-note">
+                                    <VerifiedBadge
+                                        variant="official"
+                                        size={16}
+                                    />
+                                    <span>
+                                        This is the official Sync system account
+                                        for welcome messages and platform
+                                        updates.
+                                    </span>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="sync-drawer-section">
+                                <button
+                                    type="button"
+                                    className={`sync-btn full ${
+                                        partnerProfile?.blockedByMe
+                                            ? "secondary"
+                                            : "danger"
+                                    }`}
+                                    onClick={handleToggleBlock}
+                                >
+                                    <Ban size={16} />
+                                    <span>
+                                        {partnerProfile?.blockedByMe
+                                            ? "Unblock User"
+                                            : "Block User"}
+                                    </span>
+                                </button>
+                            </div>
+                        )}
                     </>
                 ) : (
                     <>
@@ -750,17 +787,19 @@ export function ChatInfoDrawer({ conversation, onClose }) {
                                 <span className="sync-section-label">
                                     Group Settings (Group Admin)
                                 </span>
-                                <div className="sync-field">
-                                    <label>Group Name</label>
-                                    <input
-                                        type="text"
-                                        value={groupName}
-                                        onChange={e =>
-                                            setGroupName(e.target.value)
-                                        }
-                                        required
-                                    />
-                                </div>
+                                {!isOfficialGroup && (
+                                    <div className="sync-field">
+                                        <label>Group Name</label>
+                                        <input
+                                            type="text"
+                                            value={groupName}
+                                            onChange={e =>
+                                                setGroupName(e.target.value)
+                                            }
+                                            required
+                                        />
+                                    </div>
+                                )}
                                 <div className="sync-field">
                                     <label>Description</label>
                                     <textarea
@@ -806,7 +845,7 @@ export function ChatInfoDrawer({ conversation, onClose }) {
                             </div>
                         )}
 
-                        {isAdmin && (
+                        {isAdmin && !isOfficialGroup && (
                             <div className="sync-drawer-section">
                                 <span className="sync-section-label">
                                     Add Participant
@@ -896,7 +935,7 @@ export function ChatInfoDrawer({ conversation, onClose }) {
                                                     Group Admin
                                                 </span>
                                             )}
-                                            {isAdmin && !isMe && (
+                                            {isAdmin && !isMe && !isOfficialGroup && (
                                                 <div className="sync-member-actions">
                                                     {memberIsAdmin ? (
                                                         <button
@@ -951,14 +990,25 @@ export function ChatInfoDrawer({ conversation, onClose }) {
                         </div>
 
                         <div className="sync-drawer-section">
-                            <button
-                                type="button"
-                                className="sync-btn danger full"
-                                onClick={handleLeaveGroup}
-                            >
-                                <LogOut size={16} />
-                                <span>Leave Group</span>
-                            </button>
+                            {isOfficialGroup ? (
+                                <div className="sync-official-note">
+                                    <Lock size={15} />
+                                    <span>
+                                        Official Sync community group — all Sync
+                                        users are added automatically and this
+                                        group cannot be deleted or left.
+                                    </span>
+                                </div>
+                            ) : (
+                                <button
+                                    type="button"
+                                    className="sync-btn danger full"
+                                    onClick={handleLeaveGroup}
+                                >
+                                    <LogOut size={16} />
+                                    <span>Leave Group</span>
+                                </button>
+                            )}
                         </div>
                     </>
                 )}

@@ -4,7 +4,7 @@ import { isObjectId } from "../utils/helpers.js";
 
 export const POPULATE_SENDER = {
     path: "sender",
-    select: "username fullName avatar"
+    select: "username fullName avatar isOfficial"
 };
 export const POPULATE_REPLY = {
     path: "replyTo",

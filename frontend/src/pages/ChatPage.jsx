@@ -33,6 +33,8 @@ import AttachmentSheet from "../components/chat/AttachmentSheet.jsx";
 import LocationCard from "../components/chat/LocationCard.jsx";
 import ContactCard from "../components/chat/ContactCard.jsx";
 import DocumentCard from "../components/chat/DocumentCard.jsx";
+import WelcomeCard from "../components/chat/WelcomeCard.jsx";
+import VerifiedBadge from "../components/VerifiedBadge.jsx";
 import MessageGesture from "../components/chat/MessageGesture.jsx";
 import MessageActionSheet from "../components/chat/MessageActionSheet.jsx";
 import { VoicePlayer, VideoPlayer } from "../components/MediaPlayers.jsx";
@@ -364,24 +366,38 @@ export default function ChatPage() {
 
     const getConvDisplay = conv => {
         if (conv.type === "group") {
+            const isOfficialGroup = Boolean(conv.isOfficial);
             return {
                 title: conv.groupName || "Unnamed Group",
                 avatar: conv.groupIcon || "",
                 isGroup: true,
+                isOfficialGroup,
+                isOfficialAccount: false,
                 online: false,
-                subtitle: `${(conv.members || []).length} members`
+                subtitle: isOfficialGroup
+                    ? `Official Group · ${(conv.members || []).length} members`
+                    : `${(conv.members || []).length} members`
             };
         }
         const p = conv.partner || {};
+        const isOfficialAccount = Boolean(p.isOfficial);
         const pId = String(p._id || "");
-        const isOnline = Boolean(onlineUsers[pId] ?? p.online);
+        const isOnline = isOfficialAccount
+            ? false
+            : Boolean(onlineUsers[pId] ?? p.online);
         const lastSeen = lastSeenByUser[pId] || p.lastSeen;
         return {
             title: p.fullName || p.username || "Sync User",
             avatar: p.avatar || "",
             isGroup: false,
+            isOfficialGroup: false,
+            isOfficialAccount,
             online: isOnline,
-            subtitle: isOnline ? "Online" : formatLastSeen(lastSeen)
+            subtitle: isOfficialAccount
+                ? "Official Sync account"
+                : isOnline
+                  ? "Online"
+                  : formatLastSeen(lastSeen)
         };
     };
 
@@ -405,6 +421,12 @@ export default function ChatPage() {
 
     const canSendInActive = useMemo(() => {
         if (!activeConversation) return false;
+        if (
+            activeConversation.type === "direct" &&
+            activeConversation.partner?.isOfficial
+        ) {
+            return false;
+        }
         if (
             activeConversation.type === "group" &&
             activeConversation.onlyAdminCanMessage
@@ -1071,14 +1093,30 @@ export default function ChatPage() {
                                     name={info.title}
                                     size={48}
                                     isGroup={info.isGroup}
-                                    showOnline={!info.isGroup}
+                                    showOnline={
+                                        !info.isGroup && !info.isOfficialAccount
+                                    }
                                     online={info.online}
                                 />
 
                                 <div className="sync-conv-main">
                                     <div className="sync-conv-top">
-                                        <span className="sync-conv-name">
-                                            {info.title}
+                                        <span className="sync-conv-name sync-name-with-badge">
+                                            <span className="sync-name-text">
+                                                {info.title}
+                                            </span>
+                                            {info.isOfficialGroup && (
+                                                <VerifiedBadge
+                                                    variant="group"
+                                                    size={15}
+                                                />
+                                            )}
+                                            {info.isOfficialAccount && (
+                                                <VerifiedBadge
+                                                    variant="official"
+                                                    size={15}
+                                                />
+                                            )}
                                         </span>
                                         <span
                                             className={`sync-conv-time ${
@@ -1194,12 +1232,29 @@ export default function ChatPage() {
                                     name={activeDisplay.title}
                                     size={42}
                                     isGroup={activeDisplay.isGroup}
-                                    showOnline={!activeDisplay.isGroup}
+                                    showOnline={
+                                        !activeDisplay.isGroup &&
+                                        !activeDisplay.isOfficialAccount
+                                    }
                                     online={activeDisplay.online}
                                 />
                                 <div className="sync-header-meta">
-                                    <div className="sync-header-title">
-                                        {activeDisplay.title}
+                                    <div className="sync-header-title sync-name-with-badge">
+                                        <span className="sync-name-text">
+                                            {activeDisplay.title}
+                                        </span>
+                                        {activeDisplay.isOfficialGroup && (
+                                            <VerifiedBadge
+                                                variant="group"
+                                                size={17}
+                                            />
+                                        )}
+                                        {activeDisplay.isOfficialAccount && (
+                                            <VerifiedBadge
+                                                variant="official"
+                                                size={17}
+                                            />
+                                        )}
                                     </div>
                                     <div
                                         className={`sync-header-sub ${
@@ -1322,17 +1377,31 @@ export default function ChatPage() {
                                                     msg.deletedForEveryone
                                                         ? "deleted"
                                                         : ""
+                                                } ${
+                                                    !msg.deletedForEveryone &&
+                                                    msg.card?.kind === "welcome"
+                                                        ? "has-welcome-card"
+                                                        : ""
                                                 }`}
                                             >
                                                 {activeConversation.type ===
                                                     "group" &&
                                                     !isMine && (
-                                                        <div className="sync-msg-sender-name">
+                                                        <div className="sync-msg-sender-name sync-name-with-badge">
+                                                            <span className="sync-name-text">
+                                                                {msg.sender
+                                                                    ?.fullName ||
+                                                                    msg.sender
+                                                                        ?.username ||
+                                                                    "Member"}
+                                                            </span>
                                                             {msg.sender
-                                                                ?.fullName ||
-                                                                msg.sender
-                                                                    ?.username ||
-                                                                "Member"}
+                                                                ?.isOfficial && (
+                                                                <VerifiedBadge
+                                                                    variant="official"
+                                                                    size={13}
+                                                                />
+                                                            )}
                                                         </div>
                                                     )}
 
@@ -1486,13 +1555,24 @@ export default function ChatPage() {
                                                         />
                                                     )}
 
-                                                {(msg.text ||
-                                                    msg.deletedForEveryone) && (
-                                                    <div className="sync-msg-text">
-                                                        {msg.deletedForEveryone
-                                                            ? <MessagePreview deleted />
-                                                            : <MessageLinkContent text={msg.text} />}
-                                                    </div>
+                                                {!msg.deletedForEveryone &&
+                                                msg.card?.kind === "welcome" ? (
+                                                    <WelcomeCard
+                                                        name={
+                                                            msg.card?.name ||
+                                                            currentUser?.fullName ||
+                                                            ""
+                                                        }
+                                                    />
+                                                ) : (
+                                                    (msg.text ||
+                                                        msg.deletedForEveryone) && (
+                                                        <div className="sync-msg-text">
+                                                            {msg.deletedForEveryone
+                                                                ? <MessagePreview deleted />
+                                                                : <MessageLinkContent text={msg.text} />}
+                                                        </div>
+                                                    )
                                                 )}
 
                                                 {msg.uploadLocal &&
@@ -1657,13 +1737,26 @@ export default function ChatPage() {
                             )}
 
                             {!canSendInActive ? (
-                                <div className="sync-admin-only-bar">
-                                    <Lock size={15} />
-                                    <span>
-                                        Only group admins can send messages in
-                                        this group
-                                    </span>
-                                </div>
+                                activeDisplay?.isOfficialAccount ? (
+                                    <div className="sync-official-readonly-bar">
+                                        <VerifiedBadge
+                                            variant="official"
+                                            size={16}
+                                        />
+                                        <span>
+                                            Official Sync account — welcome
+                                            messages &amp; updates only
+                                        </span>
+                                    </div>
+                                ) : (
+                                    <div className="sync-admin-only-bar">
+                                        <Lock size={15} />
+                                        <span>
+                                            Only group admins can send messages
+                                            in this group
+                                        </span>
+                                    </div>
+                                )
                             ) : (
                                 <form
                                     className="sync-composer-bar"

@@ -17,4 +17,5 @@ export const idOf = v => String(v?._id ?? v);
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
 // user populate-এ যেসব ফিল্ড দেখানো হবে
-export const PUBLIC_USER_FIELDS = "username fullName avatar about lastSeen";
+export const PUBLIC_USER_FIELDS =
+    "username fullName avatar about lastSeen isOfficial";

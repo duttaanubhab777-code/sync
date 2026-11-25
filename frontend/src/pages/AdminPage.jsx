@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncLogo from "../components/SyncLogo.jsx";
+import VerifiedBadge from "../components/VerifiedBadge.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import WallpaperAdmin from "../components/WallpaperAdmin.jsx";
 import SyncDateTimePicker from "../components/ui/SyncDateTimePicker.jsx";
@@ -2126,7 +2127,20 @@ export default function AdminPage() {
                                         />
                                         <div className="sync-admin-user-info">
                                             <div className="sync-admin-user-top">
-                                                <strong>{g.name}</strong>
+                                                <strong className="sync-name-with-badge">
+                                                    <span>{g.name}</span>
+                                                    {g.isOfficial && (
+                                                        <VerifiedBadge
+                                                            variant="group"
+                                                            size={15}
+                                                        />
+                                                    )}
+                                                </strong>
+                                                {g.isOfficial && (
+                                                    <span className="sync-official-pill">
+                                                        Official
+                                                    </span>
+                                                )}
                                                 <span className="sync-role-pill user">
                                                     {g.memberCount} members
                                                 </span>
@@ -2150,19 +2164,29 @@ export default function AdminPage() {
                                             </div>
                                         </div>
 
-                                        <button
-                                            type="button"
-                                            className="sync-btn danger xs"
-                                            disabled={deletingGroupId === g.id}
-                                            onClick={() => handleDeleteGroup(g)}
-                                        >
-                                            <Trash2 size={14} />
-                                            <span>
-                                                {deletingGroupId === g.id
-                                                    ? "Deleting..."
-                                                    : "Delete Group"}
+                                        {g.isOfficial ? (
+                                            <span
+                                                className="sync-official-protected"
+                                                title="The official Sync group cannot be deleted"
+                                            >
+                                                <Lock size={13} />
+                                                <span>Protected</span>
                                             </span>
-                                        </button>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                className="sync-btn danger xs"
+                                                disabled={deletingGroupId === g.id}
+                                                onClick={() => handleDeleteGroup(g)}
+                                            >
+                                                <Trash2 size={14} />
+                                                <span>
+                                                    {deletingGroupId === g.id
+                                                        ? "Deleting..."
+                                                        : "Delete Group"}
+                                                </span>
+                                            </button>
+                                        )}
                                     </div>
                                 ))}
                             </div>

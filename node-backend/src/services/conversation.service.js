@@ -24,6 +24,8 @@ export const serializeConversation = (conv, meId) => {
         groupName: o.groupName || "",
         groupIcon: o.groupIcon || "",
         groupDescription: o.groupDescription || "",
+        isOfficial: Boolean(o.isOfficial),
+        systemKey: o.systemKey || null,
         admins: (o.admins || []).map(String),
         createdBy: o.createdBy ? String(o.createdBy) : null,
         onlyAdminCanMessage: Boolean(o.onlyAdminCanMessage),
