@@ -30,7 +30,7 @@ export const permanentlyDeleteUserData = async user => {
                 { [`unread.${userId}`]: { $exists: true } }
             ]
         })
-            .select("_id members admins createdBy groupIcon")
+            .select("_id members admins createdBy groupIcon lastMessage pinnedMessage")
             .lean(),
         Story.find({ author: user._id })
             .select("media.url")
@@ -129,9 +129,15 @@ export const permanentlyDeleteUserData = async user => {
                     "poll.options.$[].votes": user._id,
                     seenBy: { user: user._id },
                     deliveredTo: { user: user._id }
-                },
-                $unset: { storyReply: "" }
+                }
             }
+        );
+        await Message.updateMany(
+            {
+                ...remainingMessageFilter,
+                "storyReply.authorId": user._id
+            },
+            { $unset: { storyReply: "" } }
         );
 
         if (deletedMessageIds.length) {
