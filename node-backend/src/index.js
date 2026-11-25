@@ -20,6 +20,7 @@ import {
 } from "./services/cloudinaryCleanup.service.js";
 import { startAppUpdateWatcher } from "./services/appUpdateNotify.service.js";
 import { ensureOfficialSync } from "./services/official.service.js";
+import { sweepOrphanedUserData } from "./services/userDeletion.service.js";
 import { User } from "./models/user.model.js";
 import { getSuperAdminEmails } from "./utils/superAdmin.js";
 
@@ -46,6 +47,11 @@ server.listen(port, "0.0.0.0", () => {
     await connectDB();
     await migrateTtlIndexes();
     await prepareDatabase();
+    try {
+        await sweepOrphanedUserData();
+    } catch (err) {
+        console.error("[Orphan cleanup] startup sweep failed:", err.message);
+    }
     await ensureSuperAdmins();
     await ensureOfficialSync();
     startAppUpdateWatcher();

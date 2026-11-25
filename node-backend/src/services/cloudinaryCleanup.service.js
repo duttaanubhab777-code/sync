@@ -123,6 +123,7 @@ const isStillReferenced = async url => {
         ]);
     const checks = await Promise.all([
         Message.exists({ "media.url": url }),
+        Message.exists({ "storyReply.thumbnail": url }),
         Story.exists({ "media.url": url }),
         User.exists({ avatar: url }),
         Conversation.exists({ groupIcon: url }),
