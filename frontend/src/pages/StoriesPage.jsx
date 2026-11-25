@@ -1251,21 +1251,56 @@ export default function StoriesPage() {
                                 </>
                             ) : (
                                 <>
-                                    <div className="sync-field">
-                                        <label>Select Photo or Video *</label>
-                                        <input
-                                            type="file"
-                                            accept="image/*,video/*"
-                                            disabled={submitting}
-                                            onChange={e => {
-                                                // ফাইল বদলালে নতুন story → নতুন আইডি
-                                                clientStoryIdRef.current = null;
-                                                setMediaFile(
-                                                    e.target.files?.[0] || null
-                                                );
-                                            }}
-                                            required
-                                        />
+                                    <div className="sync-field sync-story-upload-field">
+                                        <label htmlFor="sync-story-media-input">
+                                            Select Photo or Video <span aria-hidden="true">*</span>
+                                        </label>
+                                        <div className={`sync-story-upload-zone ${mediaFile ? "has-file" : ""} ${submitting ? "is-disabled" : ""}`}>
+                                            <input
+                                                id="sync-story-media-input"
+                                                className="sync-story-file-input"
+                                                type="file"
+                                                accept="image/*,video/*"
+                                                disabled={submitting}
+                                                onChange={e => {
+                                                    // ফাইল বদলালে নতুন story → নতুন আইডি
+                                                    clientStoryIdRef.current = null;
+                                                    setMediaFile(
+                                                        e.target.files?.[0] || null
+                                                    );
+                                                }}
+                                                required
+                                            />
+                                            <label
+                                                className="sync-story-upload-trigger"
+                                                htmlFor="sync-story-media-input"
+                                            >
+                                                <span className="sync-story-upload-icon">
+                                                    {mediaFile ? (
+                                                        <ImageIcon size={23} strokeWidth={1.9} />
+                                                    ) : (
+                                                        <Upload size={23} strokeWidth={1.9} />
+                                                    )}
+                                                </span>
+                                                <span className="sync-story-upload-copy">
+                                                    <strong>
+                                                        {mediaFile ? mediaFile.name : "Choose a photo or video"}
+                                                    </strong>
+                                                    <small>
+                                                        {mediaFile
+                                                            ? `${(mediaFile.size / (1024 * 1024)).toFixed(2)} MB · Ready to upload`
+                                                            : "JPG, PNG, GIF or MP4 · Tap to browse"}
+                                                    </small>
+                                                </span>
+                                                <span className="sync-story-browse-btn">
+                                                    {mediaFile ? "Change" : "Browse"}
+                                                </span>
+                                            </label>
+                                            <div className="sync-story-upload-footnote">
+                                                <span className="sync-story-upload-dot" />
+                                                Your story will be visible for 24 hours
+                                            </div>
+                                        </div>
                                     </div>
                                     <div className="sync-field">
                                         <label>Caption (optional)</label>
