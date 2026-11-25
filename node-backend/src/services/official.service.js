@@ -128,10 +128,13 @@ const currentAdminIds = async () =>
         ).lean()
     ).map(u => String(u._id));
 
-// সার্ভার চালুর সময়: সব পুরনো ইউজারকে গ্রুপে তোলা, মুছে যাওয়া ইউজার সরানো, admin তালিকা মেলানো
+// সার্ভার চালুর সময়: সব পুরনো ইউজারকে গ্রুপে তোলা, মুছে যাওয়া ইউজার সরানো, admin তালিকা মেলানো এবং বাকি থাকা ইউজারদের একবার ওয়েলকাম মেসেজ পাঠানো
 export const ensureOfficialSync = async () => {
-    const group = await getSyncGroup();
-    const users = await User.find({ isOfficial: { $ne: true } }, { _id: 1 }).lean();
+    const [sync, group] = await Promise.all([getSyncUser(), getSyncGroup()]);
+    const users = await User.find(
+        { isOfficial: { $ne: true } },
+        { _id: 1, fullName: 1 }
+    ).lean();
     const userIds = users.map(u => String(u._id));
     const userSet = new Set(userIds);
 
@@ -166,8 +169,32 @@ export const ensureOfficialSync = async () => {
         },
         { timestamps: false }
     );
+
+    // আগে থেকে রেজিস্টার্ড যাদের এখনো ওয়েলকাম মেসেজ যায়নি, তাদের একবার করে পাঠানো (idempotent)
+    const sentRows = await Message.find(
+        { sender: sync._id, clientMsgId: { $regex: /^welcome:/ } },
+        { clientMsgId: 1 }
+    ).lean();
+    const welcomed = new Set(sentRows.map(r => r.clientMsgId));
+    const pendingWelcome = users.filter(
+        u => !welcomed.has(`welcome:${String(u._id)}`)
+    );
+
+    let welcomedNow = 0;
+    for (const batch of chunks(pendingWelcome, 20)) {
+        const results = await Promise.allSettled(
+            batch.map(u => sendWelcomeMessage(u))
+        );
+        for (const r of results) {
+            if (r.status === "fulfilled") welcomedNow += 1;
+            else console.error("[Sync Welcome]", r.reason?.message || r.reason);
+        }
+    }
+
     console.log(
-        `[Sync Group] ready: ${userIds.length} members, ${admins.length} admins`
+        `[Sync Group] ready: ${userIds.length} members, ${admins.length} admins${
+            welcomedNow > 0 ? `, welcomed ${welcomedNow} existing users` : ""
+        }`
     );
 };
 
