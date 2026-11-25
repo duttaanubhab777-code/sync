@@ -275,3 +275,341 @@ export const permanentlyDeleteUserData = async user => {
         updatedGroupIds: survivingGroups
     };
 };
+
+
+// One-time startup repair for accounts deleted before cascading cleanup existed.
+// It finds dangling User references, removes orphan DMs/messages/stories, and
+// cleans their Cloudinary assets without touching valid members' group history.
+export const sweepOrphanedUserData = async () => {
+    const [directRows, groups, orphanMessages, orphanStories] = await Promise.all([
+        Conversation.find({ type: "direct" })
+            .select("_id members")
+            .lean(),
+        Conversation.find({ type: "group" })
+            .select("_id members admins createdBy pinnedBy mutedBy unread groupIcon lastMessage pinnedMessage")
+            .lean(),
+        Message.aggregate([
+            {
+                $lookup: {
+                    from: User.collection.name,
+                    localField: "sender",
+                    foreignField: "_id",
+                    as: "senderRecord"
+                }
+            },
+            {
+                $lookup: {
+                    from: Conversation.collection.name,
+                    localField: "conversationId",
+                    foreignField: "_id",
+                    as: "conversationRecord"
+                }
+            },
+            {
+                $match: {
+                    $or: [
+                        { $expr: { $eq: [{ $size: "$senderRecord" }, 0] } },
+                        { $expr: { $eq: [{ $size: "$conversationRecord" }, 0] } }
+                    ]
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    sender: 1,
+                    conversationId: 1,
+                    mediaUrl: "$media.url",
+                    storyReplyThumbnail: "$storyReply.thumbnail"
+                }
+            }
+        ]),
+        Story.aggregate([
+            {
+                $lookup: {
+                    from: User.collection.name,
+                    localField: "author",
+                    foreignField: "_id",
+                    as: "authorRecord"
+                }
+            },
+            { $match: { $expr: { $eq: [{ $size: "$authorRecord" }, 0] } } },
+            { $project: { _id: 1, author: 1, mediaUrl: "$media.url" } }
+        ])
+    ]);
+
+    const candidateIds = new Set();
+    for (const conversation of directRows) {
+        for (const member of conversation.members || []) candidateIds.add(asId(member));
+    }
+    for (const group of groups) {
+        for (const field of ["members", "admins", "pinnedBy", "mutedBy"]) {
+            for (const value of group[field] || []) candidateIds.add(asId(value));
+        }
+        if (group.createdBy) candidateIds.add(asId(group.createdBy));
+        for (const key of Object.keys(group.unread || {})) candidateIds.add(key);
+    }
+    for (const message of orphanMessages) {
+        if (message.sender) candidateIds.add(asId(message.sender));
+    }
+    for (const story of orphanStories) {
+        if (story.author) candidateIds.add(asId(story.author));
+    }
+
+    const validIds = new Set(
+        (
+            await User.find(
+                { _id: { $in: [...candidateIds] } },
+                { _id: 1 }
+            ).lean()
+        ).map(user => asId(user._id))
+    );
+    const orphanIds = [...candidateIds].filter(id => !validIds.has(id));
+    const orphanSet = new Set(orphanIds);
+
+    const orphanDirect = directRows.filter(conversation =>
+        (conversation.members || []).some(member => orphanSet.has(asId(member)))
+    );
+    const orphanDirectIds = orphanDirect.map(conversation => conversation._id);
+
+    const emptyGroups = [];
+    const survivingGroups = [];
+    const groupMediaUrls = [];
+
+    for (const group of groups) {
+        const staleRefs = new Set();
+        for (const field of ["members", "admins", "pinnedBy", "mutedBy"]) {
+            for (const value of group[field] || []) {
+                if (orphanSet.has(asId(value))) staleRefs.add(asId(value));
+            }
+        }
+        if (group.createdBy && orphanSet.has(asId(group.createdBy))) {
+            staleRefs.add(asId(group.createdBy));
+        }
+        for (const key of Object.keys(group.unread || {})) {
+            if (orphanSet.has(key)) staleRefs.add(key);
+        }
+
+        const remainingMembers = (group.members || []).filter(
+            member => !orphanSet.has(asId(member))
+        );
+        if (remainingMembers.length === 0) {
+            emptyGroups.push(group._id);
+            if (group.groupIcon) groupMediaUrls.push(group.groupIcon);
+            continue;
+        }
+        if (staleRefs.size === 0) continue;
+
+        const remainingAdmins = (group.admins || []).filter(
+            admin => !orphanSet.has(asId(admin))
+        );
+        const creatorIsStale =
+            group.createdBy && orphanSet.has(asId(group.createdBy));
+        const update = {
+            $pull: {
+                members: { $in: orphanIds },
+                admins: { $in: orphanIds },
+                pinnedBy: { $in: orphanIds },
+                mutedBy: { $in: orphanIds }
+            },
+            $unset: Object.fromEntries(
+                [...staleRefs].map(id => [`unread.${id}`, ""])
+            )
+        };
+        if (creatorIsStale) {
+            update.$set = {
+                createdBy: remainingAdmins[0] || remainingMembers[0]
+            };
+        }
+        await Conversation.updateOne({ _id: group._id }, update, {
+            timestamps: false
+        });
+        survivingGroups.push(group);
+    }
+
+    const orphanDirectMessages = orphanDirectIds.length
+        ? await Message.find({ conversationId: { $in: orphanDirectIds } })
+              .select("_id media.url storyReply.thumbnail")
+              .lean()
+        : [];
+    const emptyGroupMessages = emptyGroups.length
+        ? await Message.find({ conversationId: { $in: emptyGroups } })
+              .select("_id media.url storyReply.thumbnail")
+              .lean()
+        : [];
+    const deletedMessageRows = [
+        ...orphanMessages,
+        ...orphanDirectMessages.map(message => ({
+            ...message,
+            mediaUrl: message.media?.url,
+            storyReplyThumbnail: message.storyReply?.thumbnail
+        })),
+        ...emptyGroupMessages.map(message => ({
+            ...message,
+            mediaUrl: message.media?.url,
+            storyReplyThumbnail: message.storyReply?.thumbnail
+        }))
+    ];
+    const deletedMessageIds = [...new Set(deletedMessageRows.map(row => asId(row._id)))];
+
+    const mediaUrls = [
+        ...deletedMessageRows.flatMap(row => [
+            row.mediaUrl || row.media?.url,
+            row.storyReplyThumbnail || row.storyReply?.thumbnail
+        ]),
+        ...orphanStories.map(story => story.mediaUrl),
+        ...groupMediaUrls
+    ];
+
+    if (orphanIds.length && survivingGroups.length) {
+        const groupIds = survivingGroups.map(group => group._id);
+        const remainingMessages = { conversationId: { $in: groupIds } };
+        const staleStoryReplies = await Message.find({
+            ...remainingMessages,
+            "storyReply.authorId": { $in: orphanIds }
+        })
+            .select("storyReply.thumbnail")
+            .lean();
+        mediaUrls.push(...staleStoryReplies.map(row => row.storyReply?.thumbnail));
+
+        await Message.updateMany(
+            remainingMessages,
+            {
+                $pull: {
+                    reactions: { user: { $in: orphanIds } },
+                    seenBy: { user: { $in: orphanIds } },
+                    deliveredTo: { user: { $in: orphanIds } }
+                }
+            }
+        );
+        await Message.updateMany(
+            {
+                ...remainingMessages,
+                "storyReply.authorId": { $in: orphanIds }
+            },
+            { $unset: { storyReply: "" } }
+        );
+        await Message.updateMany(
+            {
+                ...remainingMessages,
+                "poll.options.votes": { $in: orphanIds }
+            },
+            { $pull: { "poll.options.$[].votes": { $in: orphanIds } } }
+        );
+    }
+
+    const messagesToRemove = {
+        $or: [
+            ...(orphanDirectIds.length
+                ? [{ conversationId: { $in: orphanDirectIds } }]
+                : []),
+            ...(emptyGroups.length
+                ? [{ conversationId: { $in: emptyGroups } }]
+                : []),
+            ...(orphanMessages.length
+                ? [{ _id: { $in: orphanMessages.map(message => message._id) } }]
+                : [])
+        ]
+    };
+
+    if (deletedMessageIds.length && survivingGroups.length) {
+        await Message.updateMany(
+            {
+                conversationId: { $in: survivingGroups.map(group => group._id) },
+                replyTo: { $in: deletedMessageRows.map(row => row._id) }
+            },
+            { $set: { replyTo: null } }
+        );
+    }
+
+    const [messageResult, conversationResult, storyResult] = await Promise.all([
+        deletedMessageIds.length ? Message.deleteMany(messagesToRemove) : Promise.resolve({ deletedCount: 0 }),
+        Conversation.deleteMany({ _id: { $in: [...orphanDirectIds, ...emptyGroups] } }),
+        orphanIds.length
+            ? Story.deleteMany({ author: { $in: orphanIds } })
+            : Promise.resolve({ deletedCount: 0 })
+    ]);
+
+    for (const group of survivingGroups) {
+        const staleLastMessage =
+            group.lastMessage?.sender &&
+            orphanSet.has(asId(group.lastMessage.sender));
+        const stalePinnedMessage =
+            group.pinnedMessage?.pinnedBy &&
+            orphanSet.has(asId(group.pinnedMessage.pinnedBy));
+        const pinnedMessageRemoved =
+            group.pinnedMessage?.messageId &&
+            deletedMessageIds.includes(asId(group.pinnedMessage.messageId));
+        const patch = {};
+
+        if (staleLastMessage || (
+            group.lastMessage?.messageId &&
+            deletedMessageIds.includes(asId(group.lastMessage.messageId))
+        )) {
+            const latest = await Message.findOne({
+                conversationId: group._id,
+                deletedForEveryone: { $ne: true }
+            })
+                .sort({ createdAt: -1, _id: -1 })
+                .select("_id text type sender createdAt media.fileName")
+                .lean();
+            patch.lastMessage = latest
+                ? {
+                      messageId: latest._id,
+                      text: latest.text || latest.media?.fileName || "",
+                      type: latest.type,
+                      sender: latest.sender,
+                      createdAt: latest.createdAt
+                  }
+                : { messageId: null, text: "", type: "text", sender: null, createdAt: null };
+        }
+        if (stalePinnedMessage || pinnedMessageRemoved) patch.pinnedMessage = null;
+        if (Object.keys(patch).length) {
+            await Conversation.updateOne(
+                { _id: group._id },
+                { $set: patch },
+                { timestamps: false }
+            );
+        }
+    }
+
+    if (orphanIds.length) {
+        await Promise.all([
+            PushSubscription.deleteMany({ user: { $in: orphanIds } }),
+            Notification.deleteMany({
+                $or: [
+                    { recipient: { $in: orphanIds } },
+                    { actor: { $in: orphanIds } }
+                ]
+            }),
+            NoticeAck.deleteMany({ user: { $in: orphanIds } }),
+            PasswordReset.deleteMany({ userId: { $in: orphanIds } }),
+            Story.updateMany(
+                {},
+                {
+                    $pull: {
+                        viewers: { user: { $in: orphanIds } },
+                        reactions: { user: { $in: orphanIds } }
+                    }
+                }
+            ),
+            User.updateMany(
+                { blockedUser: { $in: orphanIds } },
+                { $pull: { blockedUser: { $in: orphanIds } } }
+            )
+        ]);
+    }
+
+    const cloudinaryDeleted = await deleteCloudinaryUrls(mediaUrls);
+    const summary = {
+        orphanUsersFound: orphanIds.length,
+        deletedMessages: messageResult.deletedCount || 0,
+        deletedConversations: conversationResult.deletedCount || 0,
+        deletedStories: storyResult.deletedCount || 0,
+        groupsRepaired: survivingGroups.length,
+        cloudinaryDeleted
+    };
+    if (Object.values(summary).some(value => value > 0)) {
+        console.log("[Orphan cleanup] completed:", summary);
+    }
+    return summary;
+};
