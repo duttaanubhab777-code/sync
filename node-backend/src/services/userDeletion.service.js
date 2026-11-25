@@ -402,12 +402,19 @@ export const sweepOrphanedUserData = async () => {
         id => /^[a-f0-9]{24}$/i.test(id) && !validIds.has(id)
     );
     const orphanSet = new Set(orphanIds);
-    const replacementAdmin = orphanIds.length
-        ? await User.findOne(
-              { role: { $in: ["admin", "superAdmin"] }, isOfficial: { $ne: true } },
-              { _id: 1 }
-          ).lean()
-        : null;
+    let replacementAdmin = null;
+    if (orphanIds.length) {
+        replacementAdmin = await User.findOne(
+            { role: { $in: ["admin", "superAdmin"] }, isOfficial: { $ne: true } },
+            { _id: 1 }
+        ).lean();
+        if (!replacementAdmin) {
+            replacementAdmin = await User.findOne(
+                { isOfficial: true },
+                { _id: 1 }
+            ).lean();
+        }
+    }
 
     const orphanDirect = directRows.filter(conversation =>
         (conversation.members || []).some(member => orphanSet.has(asId(member)))
