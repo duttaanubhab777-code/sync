@@ -3,7 +3,7 @@ import { User } from "../models/user.model.js";
 import { Conversation } from "../models/conversation.model.js";
 import { Message } from "../models/message.model.js";
 import { Story } from "../models/story.model.js";
-import { Notice, NoticeAck } from "../models/notice.model.js";
+import { Notice } from "../models/notice.model.js";
 import { PushSubscription } from "../models/push-subscription.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
