@@ -21,8 +21,10 @@ const ALLOWED_TYPES = [
     "audio",
     "file",
     "location",
-    "contact"
+    "contact",
+    "poll"
 ];
+const EDIT_WINDOW_MS = 15 * 60 * 1000; // পাঠানোর ১৫ মিনিটের মধ্যে মেসেজ এডিট করা যাবে
 const MAX_TEXT = 4000;
 
 // একটা socket থেকে ১০ সেকেন্ডে সর্বোচ্চ ২০টা মেসেজ (spam/flood ঠেকাতে)
@@ -41,7 +43,8 @@ const MEDIA_PREVIEW = {
     audio: "🎤 Voice message",
     file: "📎 Attachment",
     location: "📍 Location",
-    contact: "👤 Contact"
+    contact: "👤 Contact",
+    poll: "📊 Poll"
 };
 
 const optimizePushImage = url => {
@@ -60,6 +63,9 @@ const optimizePushAvatar = url => {
 
 const buildPushPreview = ({ type, cleanText, msg }) => {
     if (type === "text") return cleanText.slice(0, 160);
+    if (type === "poll") {
+        return `📊 Poll: ${String(msg.poll?.question || "").slice(0, 140)}`;
+    }
     if (type === "contact") {
         const label = msg.contact?.name
             ? `👤 Contact: ${msg.contact.name}`
@@ -133,9 +139,15 @@ async function notifyRecipients({
     };
 
     // unread সংখ্যা এই মেসেজ যোগ হওয়ার পরের (আগেই updateOne হয়ে গেছে)
-    const freshConv = await Conversation.findById(conv._id, { unread: 1 })
+    const freshConv = await Conversation.findById(conv._id, {
+        unread: 1,
+        mutedBy: 1
+    })
         .lean()
         .catch(() => null);
+    const mutedSet = new Set(
+        (freshConv?.mutedBy || []).map(id => String(id))
+    );
 
     const safeTitle = String(title || "Sync").slice(0, 120);
     const safeBody = String(body || "New message").slice(0, 240);
@@ -171,12 +183,15 @@ async function notifyRecipients({
             } catch {
                 // secret না থাকলে ack ছাড়াই push যাবে
             }
-            await sendPushToUser(recipientId, {
-                ...pushPayload,
-                data: pushData,
-                badgeCount,
-                chatUnread
-            });
+            // ইউজার এই চ্যাট মিউট করে রাখলে পুশ নোটিফিকেশন যাবে না
+            if (!mutedSet.has(String(recipientId))) {
+                await sendPushToUser(recipientId, {
+                    ...pushPayload,
+                    data: pushData,
+                    badgeCount,
+                    chatUnread
+                });
+            }
         })
     );
 
@@ -213,6 +228,7 @@ export const registerMessageHandlers = (io, socket) => {
                 media = null,
                 location = null,
                 contact = null,
+                poll = null,
                 replyTo = null
             } = payload || {};
 
@@ -274,6 +290,7 @@ export const registerMessageHandlers = (io, socket) => {
             let cleanMedia;
             let cleanLocation;
             let cleanContact;
+            let cleanPoll;
 
             if (type === "text") {
                 if (!cleanText) return ack?.({ ok: false, error: "EMPTY_MESSAGE" });
@@ -287,6 +304,25 @@ export const registerMessageHandlers = (io, socket) => {
                 if (!cleanContact) {
                     return ack?.({ ok: false, error: "INVALID_CONTACT" });
                 }
+            } else if (type === "poll") {
+                const question = String(poll?.question || "").trim().slice(0, 200);
+                const rawOpts = Array.isArray(poll?.options) ? poll.options : [];
+                const cleanOpts = rawOpts
+                    .map(o => String(typeof o === "string" ? o : o?.text || "").trim().slice(0, 100))
+                    .filter(Boolean)
+                    .slice(0, 6);
+                if (!question || cleanOpts.length < 2) {
+                    return ack?.({ ok: false, error: "INVALID_POLL" });
+                }
+                cleanPoll = {
+                    question,
+                    allowMultiple: Boolean(poll?.allowMultiple),
+                    options: cleanOpts.map((optText, i) => ({
+                        id: `opt_${i}`,
+                        text: optText,
+                        votes: []
+                    }))
+                };
             } else {
                 cleanMedia = pickMedia(media);
                 if (!cleanMedia?.url || !isValidCloudinaryUrl(cleanMedia.url)) {
@@ -321,6 +357,7 @@ export const registerMessageHandlers = (io, socket) => {
                     media: cleanMedia,
                     location: cleanLocation,
                     contact: cleanContact,
+                    poll: cleanPoll,
                     replyTo: replyId,
                     status: "sent"
                 });
@@ -346,13 +383,16 @@ export const registerMessageHandlers = (io, socket) => {
                 const id = m.toString();
                 if (id !== userId) inc[`unread.${id}`] = 1;
             }
-            const lastMessageText = buildLastMessagePreview({
-                type,
-                text: cleanText,
-                media: cleanMedia,
-                location: cleanLocation,
-                contact: cleanContact
-            });
+            const lastMessageText =
+                type === "poll"
+                    ? `📊 ${cleanPoll.question}`.slice(0, 100)
+                    : buildLastMessagePreview({
+                          type,
+                          text: cleanText,
+                          media: cleanMedia,
+                          location: cleanLocation,
+                          contact: cleanContact
+                      });
             await Conversation.updateOne(
                 { _id: conv._id },
                 {
@@ -442,6 +482,178 @@ export const registerMessageHandlers = (io, socket) => {
             ack?.({ ok: true });
         } catch (err) {
             console.error("[Socket message:delete Error]:", err.message);
+            ack?.({ ok: false, error: "SERVER_ERROR" });
+        }
+    });
+
+    // ৩. মেসেজে ইমোজি রিঅ্যাকশন দেওয়া/সরানো (টগল)
+    socket.on("message:react", async (payload, ack) => {
+        try {
+            const { messageId, emoji } = payload || {};
+            const cleanEmoji = String(emoji || "").trim();
+            if (
+                !isObjectId(messageId) ||
+                !cleanEmoji ||
+                cleanEmoji.length > 16
+            ) {
+                return ack?.({ ok: false, error: "INVALID_PAYLOAD" });
+            }
+            const msg = await Message.findById(messageId);
+            if (!msg || msg.deletedForEveryone) {
+                return ack?.({ ok: false, error: "NOT_FOUND" });
+            }
+            const conv = await Conversation.findById(msg.conversationId, {
+                members: 1
+            }).lean();
+            if (!conv || !conv.members.some(m => String(m) === userId)) {
+                return ack?.({ ok: false, error: "FORBIDDEN" });
+            }
+
+            const existingIdx = (msg.reactions || []).findIndex(
+                r => String(r.user) === userId
+            );
+            if (existingIdx !== -1) {
+                if (msg.reactions[existingIdx].emoji === cleanEmoji) {
+                    msg.reactions.splice(existingIdx, 1);
+                } else {
+                    msg.reactions[existingIdx].emoji = cleanEmoji;
+                    msg.reactions[existingIdx].createdAt = new Date();
+                }
+            } else {
+                msg.reactions.push({
+                    emoji: cleanEmoji,
+                    user: userId,
+                    createdAt: new Date()
+                });
+            }
+            await msg.save();
+
+            const reactions = msg.reactions.map(r => ({
+                emoji: r.emoji,
+                user: String(r.user),
+                createdAt: r.createdAt
+            }));
+            const memberRooms = conv.members.map(m => `user:${m.toString()}`);
+            io.to(memberRooms).emit("message:reacted", {
+                conversationId: String(msg.conversationId),
+                messageId: String(msg._id),
+                reactions
+            });
+            ack?.({ ok: true, reactions });
+        } catch (err) {
+            console.error("[Socket message:react Error]:", err.message);
+            ack?.({ ok: false, error: "SERVER_ERROR" });
+        }
+    });
+
+    // ৪. নিজের পাঠানো টেক্সট মেসেজ এডিট করা (১৫ মিনিটের মধ্যে)
+    socket.on("message:edit", async (payload, ack) => {
+        try {
+            const { messageId, text } = payload || {};
+            const cleanText = String(text || "").trim();
+            if (
+                !isObjectId(messageId) ||
+                !cleanText ||
+                cleanText.length > MAX_TEXT
+            ) {
+                return ack?.({ ok: false, error: "INVALID_PAYLOAD" });
+            }
+            const msg = await Message.findById(messageId);
+            if (
+                !msg ||
+                msg.sender.toString() !== userId ||
+                msg.deletedForEveryone ||
+                msg.type !== "text" ||
+                msg.card?.kind
+            ) {
+                return ack?.({ ok: false, error: "NOT_ALLOWED" });
+            }
+            if (Date.now() - new Date(msg.createdAt).getTime() > EDIT_WINDOW_MS) {
+                return ack?.({ ok: false, error: "EDIT_WINDOW_EXPIRED" });
+            }
+
+            msg.text = cleanText;
+            msg.editedAt = new Date();
+            await msg.save();
+
+            await Conversation.updateOne(
+                { _id: msg.conversationId, "lastMessage.messageId": msg._id },
+                { $set: { "lastMessage.text": cleanText.slice(0, 100) } }
+            );
+
+            const conv = await Conversation.findById(msg.conversationId, {
+                members: 1
+            }).lean();
+            if (conv) {
+                const memberRooms = conv.members.map(m => `user:${m.toString()}`);
+                io.to(memberRooms).emit("message:edited", {
+                    conversationId: String(msg.conversationId),
+                    messageId: String(msg._id),
+                    text: msg.text,
+                    editedAt: msg.editedAt
+                });
+            }
+            ack?.({ ok: true, text: msg.text, editedAt: msg.editedAt });
+        } catch (err) {
+            console.error("[Socket message:edit Error]:", err.message);
+            ack?.({ ok: false, error: "SERVER_ERROR" });
+        }
+    });
+
+    // ৫. গ্রুপ পোলে ভোট দেওয়া/বদলানো
+    socket.on("poll:vote", async (payload, ack) => {
+        try {
+            const { messageId, optionId } = payload || {};
+            if (!isObjectId(messageId) || typeof optionId !== "string" || !optionId) {
+                return ack?.({ ok: false, error: "INVALID_PAYLOAD" });
+            }
+            const msg = await Message.findById(messageId);
+            if (!msg || msg.deletedForEveryone || msg.type !== "poll" || !msg.poll) {
+                return ack?.({ ok: false, error: "NOT_FOUND" });
+            }
+            const conv = await Conversation.findById(msg.conversationId, {
+                members: 1
+            }).lean();
+            if (!conv || !conv.members.some(m => String(m) === userId)) {
+                return ack?.({ ok: false, error: "FORBIDDEN" });
+            }
+
+            const targetOpt = msg.poll.options.find(o => o.id === optionId);
+            if (!targetOpt) {
+                return ack?.({ ok: false, error: "INVALID_OPTION" });
+            }
+
+            const alreadyVoted = targetOpt.votes.some(v => String(v) === userId);
+            if (alreadyVoted) {
+                targetOpt.votes = targetOpt.votes.filter(v => String(v) !== userId);
+            } else {
+                if (!msg.poll.allowMultiple) {
+                    for (const opt of msg.poll.options) {
+                        opt.votes = opt.votes.filter(v => String(v) !== userId);
+                    }
+                }
+                targetOpt.votes.push(userId);
+            }
+            await msg.save();
+
+            const pollData = {
+                question: msg.poll.question,
+                allowMultiple: Boolean(msg.poll.allowMultiple),
+                options: msg.poll.options.map(o => ({
+                    id: o.id,
+                    text: o.text,
+                    votes: (o.votes || []).map(String)
+                }))
+            };
+            const memberRooms = conv.members.map(m => `user:${m.toString()}`);
+            io.to(memberRooms).emit("poll:updated", {
+                conversationId: String(msg.conversationId),
+                messageId: String(msg._id),
+                poll: pollData
+            });
+            ack?.({ ok: true, poll: pollData });
+        } catch (err) {
+            console.error("[Socket poll:vote Error]:", err.message);
             ack?.({ ok: false, error: "SERVER_ERROR" });
         }
     });

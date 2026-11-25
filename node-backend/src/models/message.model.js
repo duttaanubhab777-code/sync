@@ -20,7 +20,7 @@ const messageSchema = new Schema(
         },
         type: {
             type: String,
-            enum: ["text", "image", "video", "audio", "file", "location", "contact"],
+            enum: ["text", "image", "video", "audio", "file", "location", "contact", "poll"],
             default: "text"
         },
         text: {
@@ -29,10 +29,43 @@ const messageSchema = new Schema(
             maxlength: 4000,
             default: ""
         },
-        // অফিশিয়াল ওয়েলকাম মেসেজের স্পেশাল কার্ড প্যালেট দেখানোর জন্য
+        // অফিশিয়াল ওয়েলকাম ও ব্রডকাস্ট মেসেজের স্পেশাল কার্ড প্যালেট দেখানোর জন্য
         card: {
-            kind: { type: String, enum: ["welcome"] },
-            name: { type: String, trim: true, maxlength: 100 }
+            kind: { type: String, enum: ["welcome", "broadcast"] },
+            name: { type: String, trim: true, maxlength: 100 },
+            title: { type: String, trim: true, maxlength: 120 },
+            body: { type: String, trim: true, maxlength: 1500 },
+            tag: { type: String, trim: true, maxlength: 40 }
+        },
+        // গ্রুপ পোলের প্রশ্ন ও অপশনগুলো
+        poll: {
+            question: { type: String, trim: true, maxlength: 200 },
+            allowMultiple: { type: Boolean, default: false },
+            options: [
+                {
+                    _id: false,
+                    id: { type: String, required: true },
+                    text: { type: String, trim: true, maxlength: 100 },
+                    votes: [{ type: Schema.Types.ObjectId, ref: "User" }]
+                }
+            ]
+        },
+        // মেসেজ রিঅ্যাকশন (ইমোজি + কে দিয়েছে)
+        reactions: [
+            {
+                _id: false,
+                emoji: { type: String, required: true, maxlength: 16 },
+                user: { type: Schema.Types.ObjectId, ref: "User", required: true },
+                createdAt: { type: Date, default: Date.now }
+            }
+        ],
+        editedAt: {
+            type: Date,
+            default: null
+        },
+        forwarded: {
+            type: Boolean,
+            default: false
         },
         media: {
             url: { type: String },
@@ -130,6 +163,15 @@ messageSchema.pre("validate", function () {
             );
         } else {
             this.contact = clean;
+        }
+    } else if (this.type === "poll") {
+        const q = String(this.poll?.question || "").trim();
+        const opts = Array.isArray(this.poll?.options) ? this.poll.options : [];
+        if (!q || opts.length < 2 || opts.length > 6) {
+            this.invalidate(
+                "poll",
+                "Poll requires a question and 2 to 6 options"
+            );
         }
     } else if (!this.media?.url) {
         this.invalidate("media.url", `${this.type} message requires media.url`);

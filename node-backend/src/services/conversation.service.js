@@ -29,18 +29,22 @@ export const serializeConversation = (conv, meId) => {
         admins: (o.admins || []).map(String),
         createdBy: o.createdBy ? String(o.createdBy) : null,
         onlyAdminCanMessage: Boolean(o.onlyAdminCanMessage),
+        pinnedMessage: o.pinnedMessage?.messageId ? o.pinnedMessage : null,
         lastMessage: o.lastMessage?.messageId ? o.lastMessage : null,
         createdAt: o.createdAt,
         updatedAt: o.updatedAt
     };
 
     if (meId) {
+        const meStr = String(meId);
         const unread =
             o.unread instanceof Map ? Object.fromEntries(o.unread) : o.unread;
-        out.unread = Number(unread?.[String(meId)] || 0);
+        out.unread = Number(unread?.[meStr] || 0);
+        out.isPinned = (o.pinnedBy || []).some(id => idOf(id) === meStr);
+        out.isMuted = (o.mutedBy || []).some(id => idOf(id) === meStr);
         if (o.type === "direct") {
             out.partner =
-                members.find(m => idOf(m) !== String(meId)) || null;
+                members.find(m => idOf(m) !== meStr) || null;
         }
     }
     return out;

@@ -1,0 +1,573 @@
+/* ==========================================================================
+   Sync Pro Chat Features:
+   Reactions, Edit, Forward, Pinned Message, Chat Pin/Mute, In-Chat Search,
+   Shared Media/Docs/Links Gallery, Group Polls & Official Sync Broadcast Card
+   ========================================================================== */
+
+/* ---- Quick Emoji Reaction Bar in MessageActionSheet ---- */
+.sync-react-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    gap: 6px;
+    padding: 8px 10px 12px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--line);
+}
+
+.sync-react-emoji-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1px solid transparent;
+    background: rgba(255, 255, 255, 0.05);
+    font-size: 1.25rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.16s var(--ease), background 0.16s ease, border-color 0.16s ease;
+}
+
+.sync-react-emoji-btn:hover {
+    transform: scale(1.16);
+    background: rgba(0, 237, 100, 0.14);
+}
+
+.sync-react-emoji-btn.active {
+    background: rgba(0, 237, 100, 0.22);
+    border-color: rgba(0, 237, 100, 0.55);
+}
+
+/* ---- Reactions Row below Message Bubble ---- */
+.sync-msg-reactions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 5px;
+}
+
+.sync-reaction-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(4, 24, 20, 0.72);
+    color: var(--text);
+    font-size: 0.76rem;
+    font-weight: 700;
+    line-height: 1.2;
+    transition: transform 0.14s var(--ease), border-color 0.14s ease;
+}
+
+.sync-reaction-pill:hover {
+    transform: scale(1.06);
+}
+
+.sync-reaction-pill.mine {
+    background: rgba(0, 237, 100, 0.18);
+    border-color: rgba(0, 237, 100, 0.55);
+    color: #bbf7d0;
+}
+
+/* ---- Forwarded & Edited labels ---- */
+.sync-msg-forwarded {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.72rem;
+    font-style: italic;
+    color: var(--text-2);
+    margin-bottom: 3px;
+    opacity: 0.88;
+}
+
+.sync-msg-edited {
+    font-size: 0.68rem;
+    font-style: italic;
+    opacity: 0.78;
+    margin-right: 4px;
+}
+
+/* ---- Pinned Message Banner (below chat header) ---- */
+.sync-pinned-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    background: rgba(7, 32, 27, 0.92);
+    border-bottom: 1px solid var(--line);
+    cursor: pointer;
+    z-index: 4;
+}
+
+.sync-pinned-accent {
+    width: 3px;
+    height: 28px;
+    border-radius: 3px;
+    background: var(--mongo);
+    flex-shrink: 0;
+}
+
+.sync-pinned-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.sync-pinned-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--mongo);
+}
+
+.sync-pinned-text {
+    font-size: 0.8rem;
+    color: var(--text-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---- Highlighted Message (jump from Search / Pin) ---- */
+.sync-msg-row.is-highlighted .sync-msg-bubble {
+    box-shadow: 0 0 0 2px var(--mongo), 0 0 22px rgba(0, 237, 100, 0.3);
+}
+
+/* ---- In-Chat Search Bar & Results ---- */
+.sync-inchat-search {
+    display: flex;
+    flex-direction: column;
+    background: rgba(7, 32, 27, 0.96);
+    border-bottom: 1px solid var(--line);
+    padding: 8px 14px;
+    gap: 8px;
+    z-index: 5;
+}
+
+.sync-inchat-search-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sync-inchat-search-row .sync-search-input-wrap {
+    flex: 1;
+}
+
+.sync-inchat-results {
+    max-height: 220px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.sync-inchat-result-item {
+    width: 100%;
+    text-align: left;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.03);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.sync-inchat-result-item:hover {
+    background: rgba(0, 237, 100, 0.1);
+    border-color: rgba(0, 237, 100, 0.3);
+}
+
+.sync-inchat-result-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.74rem;
+    color: var(--text-2);
+}
+
+.sync-inchat-result-top strong {
+    color: var(--text);
+}
+
+.sync-inchat-result-text {
+    font-size: 0.82rem;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---- Chat Pin & Mute Badges in Sidebar & Info Drawer ---- */
+.sync-conv-flags {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--text-3);
+    flex-shrink: 0;
+}
+
+.sync-conv-flags .is-pinned {
+    color: var(--mongo);
+}
+
+.sync-pref-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.sync-pref-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 9px 10px;
+    border-radius: 12px;
+    border: 1px solid var(--line-strong);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text);
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.sync-pref-btn.active {
+    background: rgba(0, 237, 100, 0.14);
+    border-color: rgba(0, 237, 100, 0.45);
+    color: #86efac;
+}
+
+/* ---- Shared Media, Docs & Links Gallery (in Info Drawer) ---- */
+.sync-shared-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.sync-shared-tab {
+    padding: 7px 8px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-2);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.sync-shared-tab.active {
+    background: rgba(0, 237, 100, 0.16);
+    border-color: rgba(0, 237, 100, 0.45);
+    color: var(--text);
+}
+
+.sync-shared-media-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.sync-shared-thumb {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    display: block;
+}
+
+.sync-shared-thumb img,
+.sync-shared-thumb video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.sync-shared-video-badge {
+    position: absolute;
+    right: 5px;
+    bottom: 5px;
+    padding: 2px 5px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+}
+
+.sync-shared-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.sync-shared-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text);
+    text-decoration: none;
+}
+
+.sync-shared-row:hover {
+    border-color: rgba(0, 237, 100, 0.38);
+    background: rgba(0, 237, 100, 0.08);
+}
+
+.sync-shared-row-meta {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.sync-shared-row-meta strong {
+    font-size: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sync-shared-row-meta small {
+    font-size: 0.72rem;
+    color: var(--text-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---- Group Poll Card ---- */
+.sync-poll-card {
+    min-width: 230px;
+    max-width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sync-poll-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.sync-poll-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #4ade80;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.sync-poll-mode {
+    font-size: 0.7rem;
+    color: var(--text-2);
+}
+
+.sync-poll-question {
+    font-size: 0.94rem;
+    font-weight: 700;
+    line-height: 1.35;
+    color: #ffffff;
+}
+
+.sync-poll-options {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.sync-poll-opt {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(3, 21, 18, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    text-align: left;
+    transition: border-color 0.15s ease;
+}
+
+.sync-poll-opt.voted {
+    border-color: rgba(0, 237, 100, 0.65);
+}
+
+.sync-poll-bar {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: rgba(0, 237, 100, 0.18);
+    transition: width 0.25s var(--ease);
+    pointer-events: none;
+}
+
+.sync-poll-opt.voted .sync-poll-bar {
+    background: rgba(0, 237, 100, 0.28);
+}
+
+.sync-poll-opt-main {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.sync-poll-check {
+    width: 17px;
+    height: 17px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255, 255, 255, 0.35);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.sync-poll-check.checked {
+    background: #22c55e;
+    border-color: #22c55e;
+    color: #031512;
+}
+
+.sync-poll-opt-text {
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: var(--text);
+    word-break: break-word;
+}
+
+.sync-poll-opt-meta {
+    position: relative;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text-2);
+    flex-shrink: 0;
+}
+
+.sync-poll-footer {
+    font-size: 0.72rem;
+    color: var(--text-2);
+}
+
+.sync-poll-form-opts {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sync-poll-form-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.sync-poll-form-row input {
+    flex: 1;
+}
+
+/* ---- Official Sync Broadcast Card ---- */
+.sync-msg-bubble.has-broadcast-card {
+    padding: 8px 8px 6px;
+    max-width: min(88%, 390px);
+    background: linear-gradient(
+        160deg,
+        rgba(8, 34, 48, 0.96) 0%,
+        rgba(6, 26, 30, 0.98) 100%
+    );
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.3);
+}
+
+.sync-broadcast-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 6px 6px 4px;
+}
+
+.sync-broadcast-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.sync-broadcast-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.sync-broadcast-logo {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: rgba(3, 21, 18, 0.8);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sync-broadcast-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 800;
+    font-size: 0.88rem;
+    color: var(--text);
+}
+
+.sync-broadcast-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    background: rgba(14, 165, 233, 0.16);
+    border: 1px solid rgba(56, 189, 248, 0.32);
+    color: #7dd3fc;
+}
+
+.sync-broadcast-title {
+    font-size: 1rem;
+    font-weight: 800;
+    color: #ffffff;
+    line-height: 1.3;
+}
+
+.sync-broadcast-body {
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: #d6efe6;
+    white-space: pre-wrap;
+    word-break: break-word;
+}

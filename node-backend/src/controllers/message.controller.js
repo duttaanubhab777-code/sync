@@ -3,7 +3,10 @@ import { Message } from "../models/message.model.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { assertObjectId, isObjectId } from "../utils/helpers.js";
+import { randomUUID } from "node:crypto";
+import { User } from "../models/user.model.js";
+import { assertObjectId, escapeRegex, isObjectId } from "../utils/helpers.js";
+import { buildLastMessagePreview } from "../utils/attachments.js";
 import { isValidAckToken } from "../utils/deliveryAck.js";
 import {
     POPULATE_SENDER,
@@ -113,7 +116,7 @@ export const syncMessages = asyncHandler(async (req, res) => {
         updated = await Message.find(filter)
             .sort({ updatedAt: 1 })
             .limit(300)
-            .select("conversationId status deletedForEveryone text type media location contact updatedAt")
+            .select("conversationId status deletedForEveryone text type media location contact poll reactions editedAt updatedAt")
             .lean();
     }
 
@@ -180,5 +183,219 @@ export const getMessageInfo = asyncHandler(async (req, res) => {
             deliveredTo: pick(msg.deliveredTo, "deliveredAt"),
             seenBy: pick(msg.seenBy, "seenAt")
         })
+    );
+});
+
+// GET /api/v1/conversations/:id/search?q=... — চ্যাটের ভেতর মেসেজ সার্চ করা
+export const searchConversationMessages = asyncHandler(async (req, res) => {
+    const conv = await loadMemberConversation(req.params.id, req.user._id);
+    const q = String(req.query.q || "").trim();
+    if (q.length < 2) {
+        return res.status(200).json(new ApiResponse(200, { messages: [] }));
+    }
+    const rx = new RegExp(escapeRegex(q.slice(0, 80)), "i");
+    const rows = await Message.find({
+        conversationId: conv._id,
+        hidden: { $ne: true },
+        deletedForEveryone: { $ne: true },
+        $or: [
+            { text: rx },
+            { "media.fileName": rx },
+            { "poll.question": rx }
+        ]
+    })
+        .sort({ _id: -1 })
+        .limit(30)
+        .populate(POPULATE_SENDER)
+        .select("-__v")
+        .lean();
+
+    res.status(200).json(new ApiResponse(200, { messages: rows }));
+});
+
+const URL_EXTRACT_RE = /https?:\/\/[^\s<>"']+/gi;
+
+// GET /api/v1/conversations/:id/media?tab=media|files|links — Shared Media, Docs & Links গ্যালারি
+export const getSharedMedia = asyncHandler(async (req, res) => {
+    const conv = await loadMemberConversation(req.params.id, req.user._id);
+    const tab = ["media", "files", "links"].includes(req.query.tab)
+        ? req.query.tab
+        : "media";
+    const base = {
+        conversationId: conv._id,
+        hidden: { $ne: true },
+        deletedForEveryone: { $ne: true }
+    };
+
+    if (tab === "media") {
+        const items = await Message.find({
+            ...base,
+            type: { $in: ["image", "video"] },
+            "media.url": { $exists: true, $ne: "" }
+        })
+            .sort({ _id: -1 })
+            .limit(60)
+            .populate(POPULATE_SENDER)
+            .select("type media text sender createdAt")
+            .lean();
+        return res.status(200).json(new ApiResponse(200, { tab, items }));
+    }
+
+    if (tab === "files") {
+        const items = await Message.find({
+            ...base,
+            type: "file",
+            "media.url": { $exists: true, $ne: "" }
+        })
+            .sort({ _id: -1 })
+            .limit(60)
+            .populate(POPULATE_SENDER)
+            .select("type media text sender createdAt")
+            .lean();
+        return res.status(200).json(new ApiResponse(200, { tab, items }));
+    }
+
+    const rows = await Message.find({
+        ...base,
+        type: "text",
+        text: /https?:\/\//i
+    })
+        .sort({ _id: -1 })
+        .limit(60)
+        .populate(POPULATE_SENDER)
+        .select("text sender createdAt")
+        .lean();
+
+    const links = [];
+    for (const r of rows) {
+        const matches = String(r.text || "").match(URL_EXTRACT_RE) || [];
+        for (const raw of matches) {
+            const href = raw.replace(/[),.!?;:]+$/, "");
+            try {
+                const u = new URL(href);
+                if (!["http:", "https:"].includes(u.protocol)) continue;
+                links.push({
+                    _id: `${r._id}_${links.length}`,
+                    messageId: r._id,
+                    url: u.href,
+                    host: u.hostname,
+                    snippet: String(r.text || "").slice(0, 140),
+                    sender: r.sender,
+                    createdAt: r.createdAt
+                });
+            } catch {
+                // ignore invalid URLs
+            }
+        }
+    }
+    res.status(200).json(new ApiResponse(200, { tab, items: links.slice(0, 60) }));
+});
+
+// POST /api/v1/messages/:id/forward   body: { targetConversationIds: [...] } — অন্য চ্যাটে মেসেজ ফরওয়ার্ড করা
+export const forwardMessage = asyncHandler(async (req, res) => {
+    const me = String(req.user._id);
+    const io = req.app.get("io");
+    const msgId = assertObjectId(req.params.id, "message id");
+    const rawTargets = Array.isArray(req.body?.targetConversationIds)
+        ? req.body.targetConversationIds
+        : [];
+    const targetIds = [...new Set(rawTargets.map(String))]
+        .filter(isObjectId)
+        .slice(0, 5);
+    if (targetIds.length === 0) {
+        throw new ApiError(400, "Select at least one chat to forward to");
+    }
+
+    const source = await Message.findById(msgId).lean();
+    if (!source || source.deletedForEveryone || source.hidden) {
+        throw new ApiError(404, "Message not found");
+    }
+    if (source.type === "poll" || source.card?.kind) {
+        throw new ApiError(400, "This message cannot be forwarded");
+    }
+    await loadMemberConversation(source.conversationId, me);
+
+    const created = [];
+    for (const targetId of targetIds) {
+        const targetConv = await Conversation.findById(targetId);
+        if (!targetConv || !targetConv.isMember(me)) continue;
+        if (!targetConv.canSendMessage(me)) continue;
+
+        if (targetConv.type === "direct") {
+            const partnerId = targetConv.members
+                .map(m => m.toString())
+                .find(id => id !== me);
+            const partner = await User.findById(partnerId)
+                .select("isOfficial blockedUser")
+                .lean();
+            if (partner?.isOfficial) continue;
+            const blocked =
+                partner?.blockedUser?.some(b => String(b) === me) ||
+                req.user.blockedUser?.some(b => String(b) === partnerId);
+            if (blocked) continue;
+        }
+
+        let newMsg = await Message.create({
+            conversationId: targetConv._id,
+            sender: req.user._id,
+            clientMsgId: `fwd:${randomUUID()}`,
+            type: source.type,
+            text: source.text || "",
+            media: source.media?.url ? source.media : undefined,
+            location: source.location?.lat !== undefined ? source.location : undefined,
+            contact: source.contact?.name ? source.contact : undefined,
+            forwarded: true,
+            status: "sent"
+        });
+        newMsg = await newMsg.populate(POPULATE_SENDER);
+
+        const inc = {};
+        for (const m of targetConv.members) {
+            const id = m.toString();
+            if (id !== me) inc[`unread.${id}`] = 1;
+        }
+        const preview = buildLastMessagePreview({
+            type: newMsg.type,
+            text: newMsg.text,
+            media: newMsg.media,
+            location: newMsg.location,
+            contact: newMsg.contact
+        });
+        await Conversation.updateOne(
+            { _id: targetConv._id },
+            {
+                $set: {
+                    lastMessage: {
+                        messageId: newMsg._id,
+                        text: preview,
+                        type: newMsg.type,
+                        sender: req.user._id,
+                        createdAt: newMsg.createdAt
+                    }
+                },
+                $inc: inc
+            }
+        );
+
+        const memberRooms = targetConv.members.map(m => `user:${m.toString()}`);
+        io?.to(memberRooms).emit("message:new", {
+            message: newMsg,
+            conversationId: targetConv._id
+        });
+        created.push({
+            conversationId: String(targetConv._id),
+            messageId: String(newMsg._id)
+        });
+    }
+
+    if (created.length === 0) {
+        throw new ApiError(400, "Could not forward message to selected chats");
+    }
+    res.status(201).json(
+        new ApiResponse(
+            201,
+            { forwarded: created },
+            `Forwarded to ${created.length} chat${created.length > 1 ? "s" : ""}`
+        )
     );
 });

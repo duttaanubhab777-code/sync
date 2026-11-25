@@ -74,6 +74,28 @@ const conversationSchema = new Schema(
             sender: { type: Schema.Types.ObjectId, ref: "User" },
             createdAt: { type: Date }
         },
+        // চ্যাটের উপরে পিন করা মেসেজ (একবারে একটি)
+        pinnedMessage: {
+            messageId: { type: Schema.Types.ObjectId, ref: "Message" },
+            text: { type: String, default: "" },
+            type: { type: String, default: "text" },
+            senderName: { type: String, default: "" },
+            pinnedBy: { type: Schema.Types.ObjectId, ref: "User" },
+            pinnedAt: { type: Date }
+        },
+        // কারা এই চ্যাট লিস্টের উপরে পিন করে রেখেছে ও কারা নোটিফিকেশন মিউট করেছে
+        pinnedBy: [
+            {
+                type: Schema.Types.ObjectId,
+                ref: "User"
+            }
+        ],
+        mutedBy: [
+            {
+                type: Schema.Types.ObjectId,
+                ref: "User"
+            }
+        ],
         // কোন ইউজারের কটা মেসেজ এখনো দেখা হয়নি (userId -> সংখ্যা)
         unread: {
             type: Map,

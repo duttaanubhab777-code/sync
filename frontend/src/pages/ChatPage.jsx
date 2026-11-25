@@ -22,7 +22,11 @@ import {
     Lock,
     Loader2,
     MessageSquare,
-    LogOut
+    LogOut,
+    Pin,
+    BellOff,
+    Forward,
+    BarChart2
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncBrandBar from "../components/SyncBrandBar.jsx";
@@ -34,7 +38,12 @@ import LocationCard from "../components/chat/LocationCard.jsx";
 import ContactCard from "../components/chat/ContactCard.jsx";
 import DocumentCard from "../components/chat/DocumentCard.jsx";
 import WelcomeCard from "../components/chat/WelcomeCard.jsx";
+import BroadcastCard from "../components/chat/BroadcastCard.jsx";
+import PollCard from "../components/chat/PollCard.jsx";
+import CreatePollModal from "../components/chat/CreatePollModal.jsx";
+import ForwardModal from "../components/chat/ForwardModal.jsx";
 import VerifiedBadge from "../components/VerifiedBadge.jsx";
+import { api } from "../services/api.js";
 import MessageGesture from "../components/chat/MessageGesture.jsx";
 import MessageActionSheet from "../components/chat/MessageActionSheet.jsx";
 import { VoicePlayer, VideoPlayer } from "../components/MediaPlayers.jsx";
@@ -50,15 +59,19 @@ import {
 } from "../components/Modals.jsx";
 import {
     fetchMessages,
+    pinConversationMessage,
     setActiveConversation,
     setReplyTo
 } from "../store/chatSlice.js";
 import {
     deleteSocketMessage,
+    editSocketMessage,
     emitMessageSeen,
     emitTypingStart,
     emitTypingStop,
-    sendSocketMessage
+    reactSocketMessage,
+    sendSocketMessage,
+    voteSocketPoll
 } from "../services/socket.js";
 import { enqueueMediaMessage } from "../services/outbox.js";
 import UploadBubbleOverlay from "../components/chat/UploadBubbleOverlay.jsx";
@@ -189,6 +202,11 @@ const formatReplySnippet = target => {
             ? `📎 ${target.media.fileName}`
             : "📎 Attachment";
     }
+    if (target.type === "poll") {
+        return target.poll?.question
+            ? `📊 ${target.poll.question}`
+            : "📊 Poll";
+    }
     return `[${String(target.type || "media").toUpperCase()}]`;
 };
 
@@ -258,12 +276,62 @@ export default function ChatPage() {
     const convListRef = useRef(null);
     const { hasUpdate } = useAppUpdates({ autoLoad: isAndroidApp });
     const composerInputRef = useRef(null);
-    // মেসেজ টিপে ধরলে যেটার মেনু খোলা (Reply / Message info / Delete)
+    // মেসেজ টিপে ধরলে যেটার মেনু খোলা (Reply / React / Edit / Forward / Pin / Info / Delete)
     const [sheetMsg, setSheetMsg] = useState(null);
+    const [editingMsg, setEditingMsg] = useState(null);
+    const [forwardMsg, setForwardMsg] = useState(null);
+    const [showCreatePoll, setShowCreatePoll] = useState(false);
+    const [showChatSearch, setShowChatSearch] = useState(false);
+    const [chatSearchQuery, setChatSearchQuery] = useState("");
+    const [chatSearchResults, setChatSearchResults] = useState([]);
+    const [chatSearching, setChatSearching] = useState(false);
+    const [highlightedMsgId, setHighlightedMsgId] = useState(null);
+    const msgRowRefs = useRef(new Map());
     useEffect(() => {
         setSheetMsg(null);
+        setEditingMsg(null);
+        setShowChatSearch(false);
+        setChatSearchQuery("");
+        setChatSearchResults([]);
+        setHighlightedMsgId(null);
     }, [activeConversationId]);
     const [composerError, setComposerError] = useState("");
+
+    // চ্যাটের ভেতর মেসেজ সার্চ (debounce 250ms)
+    useEffect(() => {
+        if (!showChatSearch || !activeConversationId) return;
+        const q = chatSearchQuery.trim();
+        if (q.length < 2) {
+            setChatSearchResults([]);
+            return;
+        }
+        const t = setTimeout(async () => {
+            setChatSearching(true);
+            try {
+                const res = await api.get(
+                    `/api/v1/conversations/${activeConversationId}/search?q=${encodeURIComponent(q)}`
+                );
+                setChatSearchResults(res.data?.data?.messages || []);
+            } catch {
+                setChatSearchResults([]);
+            } finally {
+                setChatSearching(false);
+            }
+        }, 250);
+        return () => clearTimeout(t);
+    }, [showChatSearch, chatSearchQuery, activeConversationId]);
+
+    const jumpToMessage = msgId => {
+        const key = String(msgId || "");
+        const el = msgRowRefs.current.get(key);
+        if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+            setHighlightedMsgId(key);
+            setTimeout(() => {
+                setHighlightedMsgId(cur => (cur === key ? null : cur));
+            }, 2200);
+        }
+    };
     const [showMicrophoneHelp, setShowMicrophoneHelp] = useState(false);
     const [showAttachSheet, setShowAttachSheet] = useState(false);
     const [lightboxUrl, setLightboxUrl] = useState(null);
@@ -512,6 +580,23 @@ export default function ChatPage() {
         e?.preventDefault();
         const text = draftText.trim();
         if (!text || !activeConversationId || !canSendInActive) return;
+
+        // এডিট মোডে থাকলে নতুন মেসেজ না পাঠিয়ে পুরনো মেসেজ এডিট করা
+        if (editingMsg) {
+            const targetId = editingMsg._id;
+            setEditingMsg(null);
+            setDraftText("");
+            setComposerError("");
+            const ack = await editSocketMessage(targetId, text);
+            if (!ack?.ok) {
+                setComposerError(
+                    ack?.error === "EDIT_WINDOW_EXPIRED"
+                        ? "Messages can only be edited within 15 minutes"
+                        : ack?.error || "Could not edit message"
+                );
+            }
+            return;
+        }
 
         setDraftText("");
         setComposerError("");
@@ -912,6 +997,46 @@ export default function ChatPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeConversationId]);
 
+    const handleCreatePoll = async pollData => {
+        if (!activeConversationId || !canSendInActive) return;
+        const ack = await sendSocketMessage({
+            conversationId: activeConversationId,
+            clientMsgId: generateClientMsgId(),
+            type: "poll",
+            poll: pollData
+        });
+        if (ack && !ack.ok && !ack.queued) {
+            throw new Error(ack.error || "Could not send poll");
+        }
+    };
+
+    const handleReactMessage = async (msgId, emoji) => {
+        if (!msgId || !emoji) return;
+        const ack = await reactSocketMessage(msgId, emoji);
+        if (!ack?.ok) {
+            setComposerError(ack?.error || "Could not react to message");
+        }
+    };
+
+    const handleTogglePinMessage = async msg => {
+        if (!activeConversationId || !msg?._id) return;
+        const alreadyPinned =
+            String(activeConversation?.pinnedMessage?.messageId || "") ===
+            String(msg._id);
+        try {
+            await dispatch(
+                pinConversationMessage({
+                    conversationId: activeConversationId,
+                    messageId: alreadyPinned ? null : msg._id
+                })
+            ).unwrap();
+        } catch (err) {
+            setComposerError(
+                typeof err === "string" ? err : "Could not update pinned message"
+            );
+        }
+    };
+
     const handleDeleteMessage = msgId => {
         setConfirmDeleteMsgId(msgId);
     };
@@ -1161,6 +1286,23 @@ export default function ChatPage() {
                                                 )
                                             )}
                                         </span>
+                                        {(conv.isPinned || conv.isMuted) && (
+                                            <span className="sync-conv-flags">
+                                                {conv.isPinned && (
+                                                    <Pin
+                                                        size={12}
+                                                        className="is-pinned"
+                                                        title="Pinned chat"
+                                                    />
+                                                )}
+                                                {conv.isMuted && (
+                                                    <BellOff
+                                                        size={12}
+                                                        title="Notifications muted"
+                                                    />
+                                                )}
+                                            </span>
+                                        )}
                                         {unread > 0 && (
                                             <span className="sync-unread-badge">
                                                 {unread > 99 ? "99+" : unread}
@@ -1277,6 +1419,17 @@ export default function ChatPage() {
                                 <button
                                     type="button"
                                     className={`sync-icon-btn ${
+                                        showChatSearch ? "active" : ""
+                                    }`}
+                                    title="Search in chat"
+                                    aria-label="Search in chat"
+                                    onClick={() => setShowChatSearch(v => !v)}
+                                >
+                                    <Search size={19} />
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`sync-icon-btn ${
                                         showInfoDrawer ? "active" : ""
                                     }`}
                                     title="Conversation Info"
@@ -1292,6 +1445,125 @@ export default function ChatPage() {
                                 />
                             </div>
                         </header>
+
+                        {showChatSearch && (
+                            <div className="sync-inchat-search">
+                                <div className="sync-inchat-search-row">
+                                    <div className="sync-search-input-wrap">
+                                        <Search size={15} />
+                                        <input
+                                            type="text"
+                                            placeholder="Search messages in this chat..."
+                                            value={chatSearchQuery}
+                                            onChange={e =>
+                                                setChatSearchQuery(e.target.value)
+                                            }
+                                            autoFocus
+                                        />
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className="sync-icon-btn xs"
+                                        onClick={() => {
+                                            setShowChatSearch(false);
+                                            setChatSearchQuery("");
+                                            setChatSearchResults([]);
+                                        }}
+                                        aria-label="Close search"
+                                    >
+                                        <X size={16} />
+                                    </button>
+                                </div>
+                                {chatSearching && (
+                                    <div className="sync-muted">Searching...</div>
+                                )}
+                                {!chatSearching &&
+                                    chatSearchQuery.trim().length >= 2 &&
+                                    chatSearchResults.length === 0 && (
+                                        <div className="sync-muted">
+                                            No matching messages found.
+                                        </div>
+                                    )}
+                                {chatSearchResults.length > 0 && (
+                                    <div className="sync-inchat-results">
+                                        {chatSearchResults.map(m => (
+                                            <button
+                                                key={m._id}
+                                                type="button"
+                                                className="sync-inchat-result-item"
+                                                onClick={() => {
+                                                    jumpToMessage(m._id);
+                                                    setShowChatSearch(false);
+                                                }}
+                                            >
+                                                <div className="sync-inchat-result-top">
+                                                    <strong>
+                                                        {m.sender?.fullName ||
+                                                            m.sender?.username ||
+                                                            "Member"}
+                                                    </strong>
+                                                    <span>
+                                                        {formatChatListTime(
+                                                            m.createdAt
+                                                        )}
+                                                    </span>
+                                                </div>
+                                                <div className="sync-inchat-result-text">
+                                                    {m.type === "poll"
+                                                        ? `📊 ${m.poll?.question || "Poll"}`
+                                                        : m.text ||
+                                                          m.media?.fileName ||
+                                                          ""}
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {activeConversation?.pinnedMessage?.messageId && (
+                            <div
+                                className="sync-pinned-bar"
+                                onClick={() =>
+                                    jumpToMessage(
+                                        activeConversation.pinnedMessage
+                                            .messageId
+                                    )
+                                }
+                            >
+                                <span className="sync-pinned-accent" />
+                                <div className="sync-pinned-body">
+                                    <span className="sync-pinned-label">
+                                        <Pin size={12} /> Pinned message
+                                        {activeConversation.pinnedMessage
+                                            .senderName
+                                            ? ` · ${activeConversation.pinnedMessage.senderName}`
+                                            : ""}
+                                    </span>
+                                    <span className="sync-pinned-text">
+                                        {activeConversation.pinnedMessage.text}
+                                    </span>
+                                </div>
+                                <button
+                                    type="button"
+                                    className="sync-icon-btn xs"
+                                    title="Unpin message"
+                                    onClick={e => {
+                                        e.stopPropagation();
+                                        dispatch(
+                                            pinConversationMessage({
+                                                conversationId:
+                                                    activeConversationId,
+                                                messageId: null
+                                            })
+                                        );
+                                    }}
+                                >
+                                    <X size={15} />
+                                </button>
+                            </div>
+                        )}
 
                         <div className="sync-messages-viewport">
                             {activeBucket?.hasMore && (
@@ -1350,9 +1622,29 @@ export default function ChatPage() {
                                             </div>
                                         )}
 
+                                        <div
+                                            ref={el => {
+                                                if (msg._id) {
+                                                    if (el)
+                                                        msgRowRefs.current.set(
+                                                            String(msg._id),
+                                                            el
+                                                        );
+                                                    else
+                                                        msgRowRefs.current.delete(
+                                                            String(msg._id)
+                                                        );
+                                                }
+                                            }}
+                                        >
                                         <MessageGesture
                                             className={`sync-msg-row ${
                                                 isMine ? "outgoing" : "incoming"
+                                            } ${
+                                                highlightedMsgId ===
+                                                String(msg._id)
+                                                    ? "is-highlighted"
+                                                    : ""
                                             }`}
                                             disabled={Boolean(
                                                 msg.deletedForEveryone ||
@@ -1381,9 +1673,20 @@ export default function ChatPage() {
                                                     !msg.deletedForEveryone &&
                                                     msg.card?.kind === "welcome"
                                                         ? "has-welcome-card"
-                                                        : ""
+                                                        : !msg.deletedForEveryone &&
+                                                            msg.card?.kind ===
+                                                                "broadcast"
+                                                          ? "has-broadcast-card"
+                                                          : ""
                                                 }`}
                                             >
+                                                {msg.forwarded &&
+                                                    !msg.deletedForEveryone && (
+                                                        <div className="sync-msg-forwarded">
+                                                            <Forward size={12} />
+                                                            <span>Forwarded</span>
+                                                        </div>
+                                                    )}
                                                 {activeConversation.type ===
                                                     "group" &&
                                                     !isMine && (
@@ -1556,13 +1859,36 @@ export default function ChatPage() {
                                                     )}
 
                                                 {!msg.deletedForEveryone &&
-                                                msg.card?.kind === "welcome" ? (
+                                                msg.type === "poll" &&
+                                                msg.poll ? (
+                                                    <PollCard
+                                                        poll={msg.poll}
+                                                        myId={myId}
+                                                        disabled={Boolean(
+                                                            msg.optimistic ||
+                                                                msg.failed
+                                                        )}
+                                                        onVote={optionId =>
+                                                            voteSocketPoll(
+                                                                msg._id,
+                                                                optionId
+                                                            )
+                                                        }
+                                                    />
+                                                ) : !msg.deletedForEveryone &&
+                                                  msg.card?.kind === "welcome" ? (
                                                     <WelcomeCard
                                                         name={
                                                             msg.card?.name ||
                                                             currentUser?.fullName ||
                                                             ""
                                                         }
+                                                    />
+                                                ) : !msg.deletedForEveryone &&
+                                                  msg.card?.kind ===
+                                                      "broadcast" ? (
+                                                    <BroadcastCard
+                                                        card={msg.card}
                                                     />
                                                 ) : (
                                                     (msg.text ||
@@ -1582,7 +1908,88 @@ export default function ChatPage() {
                                                         />
                                                     )}
 
+                                                {!msg.deletedForEveryone &&
+                                                    Array.isArray(
+                                                        msg.reactions
+                                                    ) &&
+                                                    msg.reactions.length > 0 && (() => {
+                                                        const counts = new Map();
+                                                        for (const r of msg.reactions) {
+                                                            const cur = counts.get(
+                                                                r.emoji
+                                                            ) || {
+                                                                count: 0,
+                                                                mine: false
+                                                            };
+                                                            cur.count += 1;
+                                                            if (
+                                                                String(
+                                                                    r.user
+                                                                        ?._id ??
+                                                                        r.user
+                                                                ) === myId
+                                                            ) {
+                                                                cur.mine = true;
+                                                            }
+                                                            counts.set(
+                                                                r.emoji,
+                                                                cur
+                                                            );
+                                                        }
+                                                        return (
+                                                            <div className="sync-msg-reactions">
+                                                                {[
+                                                                    ...counts.entries()
+                                                                ].map(
+                                                                    ([
+                                                                        emoji,
+                                                                        info
+                                                                    ]) => (
+                                                                        <button
+                                                                            key={
+                                                                                emoji
+                                                                            }
+                                                                            type="button"
+                                                                            className={`sync-reaction-pill ${
+                                                                                info.mine
+                                                                                    ? "mine"
+                                                                                    : ""
+                                                                            }`}
+                                                                            onClick={e => {
+                                                                                e.stopPropagation();
+                                                                                handleReactMessage(
+                                                                                    msg._id,
+                                                                                    emoji
+                                                                                );
+                                                                            }}
+                                                                        >
+                                                                            <span>
+                                                                                {
+                                                                                    emoji
+                                                                                }
+                                                                            </span>
+                                                                            {info.count >
+                                                                                1 && (
+                                                                                <span>
+                                                                                    {
+                                                                                        info.count
+                                                                                    }
+                                                                                </span>
+                                                                            )}
+                                                                        </button>
+                                                                    )
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })()}
+
                                                 <div className="sync-msg-meta">
+                                                    {msg.editedAt &&
+                                                        !msg.deletedForEveryone && (
+                                                            <span className="sync-msg-edited">
+                                                                Edited
+                                                            </span>
+                                                        )}
                                                     <span className="sync-msg-time">
                                                         {formatTime(
                                                             msg.createdAt
@@ -1605,6 +2012,7 @@ export default function ChatPage() {
                                                 </div>
                                             </div>
                                         </MessageGesture>
+                                        </div>
                                     </React.Fragment>
                                 );
                             })}
@@ -1616,31 +2024,82 @@ export default function ChatPage() {
 
                             <div ref={messagesEndRef} />
 
-                            {sheetMsg && (
-                                <MessageActionSheet
-                                    message={sheetMsg}
-                                    isMine={
-                                        String(
-                                            sheetMsg.sender?._id ?? sheetMsg.sender
-                                        ) === myId
-                                    }
-                                    preview={formatReplySnippet(sheetMsg)}
-                                    onClose={() => setSheetMsg(null)}
-                                    onReply={() => {
-                                        dispatch(
-                                            setReplyTo({
-                                                conversationId:
-                                                    activeConversationId,
-                                                message: sheetMsg
-                                            })
-                                        );
-                                        composerInputRef.current?.focus();
-                                    }}
-                                    onDelete={() =>
-                                        handleDeleteMessage(sheetMsg._id)
-                                    }
-                                />
-                            )}
+                            {sheetMsg && (() => {
+                                const sheetIsMine =
+                                    String(
+                                        sheetMsg.sender?._id ?? sheetMsg.sender
+                                    ) === myId;
+                                const canEditSheet =
+                                    sheetIsMine &&
+                                    sheetMsg.type === "text" &&
+                                    !sheetMsg.card?.kind &&
+                                    !sheetMsg.deletedForEveryone &&
+                                    Date.now() -
+                                        new Date(
+                                            sheetMsg.createdAt
+                                        ).getTime() <=
+                                        15 * 60 * 1000;
+                                const canForwardSheet =
+                                    !sheetMsg.deletedForEveryone &&
+                                    sheetMsg.type !== "poll" &&
+                                    !sheetMsg.card?.kind;
+                                const sheetPinned =
+                                    String(
+                                        activeConversation?.pinnedMessage
+                                            ?.messageId || ""
+                                    ) === String(sheetMsg._id);
+                                return (
+                                    <MessageActionSheet
+                                        message={sheetMsg}
+                                        isMine={sheetIsMine}
+                                        myId={myId}
+                                        isPinned={sheetPinned}
+                                        canEdit={canEditSheet}
+                                        canForward={canForwardSheet}
+                                        canPin={!sheetMsg.deletedForEveryone}
+                                        preview={formatReplySnippet(sheetMsg)}
+                                        onClose={() => setSheetMsg(null)}
+                                        onReply={() => {
+                                            setEditingMsg(null);
+                                            dispatch(
+                                                setReplyTo({
+                                                    conversationId:
+                                                        activeConversationId,
+                                                    message: sheetMsg
+                                                })
+                                            );
+                                            composerInputRef.current?.focus();
+                                        }}
+                                        onReact={emoji =>
+                                            handleReactMessage(
+                                                sheetMsg._id,
+                                                emoji
+                                            )
+                                        }
+                                        onEdit={() => {
+                                            dispatch(
+                                                setReplyTo({
+                                                    conversationId:
+                                                        activeConversationId,
+                                                    message: null
+                                                })
+                                            );
+                                            setEditingMsg(sheetMsg);
+                                            setDraftText(sheetMsg.text || "");
+                                            composerInputRef.current?.focus();
+                                        }}
+                                        onForward={() =>
+                                            setForwardMsg(sheetMsg)
+                                        }
+                                        onTogglePin={() =>
+                                            handleTogglePinMessage(sheetMsg)
+                                        }
+                                        onDelete={() =>
+                                            handleDeleteMessage(sheetMsg._id)
+                                        }
+                                    />
+                                );
+                            })()}
                         </div>
 
                         <footer className="sync-composer-wrap">
@@ -1706,7 +2165,26 @@ export default function ChatPage() {
 
                             <CompressingCard conversationId={activeConversationId} />
 
-                            {replyingTo && (
+                            {editingMsg && (
+                                <div className="sync-reply-banner">
+                                    <div className="reply-banner-text">
+                                        <strong>Editing message</strong>
+                                        <p>{editingMsg.text}</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className="sync-icon-btn xs"
+                                        onClick={() => {
+                                            setEditingMsg(null);
+                                            setDraftText("");
+                                        }}
+                                    >
+                                        <X size={16} />
+                                    </button>
+                                </div>
+                            )}
+
+                            {replyingTo && !editingMsg && (
                                 <div className="sync-reply-banner">
                                     <div className="reply-banner-text">
                                         <strong>
@@ -1763,21 +2241,38 @@ export default function ChatPage() {
                                     onSubmit={handleSendText}
                                 >
                                     {recPhase === "idle" && (
-                                        <button
-                                            type="button"
-                                            className={`sync-icon-btn ${
-                                                showAttachSheet ? "active" : ""
-                                            }`}
-                                            title="Attach"
-                                            aria-label="Attach"
-                                            aria-expanded={showAttachSheet}
-                                            onClick={() =>
-                                                setShowAttachSheet(v => !v)
-                                            }
-                                            disabled={uploadingMedia}
-                                        >
-                                            <Paperclip size={20} />
-                                        </button>
+                                        <>
+                                            <button
+                                                type="button"
+                                                className={`sync-icon-btn ${
+                                                    showAttachSheet
+                                                        ? "active"
+                                                        : ""
+                                                }`}
+                                                title="Attach"
+                                                aria-label="Attach"
+                                                aria-expanded={showAttachSheet}
+                                                onClick={() =>
+                                                    setShowAttachSheet(v => !v)
+                                                }
+                                                disabled={uploadingMedia}
+                                            >
+                                                <Paperclip size={20} />
+                                            </button>
+                                            {activeIsGroup && (
+                                                <button
+                                                    type="button"
+                                                    className="sync-icon-btn"
+                                                    title="Create Poll"
+                                                    aria-label="Create Poll"
+                                                    onClick={() =>
+                                                        setShowCreatePoll(true)
+                                                    }
+                                                >
+                                                    <BarChart2 size={19} />
+                                                </button>
+                                            )}
+                                        </>
                                     )}
 
                                     {isRecording ? (
@@ -1944,6 +2439,20 @@ export default function ChatPage() {
                 <NewGroupChatModal
                     onClose={() => setShowNewGroup(false)}
                     onGroupReady={conv => navigate(`/chats/${conv._id}`)}
+                />
+            )}
+
+            {showCreatePoll && (
+                <CreatePollModal
+                    onClose={() => setShowCreatePoll(false)}
+                    onCreate={handleCreatePoll}
+                />
+            )}
+
+            {forwardMsg && (
+                <ForwardModal
+                    message={forwardMsg}
+                    onClose={() => setForwardMsg(null)}
                 />
             )}
 

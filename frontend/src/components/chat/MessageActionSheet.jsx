@@ -7,8 +7,14 @@ import {
     ChevronLeft,
     Check,
     CheckCheck,
-    Loader2
+    Loader2,
+    Pencil,
+    Forward,
+    Pin,
+    PinOff
 } from "lucide-react";
+
+const QUICK_REACTIONS = ["❤️", "😂", "👍", "🔥", "😮", "😢"];
 import { api, extractErrorMessage } from "../../services/api.js";
 import { pushBackHandler } from "../../services/backNavigation.js";
 import "../../styles/msg-gestures.css";
@@ -58,11 +64,23 @@ function PeopleList({ title, rows, icon }) {
 export default function MessageActionSheet({
     message,
     isMine,
+    myId = "",
+    isPinned = false,
+    canEdit = false,
+    canForward = true,
+    canPin = true,
     preview,
     onClose,
     onReply,
+    onReact,
+    onEdit,
+    onForward,
+    onTogglePin,
     onDelete
 }) {
+    const myReaction = (message?.reactions || []).find(
+        r => String(r.user?._id ?? r.user) === String(myId)
+    )?.emoji;
     const [view, setView] = useState("menu"); // "menu" | "info"
     const [info, setInfo] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -122,6 +140,29 @@ export default function MessageActionSheet({
 
                 {view === "menu" && (
                     <>
+                        {onReact && (
+                            <div
+                                className="sync-react-bar"
+                                role="group"
+                                aria-label="Quick reactions"
+                            >
+                                {QUICK_REACTIONS.map(emoji => (
+                                    <button
+                                        key={emoji}
+                                        type="button"
+                                        className={`sync-react-emoji-btn ${
+                                            myReaction === emoji ? "active" : ""
+                                        }`}
+                                        onClick={() => {
+                                            onReact(emoji);
+                                            onClose?.();
+                                        }}
+                                    >
+                                        {emoji}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                         {preview && (
                             <div className="sync-msgsheet-preview">{preview}</div>
                         )}
@@ -135,6 +176,50 @@ export default function MessageActionSheet({
                         >
                             <Reply size={19} /> Reply
                         </button>
+                        {canEdit && onEdit && (
+                            <button
+                                type="button"
+                                className="sync-msgsheet-item"
+                                onClick={() => {
+                                    onEdit();
+                                    onClose?.();
+                                }}
+                            >
+                                <Pencil size={18} /> Edit message
+                            </button>
+                        )}
+                        {canForward && onForward && (
+                            <button
+                                type="button"
+                                className="sync-msgsheet-item"
+                                onClick={() => {
+                                    onForward();
+                                    onClose?.();
+                                }}
+                            >
+                                <Forward size={18} /> Forward
+                            </button>
+                        )}
+                        {canPin && onTogglePin && (
+                            <button
+                                type="button"
+                                className="sync-msgsheet-item"
+                                onClick={() => {
+                                    onTogglePin();
+                                    onClose?.();
+                                }}
+                            >
+                                {isPinned ? (
+                                    <>
+                                        <PinOff size={18} /> Unpin message
+                                    </>
+                                ) : (
+                                    <>
+                                        <Pin size={18} /> Pin message
+                                    </>
+                                )}
+                            </button>
+                        )}
                         {isMine && (
                             <button
                                 type="button"

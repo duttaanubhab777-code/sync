@@ -364,6 +364,135 @@ export const sendWelcomeMessage = async (user, io) => {
     }).catch(err => console.error("[Welcome Push]", err.message));
 };
 
+// অ্যাডমিন প্যানেল থেকে অফিশিয়াল Sync অ্যাকাউন্ট দিয়ে সব ইউজারকে পার্সোনাল ব্রডকাস্ট কার্ড পাঠানো
+export const sendOfficialBroadcast = async ({ title, body, tag = "Announcement" }, io) => {
+    const sync = await getSyncUser();
+    const cleanTitle = String(title || "").trim().slice(0, 120);
+    const cleanBody = String(body || "").trim().slice(0, 1500);
+    const cleanTag = String(tag || "Announcement").trim().slice(0, 40) || "Announcement";
+    const broadcastId = `broadcast:${Date.now()}:${randomBytes(4).toString("hex")}`;
+
+    const users = await User.find(
+        { isOfficial: { $ne: true }, isBlocked: { $ne: true } },
+        { _id: 1 }
+    ).lean();
+
+    const preview = `${cleanTitle} — ${cleanBody}`.slice(0, 140);
+    let delivered = 0;
+
+    for (const batch of chunks(users, 20)) {
+        const results = await Promise.allSettled(
+            batch.map(async u => {
+                const userId = String(u._id);
+                const pairKey = [String(sync._id), userId].sort().join("_");
+                let conv = await Conversation.findOne({ pairKey });
+                let isNewConv = false;
+                if (!conv) {
+                    try {
+                        conv = await Conversation.create({
+                            type: "direct",
+                            members: [sync._id, u._id],
+                            createdBy: sync._id
+                        });
+                        isNewConv = true;
+                    } catch (err) {
+                        if (err?.code !== 11000) throw err;
+                        conv = await Conversation.findOne({ pairKey });
+                    }
+                }
+
+                let msg = await Message.create({
+                    conversationId: conv._id,
+                    sender: sync._id,
+                    clientMsgId: `${broadcastId}:${userId}`,
+                    type: "text",
+                    text: `${cleanTitle}
+
+${cleanBody}`,
+                    card: {
+                        kind: "broadcast",
+                        title: cleanTitle,
+                        body: cleanBody,
+                        tag: cleanTag
+                    },
+                    status: "sent"
+                });
+                msg = await msg.populate("sender", "username fullName avatar isOfficial");
+
+                await Conversation.updateOne(
+                    { _id: conv._id },
+                    {
+                        $set: {
+                            lastMessage: {
+                                messageId: msg._id,
+                                text: preview.slice(0, 100),
+                                type: "text",
+                                sender: sync._id,
+                                createdAt: msg.createdAt
+                            }
+                        },
+                        $inc: { [`unread.${userId}`]: 1 }
+                    }
+                );
+
+                if (io) {
+                    if (isNewConv) {
+                        joinConversationRoom(io, [u._id], conv._id);
+                        const fresh = await Conversation.findById(conv._id).populate(
+                            POPULATE_MEMBERS
+                        );
+                        emitToUsers(io, [u._id], "conversation:new", {
+                            conversation: serializeConversation(fresh, userId)
+                        });
+                    }
+                    emitToUsers(io, [u._id], "message:new", {
+                        message: msg,
+                        conversationId: conv._id
+                    });
+                }
+
+                const notifData = {
+                    conversationId: String(conv._id),
+                    messageId: String(msg._id),
+                    url: `/chats/${conv._id}`
+                };
+                await Notification.create({
+                    recipient: u._id,
+                    actor: sync._id,
+                    type: "message",
+                    title: `Sync · ${cleanTitle}`.slice(0, 120),
+                    body: cleanBody.slice(0, 240),
+                    data: notifData
+                }).catch(() => {});
+
+                const isMuted = (conv.mutedBy || []).some(
+                    id => String(id) === userId
+                );
+                if (!isMuted) {
+                    const badgeCount = await getTotalUnread(userId).catch(() => 1);
+                    await sendPushToUser(userId, {
+                        type: "message",
+                        title: `Sync · ${cleanTitle}`.slice(0, 120),
+                        body: cleanBody.slice(0, 160),
+                        messageText: preview,
+                        senderName: "Sync",
+                        icon: "/icons/icon-192.png",
+                        tag: `conversation-${conv._id}`,
+                        data: notifData,
+                        badgeCount,
+                        chatUnread: 1
+                    }).catch(() => {});
+                }
+            })
+        );
+        for (const r of results) {
+            if (r.status === "fulfilled") delivered += 1;
+        }
+    }
+
+    return { deliveredCount: delivered, totalUsers: users.length };
+};
+
 // নতুন অ্যাকাউন্ট হলে যা যা করতে হয়: গ্রুপে যোগ + welcome মেসেজ (একটা ব্যর্থ হলে আরেকটা আটকায় না, signup-ও আটকায় না)
 export const onboardNewUser = async (user, io) => {
     const results = await Promise.allSettled([

@@ -7,6 +7,9 @@ import {
     addOptimisticMessage,
     applyConversationRead,
     applyMessageDeleted,
+    applyMessageEdited,
+    applyMessageReacted,
+    applyPollUpdated,
     applyStatusBulk,
     confirmMessageSent,
     dequeuePendingMessage,
@@ -99,7 +102,9 @@ const PERMANENT_SEND_ERRORS = new Set([
     "INVALID_CONTACT",
     "INVALID_MEDIA_URL",
     "MESSAGE_TOO_LONG",
-    "INVALID_REPLY"
+    "INVALID_REPLY",
+    "INVALID_POLL",
+    "OFFICIAL_ACCOUNT_READ_ONLY"
 ]);
 export const isPermanentSendError = code => PERMANENT_SEND_ERRORS.has(String(code || ""));
 
@@ -200,11 +205,14 @@ export const connectSocket = () => {
         const senderId = String(message.sender?._id ?? message.sender);
         if (myId && senderId !== String(myId)) {
             const cId = String(conversationId || message.conversationId);
+            const convObj = state.chat.conversations.find(
+                c => String(c._id) === cId
+            );
             if (activeConvId === cId && document.visibilityState === "visible") {
                 playSound("receive");
                 emitMessageSeen(cId, message._id);
             } else {
-                playSound("notify");
+                if (!convObj?.isMuted) playSound("notify");
                 socket.emit("message:delivered", { messageId: message._id });
             }
         }
@@ -213,6 +221,21 @@ export const connectSocket = () => {
     socket.on("message:deleted", payload => {
         if (!payload?.messageId) return;
         store.dispatch(applyMessageDeleted(payload));
+    });
+
+    socket.on("message:reacted", payload => {
+        if (!payload?.messageId) return;
+        store.dispatch(applyMessageReacted(payload));
+    });
+
+    socket.on("message:edited", payload => {
+        if (!payload?.messageId) return;
+        store.dispatch(applyMessageEdited(payload));
+    });
+
+    socket.on("poll:updated", payload => {
+        if (!payload?.messageId) return;
+        store.dispatch(applyPollUpdated(payload));
     });
 
     socket.on("message:status_bulk", payload => {
@@ -362,6 +385,7 @@ export const sendSocketMessage = payload => {
         media = null,
         location = null,
         contact = null,
+        poll = null,
         replyToMessage = null
     } = payload;
 
@@ -383,6 +407,17 @@ export const sendSocketMessage = payload => {
         media,
         location,
         contact,
+        poll: poll
+            ? {
+                  question: poll.question,
+                  allowMultiple: Boolean(poll.allowMultiple),
+                  options: (poll.options || []).map((o, i) => ({
+                      id: `opt_${i}`,
+                      text: typeof o === "string" ? o : o?.text || "",
+                      votes: []
+                  }))
+              }
+            : null,
         replyTo: replyToMessage
             ? {
                   _id: replyToMessage._id,
@@ -411,6 +446,7 @@ export const sendSocketMessage = payload => {
         media,
         location,
         contact,
+        poll,
         replyTo: replyToMessage?._id || null
     };
 
@@ -493,6 +529,15 @@ export const deleteSocketMessage = messageId => {
         });
     });
 };
+
+export const reactSocketMessage = (messageId, emoji) =>
+    emitWithAck("message:react", { messageId, emoji }, 10000);
+
+export const editSocketMessage = (messageId, text) =>
+    emitWithAck("message:edit", { messageId, text }, 10000);
+
+export const voteSocketPoll = (messageId, optionId) =>
+    emitWithAck("poll:vote", { messageId, optionId }, 10000);
 
 export const emitMessageSeen = (conversationId, upToMessageId = null) => {
     if (!conversationId) return;

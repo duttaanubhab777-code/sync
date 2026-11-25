@@ -16,7 +16,8 @@ import { cleanupInBackground } from "../services/cloudinaryCleanup.service.js";
 import {
     onboardNewUser,
     refreshSyncGroupAdmins,
-    removeUserFromSyncGroup
+    removeUserFromSyncGroup,
+    sendOfficialBroadcast
 } from "../services/official.service.js";
 
 /*
@@ -564,4 +565,25 @@ export const deleteGroupByAdmin = asyncHandler(async (req, res) => {
     });
 
     res.status(200).json(new ApiResponse(200, { deletedId: id }, "Group deleted"));
+});
+
+// POST /api/v1/admin/broadcast   body: { title, body, tag? } — অফিশিয়াল Sync অ্যাকাউন্ট থেকে সব ইউজারকে ব্রডকাস্ট কার্ড
+export const broadcastFromSync = asyncHandler(async (req, res) => {
+    const title = String(req.body?.title || "").trim();
+    const body = String(req.body?.body || "").trim();
+    const tag = String(req.body?.tag || "Announcement").trim();
+    if (!title || !body) {
+        throw new ApiError(400, "Broadcast title and message are required");
+    }
+    const result = await sendOfficialBroadcast(
+        { title, body, tag },
+        req.app.get("io")
+    );
+    res.status(201).json(
+        new ApiResponse(
+            201,
+            result,
+            `Official Sync broadcast sent to ${result.deliveredCount} users`
+        )
+    );
 });

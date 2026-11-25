@@ -12,7 +12,8 @@ import wallpaperRoutes from "./wallpaper.routes.js";
 import {
     syncMessages,
     deliveryAck,
-    getMessageInfo
+    getMessageInfo,
+    forwardMessage
 } from "../controllers/message.controller.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
@@ -31,5 +32,6 @@ router.use("/wallpapers", wallpaperRoutes);
 router.get("/sync", verifyJWT, syncMessages);
 router.post("/messages/delivery-ack", deliveryAck);
 router.get("/messages/:id/info", verifyJWT, getMessageInfo);
+router.post("/messages/:id/forward", verifyJWT, forwardMessage);
 
 export default router;

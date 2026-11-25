@@ -15,7 +15,8 @@ import {
     removeStoryMedia,
     listGroups,
     deleteGroupByAdmin,
-    listLoginHistory
+    listLoginHistory,
+    broadcastFromSync
 } from "../controllers/admin.controller.js";
 import { createNotice, listNotices, deleteNotice } from "../controllers/notice.controller.js";
 import {
@@ -57,6 +58,7 @@ router.delete("/groups/:id", deleteGroupByAdmin);
 router.get("/notices", listNotices);
 router.post("/notices", createNotice);
 router.delete("/notices/:id", deleteNotice);
+router.post("/broadcast", broadcastFromSync);
 
 // চ্যাট wallpaper: Admin ও Super Admin দুজনেই যোগ/default/মোছা করতে পারবে
 // "/wallpapers/default" অবশ্যই "/wallpapers/:id"-এর আগে থাকতে হবে

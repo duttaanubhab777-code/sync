@@ -184,6 +184,10 @@ export default function AdminPage() {
     const [noticeShowDays, setNoticeShowDays] = useState(7);
     const [publishingNotice, setPublishingNotice] = useState(false);
     const [previewNowMs, setPreviewNowMs] = useState(() => Date.now());
+    const [broadcastTitle, setBroadcastTitle] = useState("");
+    const [broadcastTag, setBroadcastTag] = useState("Announcement");
+    const [broadcastBody, setBroadcastBody] = useState("");
+    const [sendingBroadcast, setSendingBroadcast] = useState(false);
 
     // ---------- 5. Groups ----------
     const [groups, setGroups] = useState([]);
@@ -565,6 +569,33 @@ export default function AdminPage() {
             flashError(err);
         } finally {
             setPublishingNotice(false);
+        }
+    };
+
+    const handleSendBroadcast = async e => {
+        e.preventDefault();
+        if (!broadcastTitle.trim() || !broadcastBody.trim()) {
+            flashError("Broadcast title and message are required");
+            return;
+        }
+        setSendingBroadcast(true);
+        setBannerErr("");
+        try {
+            const res = await api.post("/api/v1/admin/broadcast", {
+                title: broadcastTitle.trim(),
+                body: broadcastBody.trim(),
+                tag: broadcastTag
+            });
+            const data = res.data?.data || {};
+            setBroadcastTitle("");
+            setBroadcastBody("");
+            flashSuccess(
+                `Official Sync broadcast card delivered to ${data.deliveredCount || 0} users!`
+            );
+        } catch (err) {
+            flashError(err);
+        } finally {
+            setSendingBroadcast(false);
         }
     };
 
@@ -1954,6 +1985,88 @@ export default function AdminPage() {
                                     </div>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Official Sync Account DM Broadcast Card */}
+                        <div className="sync-profile-card mt-4">
+                            <div className="sync-admin-section-head">
+                                <div>
+                                    <h3 className="sync-name-with-badge">
+                                        <span>Official Sync DM Broadcast</span>
+                                        <VerifiedBadge
+                                            variant="official"
+                                            size={16}
+                                        />
+                                    </h3>
+                                    <p className="sync-muted">
+                                        Send a permanent styled announcement
+                                        card directly to every user&apos;s
+                                        personal <strong>Sync</strong> chat
+                                        (with push notification).
+                                    </p>
+                                </div>
+                            </div>
+                            <form
+                                className="sync-admin-form"
+                                onSubmit={handleSendBroadcast}
+                            >
+                                <div className="sync-field">
+                                    <label>Tag</label>
+                                    <select
+                                        value={broadcastTag}
+                                        onChange={e =>
+                                            setBroadcastTag(e.target.value)
+                                        }
+                                    >
+                                        <option value="Announcement">
+                                            Announcement
+                                        </option>
+                                        <option value="New Feature">
+                                            New Feature
+                                        </option>
+                                        <option value="Update">Update</option>
+                                        <option value="Tip">Tip</option>
+                                    </select>
+                                </div>
+                                <div className="sync-field">
+                                    <label>Broadcast Title *</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. New Polls, Reactions & More!"
+                                        maxLength={120}
+                                        value={broadcastTitle}
+                                        onChange={e =>
+                                            setBroadcastTitle(e.target.value)
+                                        }
+                                        required
+                                    />
+                                </div>
+                                <div className="sync-field">
+                                    <label>Message *</label>
+                                    <textarea
+                                        rows={3}
+                                        placeholder="Write your official Sync announcement..."
+                                        maxLength={1500}
+                                        value={broadcastBody}
+                                        onChange={e =>
+                                            setBroadcastBody(e.target.value)
+                                        }
+                                        required
+                                    />
+                                </div>
+                                <button
+                                    type="submit"
+                                    className="sync-btn primary"
+                                    disabled={sendingBroadcast}
+                                >
+                                    <Megaphone size={15} />
+                                    <span>
+                                        {sendingBroadcast
+                                            ? "Sending to all users..."
+                                            : "Send Official Sync Broadcast"}
+                                    </span>
+                                </button>
+                            </form>
                         </div>
 
                         {/* Published Notices List */}

@@ -17,7 +17,14 @@ import {
     Mail,
     Phone,
     AtSign,
-    UserRound
+    UserRound,
+    Pin,
+    PinOff,
+    BellOff,
+    Bell,
+    FileText,
+    Link2,
+    ExternalLink
 } from "lucide-react";
 import Avatar from "./Avatar.jsx";
 import VerifiedBadge from "./VerifiedBadge.jsx";
@@ -29,6 +36,7 @@ import {
     createGroupChat,
     leaveGroupChat,
     startDirectChat,
+    updateConversationPreferences,
     updateGroupDetails,
     updateGroupMember
 } from "../store/chatSlice.js";
@@ -454,6 +462,31 @@ export function ChatInfoDrawer({ conversation, onClose }) {
     const [addResults, setAddResults] = useState([]);
     const [feedback, setFeedback] = useState("");
     const [error, setError] = useState("");
+    const [prefBusy, setPrefBusy] = useState(false);
+    const [sharedTab, setSharedTab] = useState("media");
+    const [sharedItems, setSharedItems] = useState([]);
+    const [sharedLoading, setSharedLoading] = useState(false);
+
+    useEffect(() => {
+        if (!conversation?._id) return;
+        let active = true;
+        setSharedLoading(true);
+        api.get(
+            `/api/v1/conversations/${conversation._id}/media?tab=${sharedTab}`
+        )
+            .then(res => {
+                if (active) setSharedItems(res.data?.data?.items || []);
+            })
+            .catch(() => {
+                if (active) setSharedItems([]);
+            })
+            .finally(() => {
+                if (active) setSharedLoading(false);
+            });
+        return () => {
+            active = false;
+        };
+    }, [conversation?._id, sharedTab]);
 
     useEffect(() => {
         setGroupName(conversation?.groupName || "");
@@ -564,6 +597,25 @@ export function ChatInfoDrawer({ conversation, onClose }) {
             setAddResults([]);
         } catch (err) {
             setError(typeof err === "string" ? err : "Action failed");
+        }
+    };
+
+    const handleTogglePreference = async patchObj => {
+        setPrefBusy(true);
+        setError("");
+        try {
+            await dispatch(
+                updateConversationPreferences({
+                    conversationId: conversation._id,
+                    ...patchObj
+                })
+            ).unwrap();
+        } catch (err) {
+            setError(
+                typeof err === "string" ? err : "Could not update preference"
+            );
+        } finally {
+            setPrefBusy(false);
         }
     };
 
@@ -682,6 +734,161 @@ export function ChatInfoDrawer({ conversation, onClose }) {
                 {feedback && (
                     <div className="sync-alert success">{feedback}</div>
                 )}
+
+                <div className="sync-drawer-section">
+                    <div className="sync-pref-actions">
+                        <button
+                            type="button"
+                            className={`sync-pref-btn ${
+                                conversation.isPinned ? "active" : ""
+                            }`}
+                            disabled={prefBusy}
+                            onClick={() =>
+                                handleTogglePreference({
+                                    pinned: !conversation.isPinned
+                                })
+                            }
+                        >
+                            {conversation.isPinned ? (
+                                <PinOff size={15} />
+                            ) : (
+                                <Pin size={15} />
+                            )}
+                            <span>
+                                {conversation.isPinned ? "Unpin Chat" : "Pin Chat"}
+                            </span>
+                        </button>
+                        <button
+                            type="button"
+                            className={`sync-pref-btn ${
+                                conversation.isMuted ? "active" : ""
+                            }`}
+                            disabled={prefBusy}
+                            onClick={() =>
+                                handleTogglePreference({
+                                    muted: !conversation.isMuted
+                                })
+                            }
+                        >
+                            {conversation.isMuted ? (
+                                <Bell size={15} />
+                            ) : (
+                                <BellOff size={15} />
+                            )}
+                            <span>
+                                {conversation.isMuted ? "Unmute" : "Mute"}
+                            </span>
+                        </button>
+                    </div>
+                </div>
+
+                <div className="sync-drawer-section">
+                    <span className="sync-section-label">
+                        Shared Media, Docs &amp; Links
+                    </span>
+                    <div className="sync-shared-tabs">
+                        {[
+                            { id: "media", label: "Media" },
+                            { id: "files", label: "Docs" },
+                            { id: "links", label: "Links" }
+                        ].map(t => (
+                            <button
+                                key={t.id}
+                                type="button"
+                                className={`sync-shared-tab ${
+                                    sharedTab === t.id ? "active" : ""
+                                }`}
+                                onClick={() => setSharedTab(t.id)}
+                            >
+                                {t.label}
+                            </button>
+                        ))}
+                    </div>
+                    {sharedLoading ? (
+                        <div className="sync-empty-hint">
+                            <Loader2 size={16} className="spin" /> Loading...
+                        </div>
+                    ) : sharedItems.length === 0 ? (
+                        <div className="sync-empty-hint">
+                            No shared {sharedTab} yet.
+                        </div>
+                    ) : sharedTab === "media" ? (
+                        <div className="sync-shared-media-grid">
+                            {sharedItems.map(item => (
+                                <a
+                                    key={item._id}
+                                    href={item.media?.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="sync-shared-thumb"
+                                >
+                                    {item.type === "video" ? (
+                                        <>
+                                            <video
+                                                src={item.media?.url}
+                                                muted
+                                                preload="metadata"
+                                            />
+                                            <span className="sync-shared-video-badge">
+                                                Video
+                                            </span>
+                                        </>
+                                    ) : (
+                                        <img
+                                            src={item.media?.url}
+                                            alt="Shared media"
+                                            loading="lazy"
+                                        />
+                                    )}
+                                </a>
+                            ))}
+                        </div>
+                    ) : sharedTab === "files" ? (
+                        <div className="sync-shared-list">
+                            {sharedItems.map(item => (
+                                <a
+                                    key={item._id}
+                                    href={item.media?.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="sync-shared-row"
+                                >
+                                    <FileText size={16} />
+                                    <div className="sync-shared-row-meta">
+                                        <strong>
+                                            {item.media?.fileName || "Document"}
+                                        </strong>
+                                        <small>
+                                            {item.sender?.fullName ||
+                                                item.sender?.username ||
+                                                "Member"}
+                                        </small>
+                                    </div>
+                                    <ExternalLink size={14} />
+                                </a>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="sync-shared-list">
+                            {sharedItems.map(item => (
+                                <a
+                                    key={item._id}
+                                    href={item.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="sync-shared-row"
+                                >
+                                    <Link2 size={16} />
+                                    <div className="sync-shared-row-meta">
+                                        <strong>{item.host}</strong>
+                                        <small>{item.url}</small>
+                                    </div>
+                                    <ExternalLink size={14} />
+                                </a>
+                            ))}
+                        </div>
+                    )}
+                </div>
 
                 {!isGroup ? (
                     <>

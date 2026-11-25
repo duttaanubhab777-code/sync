@@ -90,6 +90,40 @@ export const updateGroupMember = createAsyncThunk(
     }
 );
 
+export const updateConversationPreferences = createAsyncThunk(
+    "chat/updateConversationPreferences",
+    async ({ conversationId, pinned, muted }, { rejectWithValue }) => {
+        try {
+            const res = await api.post(
+                `/api/v1/conversations/${conversationId}/preferences`,
+                { pinned, muted }
+            );
+            return res.data?.data;
+        } catch (err) {
+            return rejectWithValue(
+                extractErrorMessage(err, "Could not update chat preferences")
+            );
+        }
+    }
+);
+
+export const pinConversationMessage = createAsyncThunk(
+    "chat/pinConversationMessage",
+    async ({ conversationId, messageId }, { rejectWithValue }) => {
+        try {
+            const res = await api.post(
+                `/api/v1/conversations/${conversationId}/pin-message`,
+                { messageId: messageId || null }
+            );
+            return res.data?.data;
+        } catch (err) {
+            return rejectWithValue(
+                extractErrorMessage(err, "Could not update pinned message")
+            );
+        }
+    }
+);
+
 export const leaveGroupChat = createAsyncThunk(
     "chat/leaveGroupChat",
     async (conversationId, { rejectWithValue }) => {
@@ -241,11 +275,18 @@ const formatPreviewText = msg => {
             ? `📎 ${msg.media.fileName}`.slice(0, 100)
             : "📎 Attachment";
     }
+    if (msg.type === "poll") {
+        return msg.poll?.question
+            ? `📊 ${msg.poll.question}`.slice(0, 100)
+            : "📊 Poll";
+    }
     return `[${String(msg.type || "media").toUpperCase()}]`;
 };
 
 const sortConversations = convs => {
     convs.sort((a, b) => {
+        const pinDiff = (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0);
+        if (pinDiff !== 0) return pinDiff;
         const tA = new Date(
             a.lastMessage?.createdAt || a.updatedAt || a.createdAt || 0
         ).getTime();
@@ -433,6 +474,49 @@ const chatSlice = createSlice({
                 sortConversations(state.conversations);
             }
         },
+        applyMessageReacted(state, action) {
+            const { conversationId, messageId, reactions = [] } =
+                action.payload || {};
+            const bucket = state.messagesByConv[String(conversationId)];
+            if (!bucket) return;
+            const msg = bucket.items.find(
+                m => String(m._id) === String(messageId)
+            );
+            if (msg) msg.reactions = reactions;
+        },
+        applyMessageEdited(state, action) {
+            const { conversationId, messageId, text, editedAt } =
+                action.payload || {};
+            const convId = String(conversationId);
+            const bucket = state.messagesByConv[convId];
+            if (bucket) {
+                const msg = bucket.items.find(
+                    m => String(m._id) === String(messageId)
+                );
+                if (msg) {
+                    msg.text = text;
+                    msg.editedAt = editedAt;
+                }
+            }
+            const conv = state.conversations.find(
+                c => String(c._id) === convId
+            );
+            if (
+                conv &&
+                String(conv.lastMessage?.messageId) === String(messageId)
+            ) {
+                conv.lastMessage.text = String(text || "").slice(0, 100);
+            }
+        },
+        applyPollUpdated(state, action) {
+            const { conversationId, messageId, poll } = action.payload || {};
+            const bucket = state.messagesByConv[String(conversationId)];
+            if (!bucket || !poll) return;
+            const msg = bucket.items.find(
+                m => String(m._id) === String(messageId)
+            );
+            if (msg) msg.poll = poll;
+        },
         applyMessageDeleted(state, action) {
             const { messageId, conversationId } = action.payload;
             const convId = String(conversationId);
@@ -510,6 +594,8 @@ const chatSlice = createSlice({
             if (idx !== -1) {
                 const prevUnread = state.conversations[idx].unread ?? 0;
                 const prevPartner = state.conversations[idx].partner;
+                const prevPinned = Boolean(state.conversations[idx].isPinned);
+                const prevMuted = Boolean(state.conversations[idx].isMuted);
                 state.conversations[idx] = {
                     ...state.conversations[idx],
                     ...enriched,
@@ -517,6 +603,14 @@ const chatSlice = createSlice({
                         enriched.unread !== undefined
                             ? enriched.unread
                             : prevUnread,
+                    isPinned:
+                        enriched.isPinned !== undefined
+                            ? enriched.isPinned
+                            : prevPinned,
+                    isMuted:
+                        enriched.isMuted !== undefined
+                            ? enriched.isMuted
+                            : prevMuted,
                     partner: enriched.partner || prevPartner || null
                 };
             } else {
@@ -596,7 +690,8 @@ const chatSlice = createSlice({
             .addCase(fetchConversations.fulfilled, (state, action) => {
                 state.conversationsLoading = false;
                 state.conversationsLoaded = true;
-                state.conversations = action.payload;
+                state.conversations = [...action.payload];
+                sortConversations(state.conversations);
                 for (const c of action.payload) {
                     if (c.partner?._id) {
                         state.onlineUsers[String(c.partner._id)] = Boolean(
@@ -656,6 +751,36 @@ const chatSlice = createSlice({
             .addCase(updateGroupMember.fulfilled, (state, action) => {
                 const conv = action.payload;
                 if (!conv) return;
+                const idx = state.conversations.findIndex(
+                    c => String(c._id) === String(conv._id)
+                );
+                if (idx !== -1) {
+                    state.conversations[idx] = {
+                        ...state.conversations[idx],
+                        ...conv
+                    };
+                }
+            })
+            .addCase(
+                updateConversationPreferences.fulfilled,
+                (state, action) => {
+                    const conv = action.payload;
+                    if (!conv?._id) return;
+                    const idx = state.conversations.findIndex(
+                        c => String(c._id) === String(conv._id)
+                    );
+                    if (idx !== -1) {
+                        state.conversations[idx] = {
+                            ...state.conversations[idx],
+                            ...conv
+                        };
+                        sortConversations(state.conversations);
+                    }
+                }
+            )
+            .addCase(pinConversationMessage.fulfilled, (state, action) => {
+                const conv = action.payload;
+                if (!conv?._id) return;
                 const idx = state.conversations.findIndex(
                     c => String(c._id) === String(conv._id)
                 );
@@ -758,6 +883,11 @@ const chatSlice = createSlice({
                                 msg.media = null;
                                 msg.location = null;
                                 msg.contact = null;
+                            } else {
+                                if (u.text !== undefined) msg.text = u.text;
+                                if (u.editedAt !== undefined) msg.editedAt = u.editedAt;
+                                if (Array.isArray(u.reactions)) msg.reactions = u.reactions;
+                                if (u.poll) msg.poll = u.poll;
                             }
                         }
                     }
@@ -779,6 +909,9 @@ export const {
     confirmMessageSent,
     markMessageFailed,
     receiveNewMessage,
+    applyMessageReacted,
+    applyMessageEdited,
+    applyPollUpdated,
     applyMessageDeleted,
     applyStatusBulk,
     applyConversationRead,

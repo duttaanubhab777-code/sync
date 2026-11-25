@@ -343,6 +343,113 @@ export const leaveGroup = asyncHandler(async (req, res) => {
     send(res, 200, null, "Left the group");
 });
 
+// POST /api/v1/conversations/:id/preferences   body: { pinned?, muted? } — নিজের জন্য চ্যাট পিন বা মিউট করা
+export const updateConversationPreferences = asyncHandler(async (req, res) => {
+    const me = String(req.user._id);
+    const conv = await loadMemberConversation(req.params.id, me);
+    const { pinned, muted } = req.body || {};
+
+    const add = {};
+    const pull = {};
+    if (typeof pinned === "boolean") {
+        if (pinned) add.pinnedBy = req.user._id;
+        else pull.pinnedBy = req.user._id;
+    }
+    if (typeof muted === "boolean") {
+        if (muted) add.mutedBy = req.user._id;
+        else pull.mutedBy = req.user._id;
+    }
+
+    const update = {};
+    if (Object.keys(add).length) update.$addToSet = add;
+    if (Object.keys(pull).length) update.$pull = pull;
+
+    if (Object.keys(update).length) {
+        await Conversation.updateOne({ _id: conv._id }, update, {
+            timestamps: false
+        });
+    }
+
+    const fresh = await Conversation.findById(conv._id).populate(
+        POPULATE_MEMBERS
+    );
+    send(res, 200, serializeConversation(fresh, me), "Preferences updated");
+});
+
+// POST /api/v1/conversations/:id/pin-message   body: { messageId: id | null } — চ্যাটের উপরে মেসেজ পিন/আনপিন করা
+export const pinConversationMessage = asyncHandler(async (req, res) => {
+    const me = String(req.user._id);
+    const io = req.app.get("io");
+    const conv = await loadMemberConversation(req.params.id, me);
+    if (conv.type === "group" && conv.onlyAdminCanMessage && !conv.isGroupAdmin(me)) {
+        throw new ApiError(403, "Only group admins can pin messages in this group");
+    }
+
+    const { messageId } = req.body || {};
+    if (!messageId) {
+        await Conversation.updateOne(
+            { _id: conv._id },
+            { $unset: { pinnedMessage: "" } },
+            { timestamps: false }
+        );
+    } else {
+        const msgId = assertObjectId(messageId, "message id");
+        const msg = await Message.findOne({
+            _id: msgId,
+            conversationId: conv._id,
+            deletedForEveryone: { $ne: true }
+        })
+            .populate("sender", "fullName username")
+            .lean();
+        if (!msg) throw new ApiError(404, "Message not found");
+
+        const previewText =
+            msg.type === "poll"
+                ? `📊 ${msg.poll?.question || "Poll"}`
+                : msg.text ||
+                  (msg.type === "file"
+                      ? `📎 ${msg.media?.fileName || "Document"}`
+                      : msg.type === "location"
+                        ? `📍 ${msg.location?.address || "Location"}`
+                        : msg.type === "contact"
+                          ? `👤 ${msg.contact?.name || "Contact"}`
+                          : `[${String(msg.type || "media").toUpperCase()}]`);
+
+        await Conversation.updateOne(
+            { _id: conv._id },
+            {
+                $set: {
+                    pinnedMessage: {
+                        messageId: msg._id,
+                        text: String(previewText).slice(0, 140),
+                        type: msg.type,
+                        senderName:
+                            msg.sender?.fullName ||
+                            msg.sender?.username ||
+                            "Member",
+                        pinnedBy: req.user._id,
+                        pinnedAt: new Date()
+                    }
+                }
+            },
+            { timestamps: false }
+        );
+    }
+
+    const fresh = await Conversation.findById(conv._id).populate(
+        POPULATE_MEMBERS
+    );
+    emitToUsers(io, conv.members.map(idOf), "conversation:updated", {
+        conversation: serializeConversation(fresh)
+    });
+    send(
+        res,
+        200,
+        serializeConversation(fresh, me),
+        messageId ? "Message pinned" : "Message unpinned"
+    );
+});
+
 // POST /api/v1/conversations/:id/read   body: { upToMessageId? }  — Socket-এর message:seen এর REST বিকল্প
 export const markConversationRead = asyncHandler(async (req, res) => {
     const me = String(req.user._id);
