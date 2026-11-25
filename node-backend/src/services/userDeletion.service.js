@@ -32,7 +32,7 @@ export const permanentlyDeleteUserData = async user => {
                 { [`unread.${userId}`]: { $exists: true } }
             ]
         })
-            .select("_id members admins createdBy groupIcon lastMessage pinnedMessage")
+            .select("_id members admins createdBy groupIcon isOfficial lastMessage pinnedMessage")
             .lean(),
         Story.find({ author: user._id })
             .select("media.url")
@@ -64,13 +64,19 @@ export const permanentlyDeleteUserData = async user => {
         const update = {
             $pull: {
                 members: user._id,
-                admins: user._id,
                 pinnedBy: user._id,
                 mutedBy: user._id
             },
-            $unset: { [`unread.${userId}`]: "" }
+            $unset: { [`unread.${userId}`]: "" },
+            $set: {
+                admins: remainingAdmins.length
+                    ? remainingAdmins
+                    : group.isOfficial
+                      ? []
+                      : [remainingMembers[0]]
+            }
         };
-        if (nextCreator) update.$set = { createdBy: nextCreator };
+        if (nextCreator) update.$set.createdBy = nextCreator;
 
         await Conversation.updateOne({ _id: group._id }, update, {
             timestamps: false
@@ -286,7 +292,7 @@ export const sweepOrphanedUserData = async () => {
             .select("_id members")
             .lean(),
         Conversation.find({ type: "group" })
-            .select("_id members admins createdBy pinnedBy mutedBy unread groupIcon lastMessage pinnedMessage")
+            .select("_id members admins createdBy pinnedBy mutedBy unread groupIcon isOfficial lastMessage pinnedMessage")
             .lean(),
         Message.aggregate([
             {
@@ -412,18 +418,22 @@ export const sweepOrphanedUserData = async () => {
         const update = {
             $pull: {
                 members: { $in: orphanIds },
-                admins: { $in: orphanIds },
                 pinnedBy: { $in: orphanIds },
                 mutedBy: { $in: orphanIds }
             },
             $unset: Object.fromEntries(
                 [...staleRefs].map(id => [`unread.${id}`, ""])
-            )
+            ),
+            $set: {
+                admins: remainingAdmins.length
+                    ? remainingAdmins
+                    : group.isOfficial
+                      ? []
+                      : [remainingMembers[0]]
+            }
         };
         if (creatorIsStale) {
-            update.$set = {
-                createdBy: remainingAdmins[0] || remainingMembers[0]
-            };
+            update.$set.createdBy = remainingAdmins[0] || remainingMembers[0];
         }
         if (staleRefs.size > 0) {
             await Conversation.updateOne({ _id: group._id }, update, {
