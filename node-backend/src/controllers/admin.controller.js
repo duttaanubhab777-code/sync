@@ -11,12 +11,17 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { assertObjectId, escapeRegex, isObjectId } from "../utils/helpers.js";
 import { getOnlineUserIds, isUserOnline } from "../socket/store.js";
 import { isSuperAdminEmail } from "../utils/superAdmin.js";
-import { emitToUsers, getContactIds } from "../services/conversation.service.js";
+import {
+    emitToUsers,
+    getContactIds,
+    POPULATE_MEMBERS,
+    serializeConversation
+} from "../services/conversation.service.js";
 import { cleanupInBackground } from "../services/cloudinaryCleanup.service.js";
+import { permanentlyDeleteUserData } from "../services/userDeletion.service.js";
 import {
     onboardNewUser,
     refreshSyncGroupAdmins,
-    removeUserFromSyncGroup,
     sendOfficialBroadcast
 } from "../services/official.service.js";
 
@@ -331,20 +336,43 @@ export const deleteUserByAdmin = asyncHandler(async (req, res) => {
     io?.to(`user:${id}`).emit("user:blocked");
     io?.in(`user:${id}`).disconnectSockets(true);
 
-    // অ্যাকাউন্টের avatar ও সব story-র ফাইল Cloudinary থেকেও মোছা হবে
-    const userStories = await Story.find({ author: id }).select("media.url").lean();
-    const urlsToDelete = [target.avatar, ...userStories.map(s => s.media?.url)];
+    const cleanup = await permanentlyDeleteUserData(target);
 
-    await Promise.all([
-        PushSubscription.deleteMany({ user: id }),
-        Story.deleteMany({ author: id }),
-        NoticeAck.deleteMany({ user: id }),
-        User.deleteOne({ _id: id }),
-        removeUserFromSyncGroup(id)
-    ]);
+    // Remove deleted direct chats from the other participant's live chat list.
+    for (const conversation of cleanup.directConversations) {
+        emitToUsers(io, conversation.memberIds, "conversation:removed", {
+            conversationId: conversation.id
+        });
+    }
 
-    cleanupInBackground(urlsToDelete);
-    res.status(200).json(new ApiResponse(200, { deletedId: id }, "User deleted"));
+    // Keep shared groups, but immediately refresh their member lists and previews.
+    if (cleanup.updatedGroupIds.length) {
+        const groups = await Conversation.find({
+            _id: { $in: cleanup.updatedGroupIds }
+        }).populate(POPULATE_MEMBERS);
+        for (const group of groups) {
+            emitToUsers(io, group.members, "conversation:updated", {
+                conversation: serializeConversation(group)
+            });
+        }
+    }
+
+    res.status(200).json(
+        new ApiResponse(
+            200,
+            {
+                deletedId: id,
+                cleanup: {
+                    messages: cleanup.deletedMessages,
+                    conversations: cleanup.deletedConversations,
+                    stories: cleanup.deletedStories,
+                    groupsUpdated: cleanup.deletedGroupsUpdated,
+                    cloudinaryAssets: cleanup.cloudinaryDeleted
+                }
+            },
+            "User and associated data permanently deleted"
+        )
+    );
 });
 
 // ---------- Media (শুধু image ও video, কখনো লেখা নয়) ----------
