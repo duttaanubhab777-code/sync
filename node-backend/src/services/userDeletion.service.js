@@ -27,6 +27,8 @@ export const permanentlyDeleteUserData = async user => {
                 { createdBy: user._id },
                 { pinnedBy: user._id },
                 { mutedBy: user._id },
+                { "lastMessage.sender": user._id },
+                { "pinnedMessage.pinnedBy": user._id },
                 { [`unread.${userId}`]: { $exists: true } }
             ]
         })
