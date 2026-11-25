@@ -5,14 +5,16 @@ import { PasswordReset } from "../models/password-reset.model.js";
 import { PushSubscription } from "../models/push-subscription.model.js";
 import { Story } from "../models/story.model.js";
 import { User } from "../models/user.model.js";
-import { NoticeAck } from "../models/notice.model.js";
+import { Notice, NoticeAck } from "../models/notice.model.js";
+import { Wallpaper } from "../models/wallpaper.model.js";
+import { WallpaperCategory } from "../models/wallpaper-category.model.js";
 import { deleteCloudinaryUrls } from "./cloudinaryCleanup.service.js";
 
 const asId = value => String(value?._id ?? value);
 
 // Permanently remove a user's private data while preserving shared group history
 // written by other members.
-export const permanentlyDeleteUserData = async user => {
+export const permanentlyDeleteUserData = async (user, replacementAdminId) => {
     const userId = String(user._id);
 
     const [directConversations, relatedGroups, stories] = await Promise.all([
@@ -241,6 +243,18 @@ export const permanentlyDeleteUserData = async user => {
         }),
         NoticeAck.deleteMany({ user: user._id }),
         PasswordReset.deleteMany({ userId: user._id }),
+        Notice.updateMany(
+            { createdBy: user._id },
+            { $set: { createdBy: replacementAdminId } }
+        ),
+        Wallpaper.updateMany(
+            { createdBy: user._id },
+            { $set: { createdBy: replacementAdminId } }
+        ),
+        WallpaperCategory.updateMany(
+            { createdBy: user._id },
+            { $set: { createdBy: null } }
+        ),
         Story.updateMany(
             {
                 $or: [
@@ -340,7 +354,13 @@ export const sweepOrphanedUserData = async () => {
             },
             { $match: { $expr: { $eq: [{ $size: "$authorRecord" }, 0] } } },
             { $project: { _id: 1, author: 1, mediaUrl: "$media.url" } }
-        ])
+        ]),
+        Notice.find({}, { createdBy: 1 }).lean(),
+        Wallpaper.find({}, { createdBy: 1 }).lean(),
+        WallpaperCategory.find(
+            { createdBy: { $ne: null } },
+            { createdBy: 1 }
+        ).lean()
     ]);
 
     const candidateIds = new Set();
@@ -360,6 +380,15 @@ export const sweepOrphanedUserData = async () => {
     for (const story of orphanStories) {
         if (story.author) candidateIds.add(asId(story.author));
     }
+    for (const notice of notices) {
+        if (notice.createdBy) candidateIds.add(asId(notice.createdBy));
+    }
+    for (const wallpaper of wallpapers) {
+        if (wallpaper.createdBy) candidateIds.add(asId(wallpaper.createdBy));
+    }
+    for (const category of categories) {
+        if (category.createdBy) candidateIds.add(asId(category.createdBy));
+    }
 
     const validIds = new Set(
         (
@@ -373,6 +402,12 @@ export const sweepOrphanedUserData = async () => {
         id => /^[a-f0-9]{24}$/i.test(id) && !validIds.has(id)
     );
     const orphanSet = new Set(orphanIds);
+    const replacementAdmin = orphanIds.length
+        ? await User.findOne(
+              { role: { $in: ["admin", "superAdmin"] }, isOfficial: { $ne: true } },
+              { _id: 1 }
+          ).lean()
+        : null;
 
     const orphanDirect = directRows.filter(conversation =>
         (conversation.members || []).some(member => orphanSet.has(asId(member)))
@@ -600,6 +635,22 @@ export const sweepOrphanedUserData = async () => {
             }),
             NoticeAck.deleteMany({ user: { $in: orphanIds } }),
             PasswordReset.deleteMany({ userId: { $in: orphanIds } }),
+            ...(replacementAdmin
+                ? [
+                      Notice.updateMany(
+                          { createdBy: { $in: orphanIds } },
+                          { $set: { createdBy: replacementAdmin._id } }
+                      ),
+                      Wallpaper.updateMany(
+                          { createdBy: { $in: orphanIds } },
+                          { $set: { createdBy: replacementAdmin._id } }
+                      )
+                  ]
+                : []),
+            WallpaperCategory.updateMany(
+                { createdBy: { $in: orphanIds } },
+                { $set: { createdBy: null } }
+            ),
             Story.updateMany(
                 {},
                 {
