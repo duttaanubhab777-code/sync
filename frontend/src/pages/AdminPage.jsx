@@ -1430,11 +1430,14 @@ export default function AdminPage() {
                                 <h3>
                                     Media Inspector (Images & Videos Only)
                                 </h3>
-                                <p className="sync-muted">
-                                    🔒 Private chat text messages and story
-                                    captions are never returned by the server.
-                                    Only uploaded <strong>Images</strong> and{" "}
-                                    <strong>Videos</strong> are shown here.
+                                <p className="sync-muted sync-media-privacy-note">
+                                    <span className="sync-media-privacy-icon" aria-hidden="true">
+                                        <Lock size={16} strokeWidth={2.2} />
+                                    </span>
+                                    <span>
+                                        Private chat text messages and story captions are never returned by the server.
+                                        Only uploaded <strong>Images</strong> and <strong>Videos</strong> are shown here.
+                                    </span>
                                 </p>
                             </div>
                             <button
