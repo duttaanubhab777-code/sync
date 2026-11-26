@@ -278,6 +278,8 @@ export default function ChatPage() {
     const composerInputRef = useRef(null);
     // মেসেজ টিপে ধরলে যেটার মেনু খোলা (Reply / React / Edit / Forward / Pin / Info / Delete)
     const [sheetMsg, setSheetMsg] = useState(null);
+    // শিট কোন ভিউতে খুলবে: "menu" | "reactions" (রিয়্যাকশন পিলে ট্যাপ করলে)
+    const [sheetView, setSheetView] = useState("menu");
     const [editingMsg, setEditingMsg] = useState(null);
     const [forwardMsg, setForwardMsg] = useState(null);
     const [showCreatePoll, setShowCreatePoll] = useState(false);
@@ -1509,11 +1511,16 @@ export default function ChatPage() {
                                                     </span>
                                                 </div>
                                                 <div className="sync-inchat-result-text">
-                                                    {m.type === "poll"
-                                                        ? `📊 ${m.poll?.question || "Poll"}`
-                                                        : m.text ||
-                                                          m.media?.fileName ||
-                                                          ""}
+                                                    {m.type === "poll" ? (
+                                                        <MessagePreview
+                                                            type="poll"
+                                                            text={`📊 ${m.poll?.question || "Poll"}`}
+                                                        />
+                                                    ) : (
+                                                        m.text ||
+                                                        m.media?.fileName ||
+                                                        ""
+                                                    )}
                                                 </div>
                                             </button>
                                         ))}
@@ -1662,7 +1669,10 @@ export default function ChatPage() {
                                                 );
                                                 composerInputRef.current?.focus();
                                             }}
-                                            onLongPress={() => setSheetMsg(msg)}
+                                            onLongPress={() => {
+                                                setSheetView("menu");
+                                                setSheetMsg(msg);
+                                            }}
                                         >
                                             <div
                                                 className={`sync-msg-bubble ${
@@ -1864,6 +1874,10 @@ export default function ChatPage() {
                                                     <PollCard
                                                         poll={msg.poll}
                                                         myId={myId}
+                                                        members={
+                                                            activeConversation?.members ||
+                                                            []
+                                                        }
                                                         disabled={Boolean(
                                                             msg.optimistic ||
                                                                 msg.failed
@@ -1955,11 +1969,14 @@ export default function ChatPage() {
                                                                                     ? "mine"
                                                                                     : ""
                                                                             }`}
+                                                                            title="See who reacted"
                                                                             onClick={e => {
                                                                                 e.stopPropagation();
-                                                                                handleReactMessage(
-                                                                                    msg._id,
-                                                                                    emoji
+                                                                                setSheetView(
+                                                                                    "reactions"
+                                                                                );
+                                                                                setSheetMsg(
+                                                                                    msg
                                                                                 );
                                                                             }}
                                                                         >
@@ -2057,7 +2074,11 @@ export default function ChatPage() {
                                         canEdit={canEditSheet}
                                         canForward={canForwardSheet}
                                         canPin={!sheetMsg.deletedForEveryone}
-                                        preview={formatReplySnippet(sheetMsg)}
+                                        members={activeConversation?.members || []}
+                                        initialView={sheetView}
+                                        preview={
+                                            <ReplySnippet target={sheetMsg} />
+                                        }
                                         onClose={() => setSheetMsg(null)}
                                         onReply={() => {
                                             setEditingMsg(null);

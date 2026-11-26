@@ -1,10 +1,10 @@
 import React from "react";
 
 /**
- * Static ballot icon used for poll actions.
- * Kept animation-free so the chat composer stays lightweight.
+ * Poll SVG icon — rounded card with rising bars (no keyboard look).
+ * Static, animation-free so the composer stays lightweight.
  */
-export default function PollIcon({ size = 20, className = "" }) {
+export default function PollIcon({ size = 20, className = "", strokeWidth = 1.8 }) {
     return (
         <svg
             className={`sync-poll-icon ${className}`.trim()}
@@ -16,9 +16,21 @@ export default function PollIcon({ size = 20, className = "" }) {
             aria-hidden="true"
             focusable="false"
         >
-            <rect x="4" y="3.5" width="16" height="17" rx="3" stroke="currentColor" strokeWidth="1.8" />
-            <path d="M8 8H10.5M13 8H16M8 12H10.5M13 12H16M8 16H10.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            <path d="M14 16.2L15.5 17.7L18.5 14.7" stroke="#35E69A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <rect
+                x="3.5"
+                y="3.5"
+                width="17"
+                height="17"
+                rx="5"
+                stroke="currentColor"
+                strokeWidth={strokeWidth}
+            />
+            <path
+                d="M8.2 16V12.6M12 16V8M15.8 16V10.6"
+                stroke="currentColor"
+                strokeWidth={strokeWidth + 0.5}
+                strokeLinecap="round"
+            />
         </svg>
     );
 }

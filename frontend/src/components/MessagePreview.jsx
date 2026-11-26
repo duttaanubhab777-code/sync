@@ -8,6 +8,7 @@ import {
     UserRound,
     Ban
 } from "lucide-react";
+import PollIcon from "./chat/PollIcon.jsx";
 
 // চ্যাট লিস্ট / রিপ্লাই প্রিভিউতে "[AUDIO]" বা emoji এর বদলে professional SVG আইকন + লেখা
 const TYPE_META = {
@@ -16,12 +17,13 @@ const TYPE_META = {
     audio: { Icon: Mic, label: "Voice message" },
     file: { Icon: FileText, label: "Document" },
     location: { Icon: MapPin, label: "Location" },
-    contact: { Icon: UserRound, label: "Contact" }
+    contact: { Icon: UserRound, label: "Contact" },
+    poll: { Icon: PollIcon, label: "Poll" }
 };
 
 const stripLeadingSymbol = s =>
     String(s || "")
-        .replace(/^(📍|👤|📎)\s*/u, "")
+        .replace(/^(📍|👤|📎|📊)\s*/u, "")
         .replace(/^Contact:\s*/i, "")
         .trim();
 
@@ -38,6 +40,7 @@ export const resolvePreview = ({ type, text, deleted } = {}) => {
     else if (!kind && raw.startsWith("📍")) kind = "location";
     else if (!kind && raw.startsWith("👤")) kind = "contact";
     else if (!kind && raw.startsWith("📎")) kind = "file";
+    else if (!kind && raw.startsWith("📊")) kind = "poll";
 
     const meta = kind && TYPE_META[kind];
     if (!meta) return null;
@@ -46,7 +49,7 @@ export const resolvePreview = ({ type, text, deleted } = {}) => {
     if (!bracket && kind !== "image" && kind !== "video" && kind !== "audio") {
         detail = stripLeadingSymbol(raw);
         // "Location" / "Attachment" ডিফল্ট লেখা আলাদা করে দেখানোর দরকার নেই
-        if (/^(Location|Attachment|Contact)$/i.test(detail)) detail = "";
+        if (/^(Location|Attachment|Contact|Poll)$/i.test(detail)) detail = "";
     }
     return { Icon: meta.Icon, label: meta.label, detail };
 };
