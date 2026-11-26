@@ -571,3 +571,26 @@
     white-space: pre-wrap;
     word-break: break-word;
 }
+
+
+/* ---- Premium Sync poll surfaces ---- */
+.sync-poll-card { position:relative; min-width:min(230px,100%); max-width:min(420px,100%); gap:12px; padding:8px 6px 5px; }
+.sync-poll-icon { display:inline-block; flex:0 0 auto; overflow:visible; }
+.sync-poll-icon-track { transform-origin:center bottom; animation:sync-poll-bars 2.4s ease-in-out infinite; }
+.sync-poll-badge { gap:7px; font-size:.74rem; letter-spacing:.08em; }
+.sync-poll-mode { padding:5px 10px; border:1px solid rgba(110,255,190,.14); border-radius:999px; background:rgba(5,42,32,.55); font-size:.68rem; }
+.sync-poll-question { font-size:clamp(.96rem,3.7vw,1.08rem); line-height:1.45; letter-spacing:-.018em; }
+.sync-poll-options { gap:8px; }
+.sync-poll-opt { min-height:48px; padding:10px 12px; border-radius:15px; border-color:rgba(153,255,209,.14); background:linear-gradient(110deg,rgba(2,28,24,.88),rgba(4,49,39,.62)); box-shadow:inset 0 1px 0 rgba(255,255,255,.025); transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease,background .2s ease; }
+.sync-poll-opt:active { transform:scale(.985); }
+.sync-poll-opt:focus-visible { outline:2px solid rgba(47,230,153,.8); outline-offset:3px; }
+.sync-poll-opt.voted { border-color:rgba(48,235,151,.72); box-shadow:0 0 0 1px rgba(48,235,151,.08),0 7px 24px rgba(0,220,125,.08); }
+.sync-poll-bar { background:linear-gradient(90deg,rgba(0,194,117,.18),rgba(49,239,166,.26)); border-right:1px solid rgba(113,255,194,.55); transition:width .55s cubic-bezier(.2,.8,.2,1); }
+.sync-poll-opt.voted .sync-poll-bar { background:linear-gradient(90deg,rgba(0,208,125,.26),rgba(42,235,157,.36)); }
+.sync-poll-check { width:19px; height:19px; border-width:1.7px; border-color:rgba(178,225,207,.45); background:rgba(255,255,255,.025); }
+.sync-poll-check.checked { background:linear-gradient(135deg,#25d98b,#66f4b6); border-color:transparent; color:#03251a; box-shadow:0 0 13px rgba(40,230,145,.28); }
+.sync-poll-opt-text { font-size:.88rem; font-weight:650; }
+.sync-poll-opt-meta { font-size:.75rem; font-variant-numeric:tabular-nums; }
+.sync-poll-footer { display:flex; align-items:center; gap:6px; padding-top:2px; font-size:.74rem; }
+@keyframes sync-poll-bars { 0%,100% { opacity:.88; } 50% { opacity:1; filter:drop-shadow(0 0 4px currentColor); } }
+@media (prefers-reduced-motion:reduce) { .sync-poll-icon-track { animation:none; } .sync-poll-opt,.sync-poll-bar { transition:none; } }

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { BarChart2, Check } from "lucide-react";
+import { Check, Users } from "lucide-react";
+import PollIcon from "./PollIcon.jsx";
 
 /**
  * গ্রুপ পোলের রিয়েল-টাইম ভোটিং কার্ড
@@ -27,7 +28,7 @@ export default function PollCard({ poll, myId, disabled = false, onVote }) {
         <div className="sync-poll-card">
             <div className="sync-poll-header">
                 <span className="sync-poll-badge">
-                    <BarChart2 size={13} /> Poll
+                    <PollIcon size={15} /> Poll
                 </span>
                 <span className="sync-poll-mode">
                     {poll.allowMultiple ? "Multiple choice" : "Single choice"}
@@ -81,7 +82,7 @@ export default function PollCard({ poll, myId, disabled = false, onVote }) {
                 })}
             </div>
 
-            <div className="sync-poll-footer">
+            <div className="sync-poll-footer"><Users size={14} /> 
                 {totalVotes === 0
                     ? "No votes yet — tap an option to vote"
                     : `${totalVotes} vote${totalVotes === 1 ? "" : "s"}`}
