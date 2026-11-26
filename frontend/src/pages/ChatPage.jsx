@@ -2262,7 +2262,7 @@ export default function ChatPage() {
                                             {activeIsGroup && (
                                                 <button
                                                     type="button"
-                                                    className="sync-icon-btn"
+                                                    className="sync-icon-btn sync-poll-trigger"
                                                     title="Create Poll"
                                                     aria-label="Create Poll"
                                                     onClick={() =>
