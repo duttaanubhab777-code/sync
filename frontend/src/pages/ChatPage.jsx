@@ -25,8 +25,7 @@ import {
     LogOut,
     Pin,
     BellOff,
-    Forward,
-    BarChart2
+    Forward
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncBrandBar from "../components/SyncBrandBar.jsx";
@@ -40,6 +39,7 @@ import DocumentCard from "../components/chat/DocumentCard.jsx";
 import WelcomeCard from "../components/chat/WelcomeCard.jsx";
 import BroadcastCard from "../components/chat/BroadcastCard.jsx";
 import PollCard from "../components/chat/PollCard.jsx";
+import PollIcon from "../components/chat/PollIcon.jsx";
 import CreatePollModal from "../components/chat/CreatePollModal.jsx";
 import ForwardModal from "../components/chat/ForwardModal.jsx";
 import VerifiedBadge from "../components/VerifiedBadge.jsx";
@@ -2269,7 +2269,7 @@ export default function ChatPage() {
                                                         setShowCreatePoll(true)
                                                     }
                                                 >
-                                                    <BarChart2 size={19} />
+                                                    <PollIcon size={21} />
                                                 </button>
                                             )}
                                         </>
