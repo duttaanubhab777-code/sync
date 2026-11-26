@@ -79,7 +79,7 @@ import {
 import { enqueueMediaMessage } from "../services/outbox.js";
 import UploadBubbleOverlay from "../components/chat/UploadBubbleOverlay.jsx";
 import CompressingCard from "../components/chat/CompressingCard.jsx";
-import { playSound } from "../services/sounds.js";
+import { playSound, getSharedAudioContext, resumeAudio } from "../services/sounds.js";
 import MoreMenu from "../components/MoreMenu.jsx";
 import QrCodeModal from "../components/QrCodeModal.jsx";
 import ChatFab from "../components/ChatFab.jsx";
@@ -762,23 +762,25 @@ export default function ChatPage() {
         recStreamRef.current?.getTracks().forEach(track => track.stop());
         recStreamRef.current = null;
         recAnalyserRef.current = null;
-        const ctx = recAudioCtxRef.current;
+        // শেয়ার্ড AudioContext বন্ধ করা যাবে না (এটা দিয়েই সাউন্ড বাজে) — শুধু মাইকের source খুলে দেওয়া হয়
+        const source = recAudioCtxRef.current;
         recAudioCtxRef.current = null;
-        if (ctx && ctx.state !== "closed") ctx.close().catch(() => {});
+        try { source?.disconnect(); } catch { /* already disconnected */ }
     };
 
     const startWaveform = stream => {
         recLevelsRef.current = new Array(VOICE_BAR_COUNT).fill(0.08);
         paintWaveform();
         try {
-            const AudioCtx = window.AudioContext || window.webkitAudioContext;
-            if (AudioCtx) {
-                const ctx = new AudioCtx();
-                ctx.resume?.().catch(() => {});
+            // আলাদা AudioContext না বানিয়ে সাউন্ডের শেয়ার্ড context-ই ব্যবহার হয়:
+            // দুটো context একসাথে চললে মোবাইলে রেকর্ডিংয়ের সময় সাউন্ড কেটে যায়/বাজে না
+            const ctx = getSharedAudioContext();
+            if (ctx) {
                 const analyser = ctx.createAnalyser();
                 analyser.fftSize = 512;
-                ctx.createMediaStreamSource(stream).connect(analyser);
-                recAudioCtxRef.current = ctx;
+                const source = ctx.createMediaStreamSource(stream);
+                source.connect(analyser);
+                recAudioCtxRef.current = source;
                 recAnalyserRef.current = analyser;
             }
         } catch {
@@ -972,7 +974,7 @@ export default function ChatPage() {
                 if (recorder.state !== "paused") return;
                 recLastTickRef.current = Date.now();
                 recorder.resume();
-                recAudioCtxRef.current?.resume?.().catch(() => {});
+                resumeAudio();
                 setRecPhase("recording");
             }, 300);
         }
