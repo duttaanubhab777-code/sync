@@ -6,7 +6,7 @@
 ## কীভাবে কাজ করে
 1. GitHub Actions নতুন APK বানিয়ে Release দেয় (`android-v1.0.<build>`)।
 2. সার্ভার নতুন build ধরে (নিচের দুই উপায়ে) ও শুধু Android (FCM) ডিভাইসে `type = app_update` push পাঠায়।
-   - **GitHub Actions ping**: workflow শেষে `POST /api/v1/app/updates/notify` (secret সহ) → সাথে সাথে যায়।
+   - **GitHub Actions ping**: workflow শেষে `POST /api/v1/updates/notify` (secret সহ) → সাথে সাথে যায়।
    - **সার্ভারের নিজস্ব খোঁজা**: প্রতি ৫ মিনিটে GitHub Releases দেখে (secret না দিলেও কাজ করে)।
 3. একই build একবারই যায় (`AppUpdateState` collection-এ মনে রাখা হয়)। সার্ভার প্রথমবার চালু হলে পুরনো release-এর জন্য পাঠায় না।
 4. ফোনে "Update Now" চাপলে APK ডাউনলোড হয় (progress নোটিফিকেশন সহ)। শেষে **Update ready to install** নোটিফিকেশন আসে (অ্যাপ খোলা থাকলে সরাসরি ইনস্টলার খোলে)।

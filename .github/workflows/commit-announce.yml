@@ -58,7 +58,7 @@ jobs:
                   # সার্ভার প্রতিটা commit একবারই ঘোষণা করে, তাই retry-তে দুবার যাবে না।
                   curl -sS --fail-with-body --max-time 60 \
                       --retry 20 --retry-delay 30 --retry-all-errors \
-                      -X POST "${API%/}/api/v1/app/commits/announce" \
+                      -X POST "${API%/}/api/v1/commits/announce" \
                       -H "Content-Type: application/json" \
                       -H "x-update-secret: $ANNOUNCE_SECRET" \
                       --data @payload.json

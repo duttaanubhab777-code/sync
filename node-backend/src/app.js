@@ -115,7 +115,7 @@ app.use(express.urlencoded({ extended: true, limit: "64kb" }));
 app.use(cookieParser());
 
 // Render কোল্ড স্টার্ট জাগানো ও UptimeRobot ping-এর জন্য + ফ্রন্টএন্ডের জন্য runtime public config
-app.get("/health", (_req, res) => {
+const healthHandler = (_req, res) => {
     // Android অ্যাপের offline পেজ (https://localhost origin) এখান থেকে আসল status পড়ে সার্ভার জেগেছে কিনা বুঝে।
     // শুধু এই endpoint-এ খোলা CORS; কোনো cookie/credential যায় না, আর secret কিছু ফেরত আসে না।
     res.set({
@@ -135,7 +135,11 @@ app.get("/health", (_req, res) => {
         ),
         timestamp: new Date().toISOString()
     });
-});
+};
+// "/health" পুরনো ping (Render health check, UptimeRobot, Android offline পেজ) এর জন্য থাকছে;
+// "/api/v1/health" Python service-এর মতো একই নামের আধুনিক route
+app.get("/health", healthHandler);
+app.get("/api/v1/health", healthHandler);
 
 // ---------- Android App Links ----------
 // Android এই ফাইল দেখে নিশ্চিত হয় যে https://<domain>/u/<username> লিংক Sync অ্যাপ খুলতে পারবে।

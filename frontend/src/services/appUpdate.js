@@ -34,7 +34,7 @@ export function loadUpdates(force = false) {
     }
     if (!state.data) emit({ status: "loading", error: "" });
     inflight = api
-        .get("/api/v1/app/updates", {
+        .get("/api/v1/updates", {
             // force হলে সার্ভারের ক্যাশ ভেঙে সরাসরি GitHub থেকে সর্বশেষ release আনে;
             // `_` প্রতিবার আলাদা, যাতে কোনো ক্যাশ (ব্রাউজার/প্রক্সি) পুরনো জবাব না দেয়
             params: force

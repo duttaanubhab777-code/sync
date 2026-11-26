@@ -18,7 +18,7 @@ export const fetchConversations = createAsyncThunk(
     "chat/fetchConversations",
     async (_, { rejectWithValue }) => {
         try {
-            const res = await api.get("/api/v1/conversations");
+            const res = await api.get("/api/v1/chats");
             return res.data?.data || [];
         } catch (err) {
             return rejectWithValue(
@@ -32,7 +32,7 @@ export const startDirectChat = createAsyncThunk(
     "chat/startDirectChat",
     async (partnerId, { rejectWithValue }) => {
         try {
-            const res = await api.post("/api/v1/conversations", { partnerId });
+            const res = await api.post("/api/v1/chats", { partnerId });
             return res.data?.data;
         } catch (err) {
             return rejectWithValue(
@@ -46,7 +46,7 @@ export const createGroupChat = createAsyncThunk(
     "chat/createGroupChat",
     async (payload, { rejectWithValue }) => {
         try {
-            const res = await api.post("/api/v1/conversations/group", payload);
+            const res = await api.post("/api/v1/chats/group", payload);
             return res.data?.data;
         } catch (err) {
             return rejectWithValue(
@@ -61,7 +61,7 @@ export const updateGroupDetails = createAsyncThunk(
     async ({ conversationId, ...updates }, { rejectWithValue }) => {
         try {
             const res = await api.patch(
-                `/api/v1/conversations/${conversationId}`,
+                `/api/v1/chats/${conversationId}`,
                 updates
             );
             return res.data?.data;
@@ -78,7 +78,7 @@ export const updateGroupMember = createAsyncThunk(
     async ({ conversationId, action, targetUserId }, { rejectWithValue }) => {
         try {
             const res = await api.patch(
-                `/api/v1/conversations/${conversationId}/members`,
+                `/api/v1/chats/${conversationId}/members`,
                 { action, targetUserId }
             );
             return res.data?.data;
@@ -95,7 +95,7 @@ export const updateConversationPreferences = createAsyncThunk(
     async ({ conversationId, pinned, muted }, { rejectWithValue }) => {
         try {
             const res = await api.post(
-                `/api/v1/conversations/${conversationId}/preferences`,
+                `/api/v1/chats/${conversationId}/preferences`,
                 { pinned, muted }
             );
             return res.data?.data;
@@ -112,7 +112,7 @@ export const pinConversationMessage = createAsyncThunk(
     async ({ conversationId, messageId }, { rejectWithValue }) => {
         try {
             const res = await api.post(
-                `/api/v1/conversations/${conversationId}/pin-message`,
+                `/api/v1/chats/${conversationId}/pin-message`,
                 { messageId: messageId || null }
             );
             return res.data?.data;
@@ -128,7 +128,7 @@ export const leaveGroupChat = createAsyncThunk(
     "chat/leaveGroupChat",
     async (conversationId, { rejectWithValue }) => {
         try {
-            await api.post(`/api/v1/conversations/${conversationId}/leave`);
+            await api.post(`/api/v1/chats/${conversationId}/leave`);
             return conversationId;
         } catch (err) {
             return rejectWithValue(
@@ -145,7 +145,7 @@ export const fetchMessages = createAsyncThunk(
             const params = new URLSearchParams({ limit: String(limit) });
             if (before) params.set("before", before);
             const res = await api.get(
-                `/api/v1/conversations/${conversationId}/messages?${params.toString()}`
+                `/api/v1/chats/${conversationId}/messages?${params.toString()}`
             );
             return {
                 conversationId,
@@ -187,7 +187,7 @@ export const syncMissedMessages = createAsyncThunk(
                 if (after) params.set("after", after);
                 if (since && safetyCounter === 1) params.set("since", since);
 
-                const res = await api.get(`/api/v1/sync?${params.toString()}`);
+                const res = await api.get(`/api/v1/messages/sync?${params.toString()}`);
                 const data = res.data?.data || {};
                 const batch = data.messages || [];
                 const updated = data.updated || [];

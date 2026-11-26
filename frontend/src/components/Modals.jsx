@@ -472,7 +472,7 @@ export function ChatInfoDrawer({ conversation, onClose }) {
         let active = true;
         setSharedLoading(true);
         api.get(
-            `/api/v1/conversations/${conversation._id}/media?tab=${sharedTab}`
+            `/api/v1/chats/${conversation._id}/media?tab=${sharedTab}`
         )
             .then(res => {
                 if (active) setSharedItems(res.data?.data?.items || []);

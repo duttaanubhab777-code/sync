@@ -3,7 +3,7 @@
 This document describes the HTTP interfaces exposed by the Sync Node.js application and its PythonAnywhere service. The Node service serves the frontend, REST API, and Socket.IO from the same origin, so production clients do not need a separate Node API URL.
 
 ~~~js
-fetch("/api/v1/conversations", {
+fetch("/api/v1/chats", {
   headers: { Authorization: "Bearer " + accessToken },
 });
 const socket = io({ auth: { token: accessToken } });
@@ -68,7 +68,7 @@ This validation applies to avatars, group icons, stories, and message attachment
 
 | Method | Path | Description |
 | --- | --- | --- |
-| GET | /health | Reports service health and integration status, including database connectivity, the configured Python service URL, Cloudinary cloud name, and mail-relay configuration. |
+| GET | /health, /api/v1/health | Reports service health and integration status, including database connectivity, the configured Python service URL, Cloudinary cloud name, and mail-relay configuration. |
 
 ### Authentication — /api/v1/auth
 
@@ -98,21 +98,40 @@ All routes in this section require authentication.
 | POST | /:id/block | Blocks the specified user. |
 | DELETE | /:id/block | Unblocks the specified user. |
 
-### Conversations — /api/v1/conversations
+### Chats — /api/v1/chats
 
 All routes in this section require authentication.
 
 | Method | Path | Description |
 | --- | --- | --- |
-| GET | / | Returns the user's conversations, newest first, including unread counts and the direct-chat partner where applicable. |
-| POST | / | Accepts { partnerId } and creates or returns the existing direct conversation. |
+| GET | / | Returns the user's chats, newest first, including unread counts and the direct-chat partner where applicable. |
+| POST | / | Accepts { partnerId } and creates or returns the existing direct chat. |
 | POST | /group | Accepts { groupName, groupDescription?, groupIcon?, memberIds: [] } and creates a group. The creator becomes a group admin. |
-| GET | /:id | Returns the details of a conversation. |
+| GET | /:id | Returns the details of a chat. |
 | PATCH | /:id | Group-admin only. Updates { groupName?, groupDescription?, groupIcon?, onlyAdminCanMessage? }. |
 | PATCH | /:id/members | Group-admin only. Accepts { action, targetUserId }; supported actions are add, remove, make_admin, and remove_admin. |
 | POST | /:id/leave | Leaves a group. If the last admin leaves, the oldest remaining member becomes an admin. The group is removed when its final member leaves. |
 | POST | /:id/read | Accepts { upToMessageId? } and marks messages as read. This is the REST alternative to the Socket.IO message:seen event. |
 | GET | /:id/messages?before=<cursor>&limit=<n> | Returns paginated message history. The default page size is 30 and the maximum is 100. Results are ordered oldest to newest and include messages, hasMore, and nextBefore. Use nextBefore to request the preceding page. |
+
+### Messages — /api/v1/messages
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | /sync?after=<messageId>&since=<serverTime> | Authenticated. Recovers messages and updates missed while the client was disconnected. |
+| POST | /delivery-ack | Signed acknowledgement sent by the service worker for a delivered push notification. |
+| GET | /:id/info | Sender-only delivery and read details. |
+| POST | /:id/forward | Forwards an existing message to other chats. |
+
+Chat-scoped message routes live under `/api/v1/chats/:id` (`/messages`, `/search`, `/media`).
+
+### Updates and commits
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | /api/v1/updates | Public Android release metadata and version history. |
+| POST | /api/v1/updates/notify | GitHub Actions only (`x-update-secret` header). Notifies users of a new release. |
+| POST | /api/v1/commits/announce | GitHub Actions only (`x-update-secret` header). Announces commit messages in Sync. |
 
 ---
 

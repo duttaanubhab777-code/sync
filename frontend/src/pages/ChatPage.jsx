@@ -618,7 +618,7 @@ const MessageRow = React.memo(function MessageRow({
 });
 
 export default function ChatPage() {
-    const { conversationId } = useParams();
+    const { chatId: conversationId } = useParams();
     const navigate = useNavigate();
     const dispatch = useDispatch();
     const signOut = useSignOut();
@@ -720,7 +720,7 @@ export default function ChatPage() {
             setChatSearching(true);
             try {
                 const res = await api.get(
-                    `/api/v1/conversations/${activeConversationId}/search?q=${encodeURIComponent(q)}`
+                    `/api/v1/chats/${activeConversationId}/search?q=${encodeURIComponent(q)}`
                 );
                 setChatSearchResults(res.data?.data?.messages || []);
             } catch {

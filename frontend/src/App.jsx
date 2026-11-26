@@ -114,7 +114,7 @@ export default function App() {
             >
                 <Route index element={<HomeRedirect />} />
                 <Route path="chats" element={<ChatPage />} />
-                <Route path="chats/:conversationId" element={<ChatPage />} />
+                <Route path="chats/:chatId" element={<ChatPage />} />
                 <Route path="u/:username" element={<UserLinkPage />} />
                 <Route path="stories" element={<StoriesPage />} />
                 <Route path="profile" element={<ProfilePage />} />

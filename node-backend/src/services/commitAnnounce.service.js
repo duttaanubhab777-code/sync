@@ -6,7 +6,7 @@ import {
 
 /*
  * প্রতিটা git commit মেসেজ অটো-অ্যানাউন্সমেন্ট হয়ে যায়:
- *   GitHub Actions push-এ POST /api/v1/app/commits/announce → এই সার্ভিস
+ *   GitHub Actions push-এ POST /api/v1/commits/announce → এই সার্ভিস
  *   → (১) সবার personal "Sync" DM-এ ব্রডকাস্ট কার্ড + push
  *   → (২) অফিশিয়াল "Sync" গ্রুপে একই কার্ড
  *

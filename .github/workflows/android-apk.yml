@@ -202,6 +202,6 @@ jobs:
                   API="${SYNC_API_URL:-https://sync-5lfm.onrender.com}"
                   sleep 20
                   curl -sS --fail-with-body --max-time 100 --retry 3 --retry-delay 15 --retry-all-errors \
-                      -X POST "${API%/}/api/v1/app/updates/notify" \
+                      -X POST "${API%/}/api/v1/updates/notify" \
                       -H "x-update-secret: $APP_UPDATE_NOTIFY_SECRET"
                   echo

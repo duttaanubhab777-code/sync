@@ -10,7 +10,7 @@ const safeEqual = (a, b) => {
     return x.length === y.length && timingSafeEqual(x, y);
 };
 
-// POST /api/v1/app/commits/announce   (শুধু GitHub Actions — header: x-update-secret)
+// POST /api/v1/commits/announce   (শুধু GitHub Actions — header: x-update-secret)
 // body: { branch?, commits: [{ id, message }] }
 // প্রতিটা commit মেসেজ অফিশিয়াল Sync DM + Sync গ্রুপে অ্যানাউন্সমেন্ট হয়ে যায়।
 export const announceCommitMessages = asyncHandler(async (req, res) => {

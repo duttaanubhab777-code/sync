@@ -18,7 +18,7 @@ import { loadMemberConversation } from "./conversation.controller.js";
 const clamp = (value, fallback, min, max) =>
     Math.min(Math.max(Number(value) || fallback, min), max);
 
-// GET /api/v1/conversations/:id/messages?before=<messageId>&limit=30
+// GET /api/v1/chats/:id/messages?before=<messageId>&limit=30
 // পুরনো মেসেজ পেছনের দিকে পেজ করে আনা। উত্তরে মেসেজ পুরনো -> নতুন ক্রমে থাকে।
 // hasMore true হলে nextBefore পরের রিকোয়েস্টে `before` হিসেবে দাও।
 export const getMessages = asyncHandler(async (req, res) => {
@@ -51,7 +51,7 @@ export const getMessages = asyncHandler(async (req, res) => {
     );
 });
 
-// GET /api/v1/sync?after=<শেষ দেখা messageId>&since=<আগের serverTime>
+// GET /api/v1/messages/sync?after=<শেষ দেখা messageId>&since=<আগের serverTime>
 // reconnect-এর পর মিস হওয়া জিনিস ফেরত দেয়:
 //   messages — `after`-এর পরের সব নতুন মেসেজ (পুরনো -> নতুন, সর্বোচ্চ ২০০টা; hasMore true হলে আবার ডাকো)
 //   updated  — `since`-এর পর বদলানো পুরনো মেসেজ (tick বদল, "delete for everyone")
@@ -186,7 +186,7 @@ export const getMessageInfo = asyncHandler(async (req, res) => {
     );
 });
 
-// GET /api/v1/conversations/:id/search?q=... — চ্যাটের ভেতর মেসেজ সার্চ করা
+// GET /api/v1/chats/:id/search?q=... — চ্যাটের ভেতর মেসেজ সার্চ করা
 export const searchConversationMessages = asyncHandler(async (req, res) => {
     const conv = await loadMemberConversation(req.params.id, req.user._id);
     const q = String(req.query.q || "").trim();
@@ -215,7 +215,7 @@ export const searchConversationMessages = asyncHandler(async (req, res) => {
 
 const URL_EXTRACT_RE = /https?:\/\/[^\s<>"']+/gi;
 
-// GET /api/v1/conversations/:id/media?tab=media|files|links — Shared Media, Docs & Links গ্যালারি
+// GET /api/v1/chats/:id/media?tab=media|files|links — Shared Media, Docs & Links গ্যালারি
 export const getSharedMedia = asyncHandler(async (req, res) => {
     const conv = await loadMemberConversation(req.params.id, req.user._id);
     const tab = ["media", "files", "links"].includes(req.query.tab)

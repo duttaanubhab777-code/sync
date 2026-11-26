@@ -765,16 +765,33 @@ The Node REST API is versioned under `/api/v1`; unversioned `/api/...` applicati
 | Authentication | `/api/v1/auth` | OTP signup, login, refresh/logout, forgot-password OTP reset, authenticated password change and current user |
 | Users | `/api/v1/users` | User search, contact matching, public profiles, profile updates and block controls |
 | Wallpapers | `/api/v1/wallpapers` | List available wallpapers and save the signed-in user's wallpaper preference |
-| Conversations | `/api/v1/conversations` | Direct/group conversations, member/admin management, read state, pin/mute preferences, pinned messages and paginated history |
+| Chats | `/api/v1/chats` | Direct/group chats, member/admin management, read state, pin/mute preferences, pinned messages and paginated history |
 | Stories | `/api/v1/stories` | Story feed, create, view, viewers, reactions and replies |
 | Notifications | `/api/v1/notifications` | In-app notifications, read state, push config and device subscriptions |
 | Notices | `/api/v1/notices` | Pending notices and acknowledgement |
 | Admin | `/api/v1/admin` | Platform stats, users, roles, media, groups and notices |
 | Link previews | `/api/v1/link-preview` | Fetch metadata for a URL |
-| App updates | `/api/v1/app/updates` | Public Android release metadata/version history and protected GitHub Actions release-notification trigger |
-| Message operations | `/api/v1/conversations/:id` and `/api/v1/messages` | Paginated history, in-chat search, shared media, forwarding, sender-only Message Info, signed push-delivery acknowledgements and offline sync |
-| Offline sync | `/api/v1/sync` | Recover messages and message updates missed while disconnected |
+| Updates | `/api/v1/updates` | Public Android release metadata/version history and protected GitHub Actions release-notification trigger |
+| Messages | `/api/v1/chats/:id` and `/api/v1/messages` | Paginated history, in-chat search, shared media, forwarding, sender-only Message Info, signed push-delivery acknowledgements and offline sync |
+| Offline sync | `/api/v1/messages/sync` | Recover messages and message updates missed while disconnected |
 | Python service health | `/api/v1/health` | Service health and non-secret runtime configuration status |
+
+### Route map — frontend pages and backend API use the same names
+
+Every screen in the app has a backend resource with the same name, so the URL in the browser tells you which API it talks to.
+
+| Frontend page | Backend API | Notes |
+| --- | --- | --- |
+| `/login`, `/register`, `/forgot-password` | `/api/v1/auth/login`, `/auth/register/*`, `/auth/forgot-password/*` | OTP signup, login and password reset |
+| `/chats`, `/chats/:chatId` | `/api/v1/chats`, `/api/v1/chats/:id/*` | Chat list, messages, search, shared media |
+| `/stories` | `/api/v1/stories` | Story feed, views, reactions, replies |
+| `/updates` | `/api/v1/updates` | Android release notes and update check |
+| `/admin` | `/api/v1/admin` | Platform administration |
+| `/profile` | `/api/v1/users/me` | Own profile (the `me` resource) |
+| `/u/:username` | `/api/v1/users/by-username/:username` | QR / profile deep link (path kept stable for printed QR codes and Android App Links) |
+| `/contact` | Email Sender `/api/v1/mail/send` | Contact form is sent to the separate Email Sender service |
+
+`GET /health` is kept for Render, UptimeRobot and the Android offline page; `GET /api/v1/health` returns the same response.
 
 ### Real-time events
 
@@ -796,7 +813,7 @@ Socket.IO is attached to the same HTTP server and authenticates connections usin
 | `notice:new` / `notice:removed` | Broadcast notice changes |
 | `user:role_updated` / `user:blocked` | Account permission changes |
 
-Additional message endpoints include `GET /api/v1/conversations/:id/search` (search within a conversation), `GET /api/v1/conversations/:id/media` (shared media), `POST /api/v1/messages/:id/forward` (forward an existing message), `GET /api/v1/messages/:id/info` (sender-only delivery/read details), `POST /api/v1/messages/delivery-ack` (signed acknowledgement from a delivered push notification), and `GET /api/v1/sync` (recover missed message updates). Contact discovery uses `POST /api/v1/users/match-contacts`; wallpaper preferences use `GET /api/v1/wallpapers` and `PUT /api/v1/wallpapers/me`. Password recovery uses `POST /api/v1/auth/forgot-password/send-otp` and `POST /api/v1/auth/forgot-password/reset`; authenticated password changes use `POST /api/v1/auth/change-password`. Android update notifications are triggered by the protected `POST /api/v1/app/updates/notify` endpoint.
+Additional message endpoints include `GET /api/v1/chats/:id/search` (search within a chat), `GET /api/v1/chats/:id/media` (shared media), `POST /api/v1/messages/:id/forward` (forward an existing message), `GET /api/v1/messages/:id/info` (sender-only delivery/read details), `POST /api/v1/messages/delivery-ack` (signed acknowledgement from a delivered push notification), and `GET /api/v1/messages/sync` (recover missed message updates). Contact discovery uses `POST /api/v1/users/match-contacts`; wallpaper preferences use `GET /api/v1/wallpapers` and `PUT /api/v1/wallpapers/me`. Password recovery uses `POST /api/v1/auth/forgot-password/send-otp` and `POST /api/v1/auth/forgot-password/reset`; authenticated password changes use `POST /api/v1/auth/change-password`. Android update notifications are triggered by the protected `POST /api/v1/updates/notify` endpoint.
 
 The detailed request/response contract is maintained in [`docs/API.md`](docs/API.md).
 

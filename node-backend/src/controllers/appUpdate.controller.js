@@ -256,7 +256,7 @@ const refreshCache = async () => {
     return inflightFetch;
 };
 
-// GET /api/v1/app/updates (public)
+// GET /api/v1/updates (public)
 export const getAppUpdates = asyncHandler(async (req, res) => {
     const age = Date.now() - cache.at;
     const wantsFresh = req.query.fresh === "1" && age > FRESH_MIN_GAP_MS;
@@ -277,7 +277,7 @@ export const getLatestRelease = async ({ fresh = false } = {}) => {
     return cache.data?.latest || null;
 };
 
-// POST /api/v1/app/updates/notify
+// POST /api/v1/updates/notify
 // GitHub Actions নতুন APK release দেওয়ার পর এটা ডাকে (header: x-update-secret)।
 // সার্ভার নিজেই GitHub থেকে সর্বশেষ release দেখে নেয়, তাই বডির ওপর ভরসা করে না।
 export const notifyAppUpdate = asyncHandler(async (req, res) => {
