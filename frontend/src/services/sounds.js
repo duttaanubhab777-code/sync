@@ -431,6 +431,82 @@ const rebuildCtx = () => {
     return getCtx();
 };
 
+// ---------------- রেকর্ডিং সাউন্ড: নেটিভ (SoundPool) → ogg ফাইল → সিন্থ ----------------
+// ১) APK-তে নোটিফিকেশনের মতো নেটিভ Android সাউন্ড (SyncNativeNotif.playSound): WebView-এর অডিও-মোড/মাইকের
+//    ওপর নির্ভর করে না, তাই রেকর্ডিংয়ের সময়ও সবসময় বাজে। (এর জন্য নতুন APK লাগে)
+// ২) পুরনো APK/ব্রাউজারে: /sounds/*.ogg ফাইল <audio> দিয়ে — আগে থেকে লোড করা থাকে।
+// ৩) ফাইল না পেলে/বাজাতে না পারলে: আগের Web Audio সিন্থ (নিচের playSynth)।
+const FILE_SOUNDS = {
+    recStart: "rec_start",
+    recPause: "rec_pause",
+    recPlay: "rec_play",
+    recDelete: "rec_delete"
+};
+const filePool = {};
+
+const getFilePool = name => {
+    if (typeof Audio === "undefined") return null;
+    if (filePool[name] === undefined) {
+        try {
+            const els = [];
+            for (let i = 0; i < POOL; i += 1) {
+                const el = new Audio(`/sounds/${FILE_SOUNDS[name]}.ogg`);
+                el.preload = "auto";
+                el.addEventListener("error", () => {
+                    filePool[name] = null; // ফাইল লোড হয়নি → এরপর থেকে সিন্থ
+                });
+                el.load();
+                els.push(el);
+            }
+            filePool[name] = { els, next: 0 };
+        } catch {
+            filePool[name] = null;
+        }
+    }
+    return filePool[name];
+};
+
+const playNative = name => {
+    try {
+        const b = typeof window !== "undefined" ? window.SyncNativeNotif : null;
+        if (b && typeof b.playSound === "function") {
+            b.playSound(FILE_SOUNDS[name]);
+            return true;
+        }
+    } catch {
+        // নেটিভ ব্যর্থ হলে পরের ধাপে
+    }
+    return false;
+};
+
+const playFile = (name, onFail) => {
+    const pool = getFilePool(name);
+    if (!pool) return false;
+    try {
+        const el = pool.els[pool.next];
+        pool.next = (pool.next + 1) % pool.els.length;
+        try {
+            el.currentTime = 0;
+        } catch {
+            // ignore
+        }
+        const p = el.play();
+        if (p && p.catch) p.catch(() => onFail());
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+// স্টার্টআপে ফাইলগুলো আগেই নামিয়ে রাখা, যাতে প্রথমবারেই দেরি না হয়
+if (typeof window !== "undefined") {
+    setTimeout(() => {
+        if (!window.SyncNativeNotif || typeof window.SyncNativeNotif.playSound !== "function") {
+            Object.keys(FILE_SOUNDS).forEach(getFilePool);
+        }
+    }, 1500);
+}
+
 export const playSound = name => {
     if (!enabled || !SOUNDS[name]) return;
     const requestedAt = performance.now();
@@ -438,6 +514,14 @@ export const playSound = name => {
     if (lastPlayed[name] && requestedAt - lastPlayed[name] < gap) return;
     lastPlayed[name] = requestedAt;
 
+    if (FILE_SOUNDS[name]) {
+        if (playNative(name)) return;
+        if (playFile(name, () => playSynth(name, requestedAt))) return;
+    }
+    playSynth(name, requestedAt);
+};
+
+const playSynth = (name, requestedAt) => {
     let c = getCtx();
     if (!c) return;
 

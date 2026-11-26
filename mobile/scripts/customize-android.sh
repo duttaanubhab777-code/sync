@@ -228,7 +228,8 @@ JAVA_DIR="$APP/java/com/sync/chat"
 # ---------- নোটিফিকেশন সাউন্ড (res/raw) ----------
 # নাম শুধু lowercase [a-z0-9_]; sounds.js এর notify/done চাইম থেকে রেন্ডার করা
 mkdir -p "$RES/raw"
-for f in sync_notify sync_notice; do
+# ভয়েস রেকর্ডিংয়ের in-app সাউন্ড (SoundPool দিয়ে বাজে, WebView-এর অডিও-মোডের ওপর নির্ভর করে না)
+for f in sync_notify sync_notice rec_start rec_pause rec_play rec_delete; do
     if [ -f "assets/sounds/$f.ogg" ]; then
         cp -f "assets/sounds/$f.ogg" "$RES/raw/$f.ogg"
     else
@@ -272,6 +273,7 @@ public class MainActivity extends BridgeActivity {
         captureNotificationIntent(getIntent());
         super.onCreate(savedInstanceState);
         registerSyncBackHandler();
+        initSyncSounds();
 
         try {
             if (this.bridge != null && this.bridge.getWebView() != null) {
@@ -279,6 +281,52 @@ public class MainActivity extends BridgeActivity {
                 webView.addJavascriptInterface(new SyncNativeNotifBridge(), "SyncNativeNotif");
             }
         } catch (Exception ignored) {
+        }
+    }
+
+    // ---- ভয়েস রেকর্ডিংয়ের সাউন্ড (start/pause/play/delete) ----
+    // WebView-এর Web Audio/<audio> মাইক চালু থাকলে কেটে যায় বা দেরিতে বাজে। নোটিফিকেশনের মতোই
+    // নেটিভ SoundPool-এ বাজালে মাইক চালু থাকলেও সাউন্ড সঙ্গে সঙ্গে ও প্রতিবার বাজে।
+    private static android.media.SoundPool syncSoundPool;
+    private static final java.util.Map<String, Integer> syncSoundIds = new java.util.HashMap<>();
+    private static final java.util.Set<Integer> syncSoundReady =
+        java.util.Collections.synchronizedSet(new java.util.HashSet<Integer>());
+
+    private void initSyncSounds() {
+        try {
+            if (syncSoundPool != null) return;
+            android.media.AudioAttributes attrs = new android.media.AudioAttributes.Builder()
+                .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build();
+            android.media.SoundPool pool = new android.media.SoundPool.Builder()
+                .setMaxStreams(4)
+                .setAudioAttributes(attrs)
+                .build();
+            pool.setOnLoadCompleteListener(new android.media.SoundPool.OnLoadCompleteListener() {
+                @Override
+                public void onLoadComplete(android.media.SoundPool sp, int sampleId, int status) {
+                    if (status == 0) syncSoundReady.add(sampleId);
+                }
+            });
+            String[] names = {"rec_start", "rec_pause", "rec_play", "rec_delete"};
+            for (String n : names) {
+                int resId = getResources().getIdentifier(n, "raw", getPackageName());
+                if (resId != 0) syncSoundIds.put(n, pool.load(this, resId, 1));
+            }
+            syncSoundPool = pool;
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static boolean playSyncSound(String name) {
+        try {
+            android.media.SoundPool pool = syncSoundPool;
+            Integer id = name != null ? syncSoundIds.get(name) : null;
+            if (pool == null || id == null || !syncSoundReady.contains(id)) return false;
+            return pool.play(id, 1f, 1f, 1, 0, 1f) != 0;
+        } catch (Exception e) {
+            return false;
         }
     }
 
@@ -460,6 +508,12 @@ public class MainActivity extends BridgeActivity {
         @JavascriptInterface
         public void setBadge(int count) {
             BadgeHelper.set(MainActivity.this, count);
+        }
+
+        // ভয়েস রেকর্ডিংয়ের সাউন্ড: rec_start / rec_pause / rec_play / rec_delete (সফল হলে true)
+        @JavascriptInterface
+        public boolean playSound(String name) {
+            return playSyncSound(name);
         }
 
         @JavascriptInterface
