@@ -1,6 +1,7 @@
 import React from "react";
 import { Megaphone } from "lucide-react";
 import VerifiedBadge from "../VerifiedBadge.jsx";
+import LinkifiedText from "./LinkifiedText.jsx";
 
 /**
  * অ্যাডমিন প্যানেল থেকে অফিশিয়াল Sync অ্যাকাউন্ট দিয়ে পাঠানো ব্রডকাস্ট অ্যানাউন্সমেন্ট কার্ড
@@ -32,8 +33,14 @@ export default function BroadcastCard({ card }) {
                     {tag}
                 </span>
             </div>
-            <h4 className="sync-broadcast-title">{title}</h4>
-            {body && <p className="sync-broadcast-body">{body}</p>}
+            <h4 className="sync-broadcast-title">
+                <LinkifiedText text={title} />
+            </h4>
+            {body && (
+                <p className="sync-broadcast-body">
+                    <LinkifiedText text={body} />
+                </p>
+            )}
         </div>
     );
 }

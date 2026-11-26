@@ -703,3 +703,18 @@
 @media (prefers-reduced-motion:reduce) {
     .sync-poll-opt,.sync-poll-bar,.sync-poll-trigger { transition:none !important; }
 }
+
+/* ---- Broadcast কার্ডের ভেতরের লিংক: ক্লিকযোগ্য, টাচে সহজে ধরা যায় ---- */
+.sync-broadcast-body .sync-broadcast-link,
+.sync-broadcast-title .sync-broadcast-link {
+    position: relative;
+    z-index: 1;
+    color: #7dd3fc;
+    font-weight: 700;
+    cursor: pointer;
+    word-break: break-all;
+    -webkit-tap-highlight-color: rgba(56, 189, 248, 0.25);
+    -webkit-touch-callout: default;
+    touch-action: manipulation;
+}
+.sync-broadcast-body .sync-broadcast-link:active { color: #bae6fd; }
