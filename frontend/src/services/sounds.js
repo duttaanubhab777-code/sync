@@ -466,6 +466,33 @@ const getFilePool = name => {
     return filePool[name];
 };
 
+// এক সময়ে একটাই রেকর্ডিং-সাউন্ড: নতুনটা বাজলে আগেরটা (যেমন শেষ না-হওয়া start সাউন্ড) থামে,
+// তাই দ্রুত start→delete চাপলে সাউন্ড জট পাকায় না।
+const stopFileSounds = except => {
+    Object.keys(filePool).forEach(k => {
+        if (k === except || !filePool[k]) return;
+        filePool[k].els.forEach(el => {
+            try {
+                if (!el.paused) el.pause();
+            } catch {
+                // ignore
+            }
+        });
+    });
+};
+
+export const hasNativeSound = () => {
+    try {
+        return Boolean(
+            typeof window !== "undefined" &&
+            window.SyncNativeNotif &&
+            typeof window.SyncNativeNotif.playSound === "function"
+        );
+    } catch {
+        return false;
+    }
+};
+
 const playNative = name => {
     try {
         const b = typeof window !== "undefined" ? window.SyncNativeNotif : null;
@@ -482,6 +509,7 @@ const playNative = name => {
 const playFile = (name, onFail) => {
     const pool = getFilePool(name);
     if (!pool) return false;
+    stopFileSounds(name);
     try {
         const el = pool.els[pool.next];
         pool.next = (pool.next + 1) % pool.els.length;

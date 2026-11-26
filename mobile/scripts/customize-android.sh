@@ -319,12 +319,18 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    private static volatile int syncLastStream = 0;
+
     private static boolean playSyncSound(String name) {
         try {
             android.media.SoundPool pool = syncSoundPool;
             Integer id = name != null ? syncSoundIds.get(name) : null;
             if (pool == null || id == null || !syncSoundReady.contains(id)) return false;
-            return pool.play(id, 1f, 1f, 1, 0, 1f) != 0;
+            // আগের রেকর্ডিং-সাউন্ড (যেমন শেষ না-হওয়া start) থামিয়ে নতুনটা বাজে
+            if (syncLastStream != 0) pool.stop(syncLastStream);
+            int stream = pool.play(id, 1f, 1f, 1, 0, 1f);
+            syncLastStream = stream;
+            return stream != 0;
         } catch (Exception e) {
             return false;
         }

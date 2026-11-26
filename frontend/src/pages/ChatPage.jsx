@@ -79,7 +79,7 @@ import {
 import { enqueueMediaMessage } from "../services/outbox.js";
 import UploadBubbleOverlay from "../components/chat/UploadBubbleOverlay.jsx";
 import CompressingCard from "../components/chat/CompressingCard.jsx";
-import { playSound, getSharedAudioContext, resumeAudio } from "../services/sounds.js";
+import { playSound, hasNativeSound, getSharedAudioContext, resumeAudio } from "../services/sounds.js";
 import MoreMenu from "../components/MoreMenu.jsx";
 import QrCodeModal from "../components/QrCodeModal.jsx";
 import ChatFab from "../components/ChatFab.jsx";
@@ -852,7 +852,10 @@ export default function ChatPage() {
         playSound("recStart");
         // মাইক খুললেই মোবাইলের অডিও-মোড বদলে যায় এবং চলতি সাউন্ড কেটে যায়।
         // তাই সাউন্ডটা শেষ হতে দিয়ে তারপর মাইক খোলা হয় (সাউন্ডও রেকর্ডিংয়ে ঢোকে না)
-        await new Promise(resolve => setTimeout(resolve, 230));
+        // (নেটিভ APK সাউন্ড মাইকের ওপর নির্ভর করে না, তাই সেখানে অপেক্ষা নেই — UI সঙ্গে সঙ্গে দেখায়)
+        if (!hasNativeSound()) {
+            await new Promise(resolve => setTimeout(resolve, 230));
+        }
 
         setComposerError("");
         setShowMicrophoneHelp(false);
@@ -966,10 +969,11 @@ export default function ChatPage() {
         const recorder = mediaRecorderRef.current;
         if (!recorder) return;
         if (recorder.state === "recording") {
+            // সাউন্ড সবার আগে: recorder.pause() ও state আপডেটের ভারী কাজ সাউন্ডকে দেরি করাবে না
+            playSound("recPause");
             recElapsedRef.current += Date.now() - recLastTickRef.current;
             recorder.pause();
             setRecPhase("paused");
-            playSound("recPause");
         } else if (recorder.state === "paused") {
             // সাউন্ড আগে বাজে, তারপর একটু পরে resume — তাই শব্দ রেকর্ডিংয়ে ঢোকে না
             playSound("recPlay");
@@ -985,6 +989,8 @@ export default function ChatPage() {
 
     // Delete: throw the recording away with a short exit animation.
     const discardVoiceRecording = (silent = false) => {
+        // সাউন্ড সবার আগে: recorder.stop() আর মাইক ছাড়তে ফোনে সময় লাগে, তার আগেই শব্দ বাজবে
+        if (!silent) playSound("recDelete");
         const recorder = mediaRecorderRef.current;
         recDiscardRef.current = true;
         audioChunksRef.current = [];
@@ -999,7 +1005,6 @@ export default function ChatPage() {
             return;
         }
         setRecPhase("discarding");
-        playSound("recDelete");
         recDiscardTimerRef.current = setTimeout(() => {
             setRecPhase("idle");
             setRecordingSeconds(0);
