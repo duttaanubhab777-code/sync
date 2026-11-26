@@ -25,7 +25,9 @@ import {
     LogOut,
     Pin,
     BellOff,
-    Forward
+    Forward,
+    ChevronLeft,
+    ChevronRight
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncBrandBar from "../components/SyncBrandBar.jsx";
@@ -40,6 +42,7 @@ import WelcomeCard from "../components/chat/WelcomeCard.jsx";
 import BroadcastCard from "../components/chat/BroadcastCard.jsx";
 import PollCard from "../components/chat/PollCard.jsx";
 import PollIcon from "../components/chat/PollIcon.jsx";
+import VoiceTrash from "../components/chat/VoiceTrash.jsx";
 import CreatePollModal from "../components/chat/CreatePollModal.jsx";
 import ForwardModal from "../components/chat/ForwardModal.jsx";
 import VerifiedBadge from "../components/VerifiedBadge.jsx";
@@ -228,6 +231,11 @@ function ReplySnippet({ target }) {
 
 const VOICE_BAR_COUNT = 40;
 const MIN_VOICE_MS = 800;
+// mic চেপে ধরা (hold-to-record): কত ms ধরলে hold ধরা হবে, আর কতটা swipe করলে কী হবে
+const HOLD_DELAY_MS = 260;
+const HOLD_DELETE_PX = 96; // বামে এতটা টানলে ছাড়লে delete
+const HOLD_PAUSE_PX = 44; // ডানে এতটা টানলেই pause (mic ডান কিনারায় থাকে, তাই কম রাখা)
+const HOLD_SLOP_PX = 14; // hold শুরুর আগে এর বেশি নড়লে hold বাতিল
 
 function formatRecTime(totalSeconds) {
     const m = Math.floor(totalSeconds / 60);
@@ -351,6 +359,24 @@ export default function ChatPage() {
     const [recPhase, setRecPhase] = useState("idle");
     const [recordingSeconds, setRecordingSeconds] = useState(0);
     const isRecording = recPhase !== "idle";
+    // hold-to-record: আঙুল mic-এ থাকা অবস্থায় true; holdArm = বাম swipe-এ delete প্রস্তুত কিনা
+    const [holdMode, setHoldMode] = useState(false);
+    const [holdArm, setHoldArm] = useState(null);
+    const [pausedFromHold, setPausedFromHold] = useState(false);
+    const holdRef = useRef({
+        active: false,
+        pointerId: null,
+        startX: 0,
+        startY: 0,
+        dx: 0,
+        started: false,
+        released: false,
+        done: false,
+        timer: 0
+    });
+    const composerBarRef = useRef(null);
+    const recStartingRef = useRef(false);
+    const voiceActionsRef = useRef({});
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
     const recordTimerRef = useRef(null);
@@ -804,18 +830,24 @@ export default function ChatPage() {
     };
 
     const startVoiceRecording = async () => {
-        if (recPhase !== "idle") return;
+        if (recPhase !== "idle") return false;
         // getUserMedia requires HTTPS (or localhost) and a user gesture.
         if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
             setComposerError(
                 "Microphone access requires a secure HTTPS connection. Open Sync using its HTTPS address and try again."
             );
-            return;
+            return false;
         }
         if (typeof window.MediaRecorder === "undefined") {
             setComposerError("Voice recording is not supported by this browser.");
-            return;
+            return false;
         }
+
+        // টাচ + ক্লিক একসাথে এলেও দুটো রেকর্ডার যেন না চলে
+        if (recStartingRef.current) return false;
+        recStartingRef.current = true;
+        // রেকর্ডার চালুর আগেই বাজে, যাতে শব্দটা রেকর্ডিংয়ে না ঢোকে
+        playSound("recStart");
 
         setComposerError("");
         setShowMicrophoneHelp(false);
@@ -896,7 +928,10 @@ export default function ChatPage() {
                 }
                 recLastTickRef.current = now;
             }, 200);
+            recStartingRef.current = false;
+            return true;
         } catch (err) {
+            recStartingRef.current = false;
             stream?.getTracks().forEach(track => track.stop());
             teardownRecordingResources();
             const messages = {
@@ -918,6 +953,7 @@ export default function ChatPage() {
                     "Could not access the microphone. Check your browser permissions and try again."
                 );
             }
+            return false;
         }
     };
 
@@ -928,11 +964,17 @@ export default function ChatPage() {
             recElapsedRef.current += Date.now() - recLastTickRef.current;
             recorder.pause();
             setRecPhase("paused");
+            playSound("recPause");
         } else if (recorder.state === "paused") {
-            recLastTickRef.current = Date.now();
-            recorder.resume();
-            recAudioCtxRef.current?.resume?.().catch(() => {});
-            setRecPhase("recording");
+            // সাউন্ড আগে বাজে, তারপর একটু পরে resume — তাই শব্দ রেকর্ডিংয়ে ঢোকে না
+            playSound("recPlay");
+            setTimeout(() => {
+                if (recorder.state !== "paused") return;
+                recLastTickRef.current = Date.now();
+                recorder.resume();
+                recAudioCtxRef.current?.resume?.().catch(() => {});
+                setRecPhase("recording");
+            }, 200);
         }
     };
 
@@ -952,10 +994,11 @@ export default function ChatPage() {
             return;
         }
         setRecPhase("discarding");
+        playSound("recDelete");
         recDiscardTimerRef.current = setTimeout(() => {
             setRecPhase("idle");
             setRecordingSeconds(0);
-        }, 380);
+        }, 460);
     };
 
     // Send: only now the voice message is uploaded and delivered.
@@ -973,6 +1016,186 @@ export default function ChatPage() {
         recDiscardRef.current = false;
         recorder.stop();
     };
+
+    // ---- Hold-to-record: mic চেপে ধরলে রেকর্ড · ছাড়লে send · বামে swipe = delete · ডানে swipe = pause ----
+    // (ছোট টাচ/ক্লিক আগের মতই locked রেকর্ডিং চালু করে: delete · pause/play · send বাটনসহ)
+    voiceActionsRef.current = {
+        start: startVoiceRecording,
+        send: sendVoiceRecording,
+        discard: discardVoiceRecording,
+        togglePause: togglePauseVoiceRecording
+    };
+
+    const buzz = ms => {
+        try {
+            navigator.vibrate?.(ms);
+        } catch {
+            /* সব ডিভাইসে নেই */
+        }
+    };
+
+    // swipe-এর দূরত্ব CSS variable-এ বসে (re-render ছাড়া, তাই লাগে না)
+    const setHoldVisual = dx => {
+        const bar = composerBarRef.current;
+        if (!bar) return;
+        const clamped = Math.max(-150, Math.min(30, dx));
+        bar.style.setProperty("--hold-dx", `${clamped}px`);
+        bar.style.setProperty(
+            "--hold-p",
+            String(Math.min(1, Math.max(0, -dx / HOLD_DELETE_PX)))
+        );
+    };
+
+    const beginHoldRecording = async () => {
+        const h = holdRef.current;
+        h.timer = 0;
+        if (!h.active || h.done) return;
+        h.started = true;
+        h.dx = 0;
+        setHoldVisual(0);
+        setHoldArm(null);
+        setHoldMode(true);
+        buzz(12);
+        const ok = await voiceActionsRef.current.start();
+        if (!ok) {
+            h.active = false;
+            h.done = true;
+            setHoldMode(false);
+            return;
+        }
+        if (h.released || !h.active) {
+            // মাইক চালু হওয়ার আগেই (যেমন পারমিশন প্রম্পটে) আঙুল উঠে গেছে → locked রেকর্ডিং হয়ে চলবে
+            h.done = true;
+            setHoldMode(false);
+        }
+    };
+
+    const handleMicPointerDown = e => {
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        if (recPhase !== "idle" || uploadingMedia) return;
+        const h = holdRef.current;
+        clearTimeout(h.timer);
+        Object.assign(h, {
+            active: true,
+            pointerId: e.pointerId,
+            startX: e.clientX,
+            startY: e.clientY,
+            dx: 0,
+            started: false,
+            released: false,
+            done: false
+        });
+        try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+            /* ignore */
+        }
+        h.timer = setTimeout(beginHoldRecording, HOLD_DELAY_MS);
+    };
+
+    const handleMicPointerMove = e => {
+        const h = holdRef.current;
+        if (!h.active || e.pointerId !== h.pointerId) return;
+        const dx = e.clientX - h.startX;
+
+        if (!h.started) {
+            // hold শুরুর আগেই বেশি নড়লে এটা hold নয়, বাতিল
+            if (
+                Math.abs(dx) > HOLD_SLOP_PX ||
+                Math.abs(e.clientY - h.startY) > HOLD_SLOP_PX
+            ) {
+                clearTimeout(h.timer);
+                h.timer = 0;
+                h.active = false;
+            }
+            return;
+        }
+        if (h.done) return;
+
+        h.dx = dx;
+        setHoldVisual(dx);
+
+        // ডানে swipe → সাথে সাথে pause, তারপর locked প্যানেল (delete · play · send)
+        if (dx >= HOLD_PAUSE_PX) {
+            if (mediaRecorderRef.current?.state === "recording") {
+                h.done = true;
+                buzz(14);
+                voiceActionsRef.current.togglePause();
+                setPausedFromHold(true);
+                setHoldMode(false);
+                setHoldArm(null);
+                setHoldVisual(0);
+            }
+            return;
+        }
+
+        // বামে যথেষ্ট টানলে delete "প্রস্তুত" (ছাড়লে মুছে যাবে), ফিরিয়ে আনলে বাতিল
+        const arm = dx <= -HOLD_DELETE_PX ? "delete" : null;
+        setHoldArm(prev => {
+            if (prev !== arm && arm) buzz(10);
+            return prev === arm ? prev : arm;
+        });
+    };
+
+    const handleMicPointerUp = e => {
+        const h = holdRef.current;
+        if (!h.active || e.pointerId !== h.pointerId) return;
+        clearTimeout(h.timer);
+        h.timer = 0;
+        h.active = false;
+        h.released = true;
+        try {
+            e.currentTarget.releasePointerCapture?.(e.pointerId);
+        } catch {
+            /* ignore */
+        }
+
+        // hold হওয়ার আগেই ছেড়ে দিয়েছে = সাধারণ টাচ → locked রেকর্ডিং
+        if (!h.started) {
+            voiceActionsRef.current.start();
+            return;
+        }
+        if (h.done) return;
+        const rec = mediaRecorderRef.current;
+        // মাইক এখনও চালু হচ্ছে: beginHoldRecording নিজে locked রেকর্ডিংয়ে পাল্টে দেবে
+        if (!rec || rec.state === "inactive") return;
+
+        h.done = true;
+        if (h.dx <= -HOLD_DELETE_PX) {
+            voiceActionsRef.current.discard();
+        } else {
+            voiceActionsRef.current.send();
+        }
+    };
+
+    // ব্রাউজার/সিস্টেম টাচ কেড়ে নিলে রেকর্ডিং হারাবে না, locked রেকর্ডিং হয়ে চলবে
+    const handleMicPointerCancel = e => {
+        const h = holdRef.current;
+        if (!h.active || e.pointerId !== h.pointerId) return;
+        clearTimeout(h.timer);
+        h.timer = 0;
+        h.active = false;
+        h.released = true;
+        if (h.started && !h.done) {
+            h.done = true;
+            setHoldMode(false);
+            setHoldArm(null);
+            setHoldVisual(0);
+        }
+    };
+
+    // রেকর্ডিং শেষ (send/delete) হলে hold-সংক্রান্ত সব কিছু পরিষ্কার
+    useEffect(() => {
+        if (recPhase !== "idle") return;
+        setHoldMode(false);
+        setHoldArm(null);
+        setPausedFromHold(false);
+        const bar = composerBarRef.current;
+        bar?.style.removeProperty("--hold-dx");
+        bar?.style.removeProperty("--hold-p");
+    }, [recPhase]);
+
+    useEffect(() => () => clearTimeout(holdRef.current.timer), []);
 
     // Leaving the chat (or switching conversation) while recording cancels it.
     useEffect(() => {
@@ -2258,7 +2481,12 @@ export default function ChatPage() {
                                 )
                             ) : (
                                 <form
-                                    className="sync-composer-bar"
+                                    ref={composerBarRef}
+                                    className={`sync-composer-bar ${
+                                        isRecording && holdMode
+                                            ? "is-holding"
+                                            : ""
+                                    }`}
                                     onSubmit={handleSendText}
                                 >
                                     {recPhase === "idle" && (
@@ -2296,9 +2524,61 @@ export default function ChatPage() {
                                         </>
                                     )}
 
-                                    {isRecording ? (
+                                    {isRecording && holdMode ? (
                                         <div
-                                            className={`sync-voice-rec ${recPhase}`}
+                                            className={`sync-voice-hold ${
+                                                holdArm === "delete"
+                                                    ? "arm-delete"
+                                                    : ""
+                                            } ${
+                                                recPhase === "discarding"
+                                                    ? "discarding"
+                                                    : ""
+                                            }`}
+                                            role="group"
+                                            aria-label="Recording voice message"
+                                        >
+                                            <span className="sync-hold-trash">
+                                                <VoiceTrash
+                                                    size={18}
+                                                    open={
+                                                        holdArm === "delete" ||
+                                                        recPhase === "discarding"
+                                                    }
+                                                    shake={recPhase === "discarding"}
+                                                />
+                                            </span>
+                                            <span className="rec-dot" />
+                                            <span
+                                                className="sync-voice-time"
+                                                aria-live="off"
+                                            >
+                                                {formatRecTime(recordingSeconds)}
+                                            </span>
+                                            <div
+                                                className="sync-hold-hint"
+                                                aria-hidden="true"
+                                            >
+                                                <ChevronLeft size={16} />
+                                                <span>
+                                                    {holdArm === "delete"
+                                                        ? "Release to delete"
+                                                        : "Slide to delete"}
+                                                </span>
+                                            </div>
+                                            <span
+                                                className="sync-hold-pause-hint"
+                                                aria-hidden="true"
+                                            >
+                                                <Pause size={12} />
+                                                <ChevronRight size={14} />
+                                            </span>
+                                        </div>
+                                    ) : isRecording ? (
+                                        <div
+                                            className={`sync-voice-rec ${recPhase} ${
+                                                pausedFromHold ? "from-hold" : ""
+                                            }`}
                                             role="group"
                                             aria-label="Voice message recorder"
                                         >
@@ -2310,7 +2590,10 @@ export default function ChatPage() {
                                                 onClick={() => discardVoiceRecording()}
                                                 disabled={recPhase === "discarding"}
                                             >
-                                                <Trash2 size={19} />
+                                                <VoiceTrash
+                                                    size={20}
+                                                    open={recPhase === "discarding"}
+                                                />
                                             </button>
 
                                             <div className="sync-voice-panel">
@@ -2403,13 +2686,36 @@ export default function ChatPage() {
                                         />
                                     )}
 
-                                    {!isRecording &&
+                                    {(!isRecording || holdMode) &&
                                         (!draftText.trim() ? (
                                             <button
                                                 type="button"
-                                                className="sync-icon-btn"
-                                                title="Record Voice Note"
-                                                onClick={startVoiceRecording}
+                                                className={`sync-icon-btn sync-mic-btn ${
+                                                    isRecording && holdMode
+                                                        ? "is-holding"
+                                                        : ""
+                                                } ${
+                                                    holdArm === "delete"
+                                                        ? "arm-delete"
+                                                        : ""
+                                                } ${
+                                                    isRecording &&
+                                                    holdMode &&
+                                                    recPhase === "discarding"
+                                                        ? "is-discarding"
+                                                        : ""
+                                                }`}
+                                                title="Tap to record · hold to record and release to send"
+                                                aria-label="Record voice message"
+                                                onPointerDown={handleMicPointerDown}
+                                                onPointerMove={handleMicPointerMove}
+                                                onPointerUp={handleMicPointerUp}
+                                                onPointerCancel={handleMicPointerCancel}
+                                                onContextMenu={e => e.preventDefault()}
+                                                onClick={e => {
+                                                    // কিবোর্ড (Enter/Space) থেকে এলে detail === 0; টাচ/মাউস pointer হ্যান্ডলারে সামলানো
+                                                    if (e.detail === 0) startVoiceRecording();
+                                                }}
                                                 disabled={uploadingMedia}
                                             >
                                                 <Mic size={20} />
