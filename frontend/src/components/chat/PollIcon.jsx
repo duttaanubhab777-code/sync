@@ -1,6 +1,9 @@
 import React from "react";
 
-/** Lightweight inline SVG poll mark shared by the composer and poll surfaces. */
+/**
+ * Static ballot icon used for poll actions.
+ * Kept animation-free so the chat composer stays lightweight.
+ */
 export default function PollIcon({ size = 20, className = "" }) {
     return (
         <svg
@@ -13,8 +16,9 @@ export default function PollIcon({ size = 20, className = "" }) {
             aria-hidden="true"
             focusable="false"
         >
-            <path className="sync-poll-icon-track" d="M4 19V13M10 19V5M16 19V9M22 19V3" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-            <path d="M2 21H22" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity=".45" />
+            <rect x="4" y="3.5" width="16" height="17" rx="3" stroke="currentColor" strokeWidth="1.8" />
+            <path d="M8 8H10.5M13 8H16M8 12H10.5M13 12H16M8 16H10.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            <path d="M14 16.2L15.5 17.7L18.5 14.7" stroke="#35E69A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
     );
 }
