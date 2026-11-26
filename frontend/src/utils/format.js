@@ -64,7 +64,7 @@ export const formatLastSeen = dateInput => {
     if (!dateInput) return "Offline";
     const d = new Date(dateInput);
     if (Number.isNaN(d.getTime())) return "Offline";
-    return `last seen ${formatChatListTime(d)} at ${formatTime(d)}`;
+    // Use a calendar-day label here; chat-list formatting returns a time for today.\n    return `last seen ${formatDateDivider(d)} at ${formatTime(d)}`;
 };
 
 export const formatBytes = bytes => {
