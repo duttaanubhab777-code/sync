@@ -87,7 +87,7 @@ export const generateClientMsgId = () => {
 
 export const getInitials = name => {
     if (!name) return "?";
-    const parts = String(name).trim().split(/\\s+/);
+    const parts = String(name).trim().split(/\s+/);
     if (parts.length >= 2) {
         return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
     }
@@ -99,7 +99,7 @@ export const DEFAULT_ABOUT = "Hey there! I'm using Sync";
 // পুরনো ডিফল্ট bio-তে কিবোর্ড ইমোজি ছিল, UI-তে সেটা পরিষ্কার টেক্সট হিসেবে দেখাই
 export const cleanAbout = text => {
     const value = String(text || "").trim();
-    if (!value || /^hello\\s*!?\\s*i am using sync/i.test(value)) {
+    if (!value || /^hello\s*!?\s*i am using sync/i.test(value)) {
         return DEFAULT_ABOUT;
     }
     return value;
