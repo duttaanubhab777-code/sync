@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -6,11 +6,7 @@ import {
     UserPlus,
     Users,
     QrCode,
-    Send,
-    Paperclip,
     Mic,
-    Pause,
-    Play,
     Trash2,
     Info,
     ArrowLeft,
@@ -25,24 +21,19 @@ import {
     LogOut,
     Pin,
     BellOff,
-    Forward,
-    ChevronLeft,
-    ChevronUp
+    Forward
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncBrandBar from "../components/SyncBrandBar.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import MessagePreview from "../components/MessagePreview.jsx";
 import LinkPreviewCard from "../components/LinkPreviewCard.jsx";
-import AttachmentSheet from "../components/chat/AttachmentSheet.jsx";
 import LocationCard from "../components/chat/LocationCard.jsx";
 import ContactCard from "../components/chat/ContactCard.jsx";
 import DocumentCard from "../components/chat/DocumentCard.jsx";
 import WelcomeCard from "../components/chat/WelcomeCard.jsx";
 import BroadcastCard from "../components/chat/BroadcastCard.jsx";
 import PollCard from "../components/chat/PollCard.jsx";
-import PollIcon from "../components/chat/PollIcon.jsx";
-import VoiceTrash from "../components/chat/VoiceTrash.jsx";
 import CreatePollModal from "../components/chat/CreatePollModal.jsx";
 import ForwardModal from "../components/chat/ForwardModal.jsx";
 import VerifiedBadge from "../components/VerifiedBadge.jsx";
@@ -79,7 +70,6 @@ import {
 import { enqueueMediaMessage } from "../services/outbox.js";
 import UploadBubbleOverlay from "../components/chat/UploadBubbleOverlay.jsx";
 import CompressingCard from "../components/chat/CompressingCard.jsx";
-import { playSound, getSharedAudioContext, resumeAudio } from "../services/sounds.js";
 import MoreMenu from "../components/MoreMenu.jsx";
 import QrCodeModal from "../components/QrCodeModal.jsx";
 import ChatFab from "../components/ChatFab.jsx";
@@ -95,6 +85,7 @@ import {
     generateClientMsgId
 } from "../utils/format.js";
 import { LocalImg } from "../components/LocalImg.jsx";
+import ChatComposer from "../components/chat/ChatComposer.jsx";
 
 const MESSAGE_URL_REGEX = /https?:\/\/[^\s<>"']+/gi;
 
@@ -229,19 +220,402 @@ function ReplySnippet({ target }) {
     );
 }
 
-const VOICE_BAR_COUNT = 40;
-const MIN_VOICE_MS = 800;
-// mic চেপে ধরা (hold-to-record): কত ms ধরলে hold ধরা হবে, আর কতটা swipe করলে কী হবে
-const HOLD_DELAY_MS = 260;
-const HOLD_DELETE_PX = 96; // বামে এতটা টানলে ছাড়লে delete
-const HOLD_PAUSE_UP_PX = 56; // উপরে এতটা টানলেই pause (mic ডান কিনারায় থাকে, তাই ডানে নয়, উপরে)
-const HOLD_SLOP_PX = 14; // hold শুরুর আগে এর বেশি নড়লে hold বাতিল
+// মেসেজ লিস্টের একেকটা সারি। memo থাকায় রেকর্ডিং/টাইপিংয়ের state বদলালে (ChatPage re-render হলেও)
+// সারি আবার আঁকা হয় না — শুধু নিজের msg বা দরকারি prop বদলালে হয়।
+const EMPTY_MEMBERS = [];
 
-function formatRecTime(totalSeconds) {
-    const m = Math.floor(totalSeconds / 60);
-    const sec = totalSeconds % 60;
-    return `${m}:${String(sec).padStart(2, "0")}`;
-}
+const MessageRow = React.memo(function MessageRow({
+    msg,
+    prevCreatedAt,
+    myId,
+    isGroup,
+    members,
+    highlighted,
+    welcomeName,
+    onReply,
+    onLongPress,
+    onOpenReactions,
+    onOpenLightbox,
+    registerRow
+}) {
+    const senderId = String(msg.sender?._id ?? msg.sender);
+    const isMine = senderId === myId;
+    const curDate = formatDateDivider(msg.createdAt);
+    const prevDate = prevCreatedAt ? formatDateDivider(prevCreatedAt) : "";
+    const showDateDivider = curDate && curDate !== prevDate;
+
+    return (
+        <>
+            {showDateDivider && (
+                <div className="sync-date-divider">
+                    <span>{curDate}</span>
+                </div>
+            )}
+
+            <div
+                ref={el => registerRow(msg._id, el)}
+            >
+            <MessageGesture
+                className={`sync-msg-row ${
+                    isMine ? "outgoing" : "incoming"
+                } ${
+                    highlighted
+                        ? "is-highlighted"
+                        : ""
+                }`}
+                disabled={Boolean(
+                    msg.deletedForEveryone ||
+                        msg.optimistic ||
+                        msg.failed ||
+                        !msg._id
+                )}
+                onReply={() => onReply(msg)}
+                onLongPress={() => onLongPress(msg)}
+            >
+                <div
+                    className={`sync-msg-bubble ${
+                        msg.deletedForEveryone
+                            ? "deleted"
+                            : ""
+                    } ${
+                        !msg.deletedForEveryone &&
+                        msg.card?.kind === "welcome"
+                            ? "has-welcome-card"
+                            : !msg.deletedForEveryone &&
+                                msg.card?.kind ===
+                                    "broadcast"
+                              ? "has-broadcast-card"
+                              : ""
+                    }`}
+                >
+                    {msg.forwarded &&
+                        !msg.deletedForEveryone && (
+                            <div className="sync-msg-forwarded">
+                                <Forward size={12} />
+                                <span>Forwarded</span>
+                            </div>
+                        )}
+                    {isGroup &&
+                        !isMine && (
+                            <div className="sync-msg-sender-name sync-name-with-badge">
+                                <span className="sync-name-text">
+                                    {msg.sender
+                                        ?.fullName ||
+                                        msg.sender
+                                            ?.username ||
+                                        "Member"}
+                                </span>
+                                {msg.sender
+                                    ?.isOfficial && (
+                                    <VerifiedBadge
+                                        variant="official"
+                                        size={13}
+                                    />
+                                )}
+                            </div>
+                        )}
+
+                    {msg.storyReply &&
+                        !msg.deletedForEveryone && (
+                            <div className="sync-msg-story-quote">
+                                <div
+                                    className="story-thumb"
+                                    style={
+                                        msg
+                                            .storyReply
+                                            .thumbnail
+                                            ? {
+                                                  backgroundImage: `url(${msg.storyReply.thumbnail})`
+                                              }
+                                            : {
+                                                  backgroundColor:
+                                                      msg
+                                                          .storyReply
+                                                          .backgroundColor ||
+                                                      "#0F4C3A"
+                                              }
+                                    }
+                                >
+                                    {!msg
+                                        .storyReply
+                                        .thumbnail &&
+                                        msg
+                                            .storyReply
+                                            .type ===
+                                            "text" &&
+                                        (msg
+                                            .storyReply
+                                            .caption ||
+                                            "")}
+                                </div>
+                                <div className="story-meta">
+                                    <span className="story-label">
+                                        {isMine
+                                            ? "You replied to a story"
+                                            : "Replied to your story"}
+                                    </span>
+                                    <span className="story-text">
+                                        {msg
+                                            .storyReply
+                                            .caption ||
+                                            (msg
+                                                .storyReply
+                                                .type ===
+                                            "video"
+                                                ? "Video story"
+                                                : "Photo story")}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
+                    {msg.replyTo &&
+                        !msg.deletedForEveryone && (
+                            <div className="sync-msg-reply-quote">
+                                <span className="reply-bar" />
+                                <div className="reply-content">
+                                    <p>
+                                        <ReplySnippet
+                                            target={
+                                                msg.replyTo
+                                            }
+                                        />
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                    {!msg.deletedForEveryone &&
+                        msg.type === "image" &&
+                        msg.media?.url && (
+                            <div className="sync-msg-media-img">
+                                <LocalImg
+                                    url={
+                                        msg.media
+                                            .url
+                                    }
+                                    alt="attachment"
+                                    loading="lazy"
+                                    onClick={() =>
+                                        onOpenLightbox(msg.media.url)
+                                    }
+                                />
+                            </div>
+                        )}
+
+                    {!msg.deletedForEveryone &&
+                        msg.type === "video" &&
+                        msg.media?.url && (
+                            <VideoPlayer
+                                src={msg.media.url}
+                                duration={
+                                    msg.media
+                                        .duration
+                                }
+                                width={
+                                    msg.media.width
+                                }
+                                height={
+                                    msg.media.height
+                                }
+                            />
+                        )}
+
+                    {!msg.deletedForEveryone &&
+                        msg.type === "audio" &&
+                        msg.media?.url && (
+                            <VoicePlayer
+                                src={msg.media.url}
+                                duration={
+                                    msg.media
+                                        .duration
+                                }
+                            />
+                        )}
+
+                    {!msg.deletedForEveryone &&
+                        msg.type === "file" &&
+                        msg.media?.url && (
+                            <DocumentCard
+                                media={msg.media}
+                            />
+                        )}
+
+                    {!msg.deletedForEveryone &&
+                        msg.type === "location" &&
+                        msg.location && (
+                            <LocationCard
+                                location={
+                                    msg.location
+                                }
+                            />
+                        )}
+
+                    {!msg.deletedForEveryone &&
+                        msg.type === "contact" &&
+                        msg.contact && (
+                            <ContactCard
+                                contact={
+                                    msg.contact
+                                }
+                            />
+                        )}
+
+                    {!msg.deletedForEveryone &&
+                    msg.type === "poll" &&
+                    msg.poll ? (
+                        <PollCard
+                            poll={msg.poll}
+                            myId={myId}
+                            members={members}
+                            disabled={Boolean(
+                                msg.optimistic ||
+                                    msg.failed
+                            )}
+                            onVote={optionId =>
+                                voteSocketPoll(
+                                    msg._id,
+                                    optionId
+                                )
+                            }
+                        />
+                    ) : !msg.deletedForEveryone &&
+                      msg.card?.kind === "welcome" ? (
+                        <WelcomeCard
+                            name={
+                                msg.card?.name || welcomeName
+                            }
+                        />
+                    ) : !msg.deletedForEveryone &&
+                      msg.card?.kind ===
+                          "broadcast" ? (
+                        <BroadcastCard
+                            card={msg.card}
+                        />
+                    ) : (
+                        (msg.text ||
+                            msg.deletedForEveryone) && (
+                            <div className="sync-msg-text">
+                                {msg.deletedForEveryone
+                                    ? <MessagePreview deleted />
+                                    : <MessageLinkContent text={msg.text} />}
+                            </div>
+                        )
+                    )}
+
+                    {msg.uploadLocal &&
+                        (msg.optimistic || msg.failed) && (
+                            <UploadBubbleOverlay
+                                clientMsgId={msg.clientMsgId}
+                            />
+                        )}
+
+                    {!msg.deletedForEveryone &&
+                        Array.isArray(
+                            msg.reactions
+                        ) &&
+                        msg.reactions.length > 0 && (() => {
+                            const counts = new Map();
+                            for (const r of msg.reactions) {
+                                const cur = counts.get(
+                                    r.emoji
+                                ) || {
+                                    count: 0,
+                                    mine: false
+                                };
+                                cur.count += 1;
+                                if (
+                                    String(
+                                        r.user
+                                            ?._id ??
+                                            r.user
+                                    ) === myId
+                                ) {
+                                    cur.mine = true;
+                                }
+                                counts.set(
+                                    r.emoji,
+                                    cur
+                                );
+                            }
+                            return (
+                                <div className="sync-msg-reactions">
+                                    {[
+                                        ...counts.entries()
+                                    ].map(
+                                        ([
+                                            emoji,
+                                            info
+                                        ]) => (
+                                            <button
+                                                key={
+                                                    emoji
+                                                }
+                                                type="button"
+                                                className={`sync-reaction-pill ${
+                                                    info.mine
+                                                        ? "mine"
+                                                        : ""
+                                                }`}
+                                                title="See who reacted"
+                                                onClick={e => {
+                                                    e.stopPropagation();
+                                                    onOpenReactions(msg);
+                                                }}
+                                            >
+                                                <span>
+                                                    {
+                                                        emoji
+                                                    }
+                                                </span>
+                                                {info.count >
+                                                    1 && (
+                                                    <span>
+                                                        {
+                                                            info.count
+                                                        }
+                                                    </span>
+                                                )}
+                                            </button>
+                                        )
+                                    )}
+                                </div>
+                            );
+                        })()}
+
+                    <div className="sync-msg-meta">
+                        {msg.editedAt &&
+                            !msg.deletedForEveryone && (
+                                <span className="sync-msg-edited">
+                                    Edited
+                                </span>
+                            )}
+                        <span className="sync-msg-time">
+                            {formatTime(
+                                msg.createdAt
+                            )}
+                        </span>
+                        {isMine &&
+                            !msg.deletedForEveryone && (
+                                <StatusTick
+                                    status={
+                                        msg.status
+                                    }
+                                    optimistic={
+                                        msg.optimistic
+                                    }
+                                    failed={
+                                        msg.failed
+                                    }
+                                />
+                            )}
+                    </div>
+                </div>
+            </MessageGesture>
+            </div>
+        </>
+    );
+});
 
 export default function ChatPage() {
     const { conversationId } = useParams();
@@ -280,7 +654,6 @@ export default function ChatPage() {
     const [showInfoDrawer, setShowInfoDrawer] = useState(false);
 
     const [draftText, setDraftText] = useState("");
-    const uploadingMedia = false; // আপলোড এখন composer আটকায় না: ইউজার লিখতে/পাঠাতে থাকতে পারে
     const convListRef = useRef(null);
     const { hasUpdate } = useAppUpdates({ autoLoad: isAndroidApp });
     const composerInputRef = useRef(null);
@@ -306,6 +679,34 @@ export default function ChatPage() {
         setHighlightedMsgId(null);
     }, [activeConversationId]);
     const [composerError, setComposerError] = useState("");
+
+    // MessageRow (React.memo) এর callback-গুলো stable রাখা হয়েছে, নইলে memo কাজ করবে না
+    const handleRowReply = useCallback(
+        msg => {
+            dispatch(
+                setReplyTo({
+                    conversationId: activeConversationId,
+                    message: msg
+                })
+            );
+            composerInputRef.current?.focus();
+        },
+        [dispatch, activeConversationId]
+    );
+    const handleRowLongPress = useCallback(msg => {
+        setSheetView("menu");
+        setSheetMsg(msg);
+    }, []);
+    const handleRowOpenReactions = useCallback(msg => {
+        setSheetView("reactions");
+        setSheetMsg(msg);
+    }, []);
+    const registerMsgRow = useCallback((id, el) => {
+        if (!id) return;
+        const key = String(id);
+        if (el) msgRowRefs.current.set(key, el);
+        else msgRowRefs.current.delete(key);
+    }, []);
 
     // চ্যাটের ভেতর মেসেজ সার্চ (debounce 250ms)
     useEffect(() => {
@@ -355,43 +756,8 @@ export default function ChatPage() {
         });
     }, [showInfoDrawer]);
 
-    // recPhase: "idle" | "recording" | "paused" | "discarding"
-    const [recPhase, setRecPhase] = useState("idle");
-    const [recordingSeconds, setRecordingSeconds] = useState(0);
-    const isRecording = recPhase !== "idle";
-    // hold-to-record: আঙুল mic-এ থাকা অবস্থায় true; holdArm = বাম swipe-এ delete প্রস্তুত কিনা
-    const [holdMode, setHoldMode] = useState(false);
-    const [holdArm, setHoldArm] = useState(null);
-    const [pausedFromHold, setPausedFromHold] = useState(false);
-    const holdRef = useRef({
-        active: false,
-        pointerId: null,
-        startX: 0,
-        startY: 0,
-        dx: 0,
-        started: false,
-        released: false,
-        done: false,
-        timer: 0
-    });
-    const composerBarRef = useRef(null);
-    const recStartingRef = useRef(false);
-    const voiceActionsRef = useRef({});
-    const mediaRecorderRef = useRef(null);
-    const audioChunksRef = useRef([]);
-    const recordTimerRef = useRef(null);
-    const recStreamRef = useRef(null);
-    const recAudioCtxRef = useRef(null);
-    const recAnalyserRef = useRef(null);
-    const recRafRef = useRef(0);
-    const recDiscardRef = useRef(false);
-    const recElapsedRef = useRef(0);
-    const recLastTickRef = useRef(0);
-    const recLevelsRef = useRef(new Array(VOICE_BAR_COUNT).fill(0.08));
-    const recBarsRef = useRef([]);
-    const recDiscardTimerRef = useRef(null);
-    const recContextRef = useRef({ conversationId: null, replyingTo: null });
-
+    // ChatComposer-এর ভেতরের রেকর্ডিং চালুর হাতল (mic permission ডায়ালগের "Try Again" এর জন্য)
+    const voiceApiRef = useRef(null);
     const messagesEndRef = useRef(null);
     const typingStopTimerRef = useRef(null);
     const isTypingSentRef = useRef(false);
@@ -533,35 +899,6 @@ export default function ChatPage() {
         }
         return true;
     }, [activeConversation, myId]);
-
-    // লেখা বাড়লে ইনপুট বক্স নিজে থেকে উঁচু হয় (সর্বোচ্চ ~5 লাইন), তারপর ভেতরে স্ক্রল
-    useEffect(() => {
-        const el = composerInputRef.current;
-        if (!el) return;
-        el.style.height = "auto";
-        el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
-    }, [draftText, isRecording, activeConversationId]);
-
-    // ভয়েস রেকর্ড চলার সময় অন্যপাশে "recording audio..." দেখাতে হার্টবিট পাঠানো হয়
-    // (receiver ৪.৫ সেকেন্ড পর নিজে থেকে মুছে ফেলে, তাই ২.৫ সেকেন্ড পরপর নতুন করে পাঠাই)
-    useEffect(() => {
-        if (recPhase !== "recording" || !activeConversationId) return undefined;
-        const convId = activeConversationId;
-        if (typingStopTimerRef.current) {
-            clearTimeout(typingStopTimerRef.current);
-            typingStopTimerRef.current = null;
-        }
-        isTypingSentRef.current = false;
-        emitTypingStart(convId, "recording");
-        const timer = setInterval(
-            () => emitTypingStart(convId, "recording"),
-            2500
-        );
-        return () => {
-            clearInterval(timer);
-            emitTypingStop(convId);
-        };
-    }, [recPhase, activeConversationId]);
 
     const lastTypingEmitRef = useRef(0);
 
@@ -742,498 +1079,6 @@ export default function ChatPage() {
             setComposerError(`Contact error: ${ack.error || "Failed to send"}`);
         }
     };
-
-    // ---- Voice recording: record → (pause / resume) → Send or Delete ----
-
-    const paintWaveform = () => {
-        const bars = recBarsRef.current;
-        const levels = recLevelsRef.current;
-        for (let i = 0; i < bars.length; i += 1) {
-            const el = bars[i];
-            if (el) el.style.transform = `scaleY(${Math.max(0.08, levels[i] || 0.08)})`;
-        }
-    };
-
-    const teardownRecordingResources = () => {
-        cancelAnimationFrame(recRafRef.current);
-        recRafRef.current = 0;
-        clearInterval(recordTimerRef.current);
-        recordTimerRef.current = null;
-        recStreamRef.current?.getTracks().forEach(track => track.stop());
-        recStreamRef.current = null;
-        recAnalyserRef.current = null;
-        // শেয়ার্ড AudioContext বন্ধ করা যাবে না (এটা দিয়েই সাউন্ড বাজে) — শুধু মাইকের source খুলে দেওয়া হয়
-        const source = recAudioCtxRef.current;
-        recAudioCtxRef.current = null;
-        try { source?.disconnect(); } catch { /* already disconnected */ }
-    };
-
-    const startWaveform = stream => {
-        recLevelsRef.current = new Array(VOICE_BAR_COUNT).fill(0.08);
-        paintWaveform();
-        try {
-            // আলাদা AudioContext না বানিয়ে সাউন্ডের শেয়ার্ড context-ই ব্যবহার হয়:
-            // দুটো context একসাথে চললে মোবাইলে রেকর্ডিংয়ের সময় সাউন্ড কেটে যায়/বাজে না
-            const ctx = getSharedAudioContext();
-            if (ctx) {
-                const analyser = ctx.createAnalyser();
-                analyser.fftSize = 512;
-                const source = ctx.createMediaStreamSource(stream);
-                source.connect(analyser);
-                recAudioCtxRef.current = source;
-                recAnalyserRef.current = analyser;
-            }
-        } catch {
-            recAnalyserRef.current = null;
-        }
-
-        const buffer = new Uint8Array(512);
-        let lastPush = 0;
-        const loop = now => {
-            recRafRef.current = requestAnimationFrame(loop);
-            const recorder = mediaRecorderRef.current;
-            if (!recorder || recorder.state !== "recording") return;
-            if (now - lastPush < 70) return;
-            lastPush = now;
-
-            let level;
-            const analyser = recAnalyserRef.current;
-            if (analyser) {
-                analyser.getByteTimeDomainData(buffer);
-                let sum = 0;
-                for (let i = 0; i < buffer.length; i += 1) {
-                    const v = (buffer[i] - 128) / 128;
-                    sum += v * v;
-                }
-                level = Math.min(1, Math.sqrt(sum / buffer.length) * 4.2);
-            } else {
-                level = 0.2 + Math.random() * 0.5;
-            }
-            const levels = recLevelsRef.current;
-            levels.push(level);
-            levels.shift();
-            paintWaveform();
-        };
-        recRafRef.current = requestAnimationFrame(loop);
-    };
-
-    // ভয়েস মেসেজও background queue দিয়ে যায় (নেট গেলে নিজে অপেক্ষা করে আবার পাঠায়)
-    const uploadAndSendVoice = (audioFile, conversationId, replyTarget) => {
-        enqueueMediaMessage({
-            file: audioFile,
-            conversationId,
-            replyToMessage: replyTarget,
-            purpose: "voice",
-            type: "audio"
-        });
-        if (replyTarget) {
-            dispatch(setReplyTo({ conversationId, message: null }));
-        }
-    };
-
-    const startVoiceRecording = async opts => {
-        if (recPhase !== "idle") return false;
-        // getUserMedia requires HTTPS (or localhost) and a user gesture.
-        if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-            setComposerError(
-                "Microphone access requires a secure HTTPS connection. Open Sync using its HTTPS address and try again."
-            );
-            return false;
-        }
-        if (typeof window.MediaRecorder === "undefined") {
-            setComposerError("Voice recording is not supported by this browser.");
-            return false;
-        }
-
-        // টাচ + ক্লিক একসাথে এলেও দুটো রেকর্ডার যেন না চলে
-        if (recStartingRef.current) return false;
-        recStartingRef.current = true;
-        // রেকর্ডার চালুর আগেই বাজে, যাতে শব্দটা রেকর্ডিংয়ে না ঢোকে
-        // mic বাটনে আঙুল পড়ার মুহূর্তেই সাউন্ড বেজে গেছে (handleMicPointerDown) — না হলে (অন্য বাটন) এখানে বাজে
-        if (!opts?.soundPlayed) playSound("recStart");
-
-        setComposerError("");
-        setShowMicrophoneHelp(false);
-        let stream;
-        try {
-            // Calling this directly from the microphone button opens the
-            // browser's native Allow / Block permission prompt when needed.
-            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-            const mimeType = [
-                "audio/webm;codecs=opus",
-                "audio/webm",
-                "audio/mp4"
-            ].find(type => MediaRecorder.isTypeSupported?.(type));
-            const recorder = new MediaRecorder(
-                stream,
-                mimeType ? { mimeType } : undefined
-            );
-            const recordingType = recorder.mimeType || mimeType || "audio/webm";
-            audioChunksRef.current = [];
-            recDiscardRef.current = false;
-            recElapsedRef.current = 0;
-            clearTimeout(recDiscardTimerRef.current);
-            recContextRef.current = {
-                conversationId: activeConversationId,
-                replyingTo
-            };
-
-            recorder.ondataavailable = evt => {
-                if (evt.data.size > 0) audioChunksRef.current.push(evt.data);
-            };
-
-            recorder.onerror = () => {
-                teardownRecordingResources();
-                recDiscardRef.current = true;
-                setRecPhase("idle");
-                setRecordingSeconds(0);
-                setComposerError("The microphone recording could not be started. Please try again.");
-            };
-
-            recorder.onstop = () => {
-                // a stale recorder must not tear down a newer recording
-                if (mediaRecorderRef.current === recorder) {
-                    teardownRecordingResources();
-                }
-                const discarded = recDiscardRef.current;
-                const chunks = audioChunksRef.current;
-                audioChunksRef.current = [];
-                if (discarded || chunks.length === 0) return;
-
-                setRecPhase("idle");
-                setRecordingSeconds(0);
-
-                const blob = new Blob(chunks, { type: recordingType });
-                const extension = recordingType.includes("mp4") ? "m4a" : "webm";
-                const audioFile = new File(
-                    [blob],
-                    `voice_${Date.now()}.${extension}`,
-                    { type: recordingType }
-                );
-                const { conversationId, replyingTo: replyTarget } =
-                    recContextRef.current;
-                uploadAndSendVoice(audioFile, conversationId, replyTarget);
-            };
-
-            mediaRecorderRef.current = recorder;
-            recStreamRef.current = stream;
-            recorder.start();
-            startWaveform(stream);
-            setRecPhase("recording");
-            setRecordingSeconds(0);
-            recLastTickRef.current = Date.now();
-            recordTimerRef.current = setInterval(() => {
-                const now = Date.now();
-                if (mediaRecorderRef.current?.state === "recording") {
-                    recElapsedRef.current += now - recLastTickRef.current;
-                    setRecordingSeconds(Math.floor(recElapsedRef.current / 1000));
-                }
-                recLastTickRef.current = now;
-            }, 200);
-            recStartingRef.current = false;
-            return true;
-        } catch (err) {
-            recStartingRef.current = false;
-            stream?.getTracks().forEach(track => track.stop());
-            teardownRecordingResources();
-            const messages = {
-                NotAllowedError: "Please allow microphone access in your browser to record a voice message.",
-                PermissionDeniedError: "Please allow microphone access in your browser to record a voice message.",
-                NotFoundError: "No microphone was found on this device.",
-                NotReadableError: "The microphone is already in use by another app."
-            };
-            if (
-                err?.name === "NotAllowedError" ||
-                err?.name === "PermissionDeniedError" ||
-                err?.name === "SecurityError"
-            ) {
-                setShowMicrophoneHelp(true);
-            } else {
-                setComposerError(
-                    messages[err?.name] ||
-                    err?.message ||
-                    "Could not access the microphone. Check your browser permissions and try again."
-                );
-            }
-            return false;
-        }
-    };
-
-    const togglePauseVoiceRecording = () => {
-        const recorder = mediaRecorderRef.current;
-        if (!recorder) return;
-        if (recorder.state === "recording") {
-            // সাউন্ড সবার আগে: recorder.pause() ও state আপডেটের ভারী কাজ সাউন্ডকে দেরি করাবে না
-            playSound("recPause");
-            recElapsedRef.current += Date.now() - recLastTickRef.current;
-            recorder.pause();
-            setRecPhase("paused");
-        } else if (recorder.state === "paused") {
-            // সাউন্ড আগে বাজে, তারপর একটু পরে resume — তাই শব্দ রেকর্ডিংয়ে ঢোকে না
-            playSound("recPlay");
-            setTimeout(() => {
-                if (recorder.state !== "paused") return;
-                recLastTickRef.current = Date.now();
-                recorder.resume();
-                resumeAudio();
-                setRecPhase("recording");
-            }, 300);
-        }
-    };
-
-    // Delete: throw the recording away with a short exit animation.
-    const discardVoiceRecording = (silent = false) => {
-        // সাউন্ড সবার আগে: recorder.stop() আর মাইক ছাড়তে ফোনে সময় লাগে, তার আগেই শব্দ বাজবে
-        if (!silent) playSound("recDelete");
-        const recorder = mediaRecorderRef.current;
-        recDiscardRef.current = true;
-        audioChunksRef.current = [];
-        if (recorder && recorder.state !== "inactive") {
-            try { recorder.stop(); } catch { /* already stopped */ }
-        }
-        teardownRecordingResources();
-        clearTimeout(recDiscardTimerRef.current);
-        if (silent) {
-            setRecPhase("idle");
-            setRecordingSeconds(0);
-            return;
-        }
-        setRecPhase("discarding");
-        recDiscardTimerRef.current = setTimeout(() => {
-            setRecPhase("idle");
-            setRecordingSeconds(0);
-        }, 460);
-    };
-
-    // Send: only now the voice message is uploaded and delivered.
-    const sendVoiceRecording = () => {
-        const recorder = mediaRecorderRef.current;
-        if (!recorder || recorder.state === "inactive") return;
-        if (recPhase === "recording") {
-            recElapsedRef.current += Date.now() - recLastTickRef.current;
-        }
-        if (recElapsedRef.current < MIN_VOICE_MS) {
-            discardVoiceRecording();
-            setComposerError("Voice message is too short. Hold on a little longer.");
-            return;
-        }
-        recDiscardRef.current = false;
-        recorder.stop();
-    };
-
-    // ---- Hold-to-record: mic চেপে ধরলে রেকর্ড · ছাড়লে send · বামে swipe = delete · উপরে swipe = pause ----
-    // (ছোট টাচ/ক্লিক আগের মতই locked রেকর্ডিং চালু করে: delete · pause/play · send বাটনসহ)
-    voiceActionsRef.current = {
-        start: startVoiceRecording,
-        send: sendVoiceRecording,
-        discard: discardVoiceRecording,
-        togglePause: togglePauseVoiceRecording
-    };
-
-    const buzz = ms => {
-        try {
-            navigator.vibrate?.(ms);
-        } catch {
-            /* সব ডিভাইসে নেই */
-        }
-    };
-
-    // swipe-এর দূরত্ব CSS variable-এ বসে (re-render ছাড়া, তাই লাগে না)
-    const setHoldVisual = (dx, dy = 0) => {
-        const bar = composerBarRef.current;
-        if (!bar) return;
-        const clamped = Math.max(-150, Math.min(30, dx));
-        bar.style.setProperty("--hold-dx", `${clamped}px`);
-        bar.style.setProperty(
-            "--hold-dy",
-            `${Math.max(-90, Math.min(0, dy))}px`
-        );
-        bar.style.setProperty(
-            "--hold-p",
-            String(Math.min(1, Math.max(0, -dx / HOLD_DELETE_PX)))
-        );
-    };
-
-    const beginHoldRecording = async () => {
-        const h = holdRef.current;
-        h.timer = 0;
-        if (!h.active || h.done) return;
-        h.started = true;
-        h.dx = 0;
-        setHoldVisual(0);
-        setHoldArm(null);
-        setHoldMode(true);
-        buzz(12);
-        const ok = await voiceActionsRef.current.start({ soundPlayed: true });
-        if (!ok) {
-            h.active = false;
-            h.done = true;
-            setHoldMode(false);
-            return;
-        }
-        if (h.released || !h.active) {
-            // মাইক চালু হওয়ার আগেই (যেমন পারমিশন প্রম্পটে) আঙুল উঠে গেছে → locked রেকর্ডিং হয়ে চলবে
-            h.done = true;
-            setHoldMode(false);
-        }
-    };
-
-    const handleMicPointerDown = e => {
-        if (e.pointerType === "mouse" && e.button !== 0) return;
-        if (recPhase !== "idle" || uploadingMedia) return;
-        const h = holdRef.current;
-        clearTimeout(h.timer);
-        Object.assign(h, {
-            active: true,
-            pointerId: e.pointerId,
-            startX: e.clientX,
-            startY: e.clientY,
-            dx: 0,
-            started: false,
-            released: false,
-            done: false
-        });
-        try {
-            e.currentTarget.setPointerCapture(e.pointerId);
-        } catch {
-            /* ignore */
-        }
-        // সাউন্ড আঙুল পড়ার মুহূর্তেই — hold-টাইমার ও ভারী re-render-এর অপেক্ষা না করে (ফোনে সেটা ~০.৫–১ সেকেন্ড লাগছিল)
-        playSound("recStart");
-        h.timer = setTimeout(beginHoldRecording, HOLD_DELAY_MS);
-    };
-
-    const handleMicPointerMove = e => {
-        const h = holdRef.current;
-        if (!h.active || e.pointerId !== h.pointerId) return;
-        const dx = e.clientX - h.startX;
-
-        if (!h.started) {
-            // hold শুরুর আগেই বেশি নড়লে এটা hold নয়, বাতিল
-            if (
-                Math.abs(dx) > HOLD_SLOP_PX ||
-                Math.abs(e.clientY - h.startY) > HOLD_SLOP_PX
-            ) {
-                clearTimeout(h.timer);
-                h.timer = 0;
-                h.active = false;
-            }
-            return;
-        }
-        if (h.done) return;
-
-        const dy = e.clientY - h.startY;
-        h.dx = dx;
-        setHoldVisual(dx, dy);
-
-        // উপরে swipe → সাথে সাথে pause, তারপর locked প্যানেল (delete · play · send)
-        if (dy <= -HOLD_PAUSE_UP_PX && Math.abs(dy) > Math.abs(dx) * 0.8) {
-            if (mediaRecorderRef.current?.state === "recording") {
-                h.done = true;
-                buzz(14);
-                voiceActionsRef.current.togglePause();
-                setPausedFromHold(true);
-                setHoldMode(false);
-                setHoldArm(null);
-                setHoldVisual(0, 0);
-            }
-            return;
-        }
-
-        // বামে যথেষ্ট টানলে delete "প্রস্তুত" (ছাড়লে মুছে যাবে), ফিরিয়ে আনলে বাতিল
-        const arm = dx <= -HOLD_DELETE_PX ? "delete" : null;
-        setHoldArm(prev => {
-            if (prev !== arm && arm) buzz(10);
-            return prev === arm ? prev : arm;
-        });
-    };
-
-    const handleMicPointerUp = e => {
-        const h = holdRef.current;
-        if (!h.active || e.pointerId !== h.pointerId) return;
-        clearTimeout(h.timer);
-        h.timer = 0;
-        h.active = false;
-        h.released = true;
-        try {
-            e.currentTarget.releasePointerCapture?.(e.pointerId);
-        } catch {
-            /* ignore */
-        }
-
-        // hold হওয়ার আগেই ছেড়ে দিয়েছে = সাধারণ টাচ → locked রেকর্ডিং
-        if (!h.started) {
-            voiceActionsRef.current.start({ soundPlayed: true });
-            return;
-        }
-        if (h.done) return;
-        const rec = mediaRecorderRef.current;
-        // মাইক এখনও চালু হচ্ছে: beginHoldRecording নিজে locked রেকর্ডিংয়ে পাল্টে দেবে
-        if (!rec || rec.state === "inactive") return;
-
-        h.done = true;
-        if (h.dx <= -HOLD_DELETE_PX) {
-            voiceActionsRef.current.discard();
-        } else {
-            voiceActionsRef.current.send();
-        }
-    };
-
-    // ব্রাউজার/সিস্টেম টাচ কেড়ে নিলে রেকর্ডিং হারাবে না, locked রেকর্ডিং হয়ে চলবে
-    const handleMicPointerCancel = e => {
-        const h = holdRef.current;
-        if (!h.active || e.pointerId !== h.pointerId) return;
-        clearTimeout(h.timer);
-        h.timer = 0;
-        h.active = false;
-        h.released = true;
-        if (h.started && !h.done) {
-            h.done = true;
-            setHoldMode(false);
-            setHoldArm(null);
-            setHoldVisual(0);
-        }
-    };
-
-    // রেকর্ডিং শেষ (send/delete) হলে hold-সংক্রান্ত সব কিছু পরিষ্কার
-    useEffect(() => {
-        if (recPhase !== "idle") return;
-        setHoldMode(false);
-        setHoldArm(null);
-        setPausedFromHold(false);
-        const bar = composerBarRef.current;
-        bar?.style.removeProperty("--hold-dx");
-        bar?.style.removeProperty("--hold-dy");
-        bar?.style.removeProperty("--hold-p");
-    }, [recPhase]);
-
-    useEffect(() => () => clearTimeout(holdRef.current.timer), []);
-
-    // Leaving the chat (or switching conversation) while recording cancels it.
-    useEffect(() => {
-        return () => {
-            if (mediaRecorderRef.current?.state && mediaRecorderRef.current.state !== "inactive") {
-                recDiscardRef.current = true;
-                try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }
-            }
-            teardownRecordingResources();
-            clearTimeout(recDiscardTimerRef.current);
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    useEffect(() => {
-        if (
-            recContextRef.current.conversationId &&
-            String(recContextRef.current.conversationId) !== String(activeConversationId) &&
-            mediaRecorderRef.current?.state &&
-            mediaRecorderRef.current.state !== "inactive"
-        ) {
-            discardVoiceRecording(true);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeConversationId]);
 
     const handleCreatePoll = async pollData => {
         if (!activeConversationId || !canSendInActive) return;
@@ -1839,436 +1684,25 @@ export default function ChatPage() {
                                     </div>
                                 )}
 
-                            {messages.map((msg, idx) => {
-                                const senderId = String(
-                                    msg.sender?._id ?? msg.sender
-                                );
-                                const isMine = senderId === myId;
-                                const prevMsg =
-                                    idx > 0 ? messages[idx - 1] : null;
-                                const curDate = formatDateDivider(
-                                    msg.createdAt
-                                );
-                                const prevDate = prevMsg
-                                    ? formatDateDivider(prevMsg.createdAt)
-                                    : "";
-                                const showDateDivider =
-                                    curDate && curDate !== prevDate;
-
-                                return (
-                                    <React.Fragment
-                                        key={msg._id || msg.clientMsgId}
-                                    >
-                                        {showDateDivider && (
-                                            <div className="sync-date-divider">
-                                                <span>{curDate}</span>
-                                            </div>
-                                        )}
-
-                                        <div
-                                            ref={el => {
-                                                if (msg._id) {
-                                                    if (el)
-                                                        msgRowRefs.current.set(
-                                                            String(msg._id),
-                                                            el
-                                                        );
-                                                    else
-                                                        msgRowRefs.current.delete(
-                                                            String(msg._id)
-                                                        );
-                                                }
-                                            }}
-                                        >
-                                        <MessageGesture
-                                            className={`sync-msg-row ${
-                                                isMine ? "outgoing" : "incoming"
-                                            } ${
-                                                highlightedMsgId ===
-                                                String(msg._id)
-                                                    ? "is-highlighted"
-                                                    : ""
-                                            }`}
-                                            disabled={Boolean(
-                                                msg.deletedForEveryone ||
-                                                    msg.optimistic ||
-                                                    msg.failed ||
-                                                    !msg._id
-                                            )}
-                                            onReply={() => {
-                                                dispatch(
-                                                    setReplyTo({
-                                                        conversationId:
-                                                            activeConversationId,
-                                                        message: msg
-                                                    })
-                                                );
-                                                composerInputRef.current?.focus();
-                                            }}
-                                            onLongPress={() => {
-                                                setSheetView("menu");
-                                                setSheetMsg(msg);
-                                            }}
-                                        >
-                                            <div
-                                                className={`sync-msg-bubble ${
-                                                    msg.deletedForEveryone
-                                                        ? "deleted"
-                                                        : ""
-                                                } ${
-                                                    !msg.deletedForEveryone &&
-                                                    msg.card?.kind === "welcome"
-                                                        ? "has-welcome-card"
-                                                        : !msg.deletedForEveryone &&
-                                                            msg.card?.kind ===
-                                                                "broadcast"
-                                                          ? "has-broadcast-card"
-                                                          : ""
-                                                }`}
-                                            >
-                                                {msg.forwarded &&
-                                                    !msg.deletedForEveryone && (
-                                                        <div className="sync-msg-forwarded">
-                                                            <Forward size={12} />
-                                                            <span>Forwarded</span>
-                                                        </div>
-                                                    )}
-                                                {activeConversation.type ===
-                                                    "group" &&
-                                                    !isMine && (
-                                                        <div className="sync-msg-sender-name sync-name-with-badge">
-                                                            <span className="sync-name-text">
-                                                                {msg.sender
-                                                                    ?.fullName ||
-                                                                    msg.sender
-                                                                        ?.username ||
-                                                                    "Member"}
-                                                            </span>
-                                                            {msg.sender
-                                                                ?.isOfficial && (
-                                                                <VerifiedBadge
-                                                                    variant="official"
-                                                                    size={13}
-                                                                />
-                                                            )}
-                                                        </div>
-                                                    )}
-
-                                                {msg.storyReply &&
-                                                    !msg.deletedForEveryone && (
-                                                        <div className="sync-msg-story-quote">
-                                                            <div
-                                                                className="story-thumb"
-                                                                style={
-                                                                    msg
-                                                                        .storyReply
-                                                                        .thumbnail
-                                                                        ? {
-                                                                              backgroundImage: `url(${msg.storyReply.thumbnail})`
-                                                                          }
-                                                                        : {
-                                                                              backgroundColor:
-                                                                                  msg
-                                                                                      .storyReply
-                                                                                      .backgroundColor ||
-                                                                                  "#0F4C3A"
-                                                                          }
-                                                                }
-                                                            >
-                                                                {!msg
-                                                                    .storyReply
-                                                                    .thumbnail &&
-                                                                    msg
-                                                                        .storyReply
-                                                                        .type ===
-                                                                        "text" &&
-                                                                    (msg
-                                                                        .storyReply
-                                                                        .caption ||
-                                                                        "")}
-                                                            </div>
-                                                            <div className="story-meta">
-                                                                <span className="story-label">
-                                                                    {isMine
-                                                                        ? "You replied to a story"
-                                                                        : "Replied to your story"}
-                                                                </span>
-                                                                <span className="story-text">
-                                                                    {msg
-                                                                        .storyReply
-                                                                        .caption ||
-                                                                        (msg
-                                                                            .storyReply
-                                                                            .type ===
-                                                                        "video"
-                                                                            ? "Video story"
-                                                                            : "Photo story")}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    )}
-
-                                                {msg.replyTo &&
-                                                    !msg.deletedForEveryone && (
-                                                        <div className="sync-msg-reply-quote">
-                                                            <span className="reply-bar" />
-                                                            <div className="reply-content">
-                                                                <p>
-                                                                    <ReplySnippet
-                                                                        target={
-                                                                            msg.replyTo
-                                                                        }
-                                                                    />
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                    )}
-
-                                                {!msg.deletedForEveryone &&
-                                                    msg.type === "image" &&
-                                                    msg.media?.url && (
-                                                        <div className="sync-msg-media-img">
-                                                            <LocalImg
-                                                                url={
-                                                                    msg.media
-                                                                        .url
-                                                                }
-                                                                alt="attachment"
-                                                                loading="lazy"
-                                                                onClick={() =>
-                                                                    setLightboxUrl(
-                                                                        msg
-                                                                            .media
-                                                                            .url
-                                                                    )
-                                                                }
-                                                            />
-                                                        </div>
-                                                    )}
-
-                                                {!msg.deletedForEveryone &&
-                                                    msg.type === "video" &&
-                                                    msg.media?.url && (
-                                                        <VideoPlayer
-                                                            src={msg.media.url}
-                                                            duration={
-                                                                msg.media
-                                                                    .duration
-                                                            }
-                                                            width={
-                                                                msg.media.width
-                                                            }
-                                                            height={
-                                                                msg.media.height
-                                                            }
-                                                        />
-                                                    )}
-
-                                                {!msg.deletedForEveryone &&
-                                                    msg.type === "audio" &&
-                                                    msg.media?.url && (
-                                                        <VoicePlayer
-                                                            src={msg.media.url}
-                                                            duration={
-                                                                msg.media
-                                                                    .duration
-                                                            }
-                                                        />
-                                                    )}
-
-                                                {!msg.deletedForEveryone &&
-                                                    msg.type === "file" &&
-                                                    msg.media?.url && (
-                                                        <DocumentCard
-                                                            media={msg.media}
-                                                        />
-                                                    )}
-
-                                                {!msg.deletedForEveryone &&
-                                                    msg.type === "location" &&
-                                                    msg.location && (
-                                                        <LocationCard
-                                                            location={
-                                                                msg.location
-                                                            }
-                                                        />
-                                                    )}
-
-                                                {!msg.deletedForEveryone &&
-                                                    msg.type === "contact" &&
-                                                    msg.contact && (
-                                                        <ContactCard
-                                                            contact={
-                                                                msg.contact
-                                                            }
-                                                        />
-                                                    )}
-
-                                                {!msg.deletedForEveryone &&
-                                                msg.type === "poll" &&
-                                                msg.poll ? (
-                                                    <PollCard
-                                                        poll={msg.poll}
-                                                        myId={myId}
-                                                        members={
-                                                            activeConversation?.members ||
-                                                            []
-                                                        }
-                                                        disabled={Boolean(
-                                                            msg.optimistic ||
-                                                                msg.failed
-                                                        )}
-                                                        onVote={optionId =>
-                                                            voteSocketPoll(
-                                                                msg._id,
-                                                                optionId
-                                                            )
-                                                        }
-                                                    />
-                                                ) : !msg.deletedForEveryone &&
-                                                  msg.card?.kind === "welcome" ? (
-                                                    <WelcomeCard
-                                                        name={
-                                                            msg.card?.name ||
-                                                            currentUser?.fullName ||
-                                                            ""
-                                                        }
-                                                    />
-                                                ) : !msg.deletedForEveryone &&
-                                                  msg.card?.kind ===
-                                                      "broadcast" ? (
-                                                    <BroadcastCard
-                                                        card={msg.card}
-                                                    />
-                                                ) : (
-                                                    (msg.text ||
-                                                        msg.deletedForEveryone) && (
-                                                        <div className="sync-msg-text">
-                                                            {msg.deletedForEveryone
-                                                                ? <MessagePreview deleted />
-                                                                : <MessageLinkContent text={msg.text} />}
-                                                        </div>
-                                                    )
-                                                )}
-
-                                                {msg.uploadLocal &&
-                                                    (msg.optimistic || msg.failed) && (
-                                                        <UploadBubbleOverlay
-                                                            clientMsgId={msg.clientMsgId}
-                                                        />
-                                                    )}
-
-                                                {!msg.deletedForEveryone &&
-                                                    Array.isArray(
-                                                        msg.reactions
-                                                    ) &&
-                                                    msg.reactions.length > 0 && (() => {
-                                                        const counts = new Map();
-                                                        for (const r of msg.reactions) {
-                                                            const cur = counts.get(
-                                                                r.emoji
-                                                            ) || {
-                                                                count: 0,
-                                                                mine: false
-                                                            };
-                                                            cur.count += 1;
-                                                            if (
-                                                                String(
-                                                                    r.user
-                                                                        ?._id ??
-                                                                        r.user
-                                                                ) === myId
-                                                            ) {
-                                                                cur.mine = true;
-                                                            }
-                                                            counts.set(
-                                                                r.emoji,
-                                                                cur
-                                                            );
-                                                        }
-                                                        return (
-                                                            <div className="sync-msg-reactions">
-                                                                {[
-                                                                    ...counts.entries()
-                                                                ].map(
-                                                                    ([
-                                                                        emoji,
-                                                                        info
-                                                                    ]) => (
-                                                                        <button
-                                                                            key={
-                                                                                emoji
-                                                                            }
-                                                                            type="button"
-                                                                            className={`sync-reaction-pill ${
-                                                                                info.mine
-                                                                                    ? "mine"
-                                                                                    : ""
-                                                                            }`}
-                                                                            title="See who reacted"
-                                                                            onClick={e => {
-                                                                                e.stopPropagation();
-                                                                                setSheetView(
-                                                                                    "reactions"
-                                                                                );
-                                                                                setSheetMsg(
-                                                                                    msg
-                                                                                );
-                                                                            }}
-                                                                        >
-                                                                            <span>
-                                                                                {
-                                                                                    emoji
-                                                                                }
-                                                                            </span>
-                                                                            {info.count >
-                                                                                1 && (
-                                                                                <span>
-                                                                                    {
-                                                                                        info.count
-                                                                                    }
-                                                                                </span>
-                                                                            )}
-                                                                        </button>
-                                                                    )
-                                                                )}
-                                                            </div>
-                                                        );
-                                                    })()}
-
-                                                <div className="sync-msg-meta">
-                                                    {msg.editedAt &&
-                                                        !msg.deletedForEveryone && (
-                                                            <span className="sync-msg-edited">
-                                                                Edited
-                                                            </span>
-                                                        )}
-                                                    <span className="sync-msg-time">
-                                                        {formatTime(
-                                                            msg.createdAt
-                                                        )}
-                                                    </span>
-                                                    {isMine &&
-                                                        !msg.deletedForEveryone && (
-                                                            <StatusTick
-                                                                status={
-                                                                    msg.status
-                                                                }
-                                                                optimistic={
-                                                                    msg.optimistic
-                                                                }
-                                                                failed={
-                                                                    msg.failed
-                                                                }
-                                                            />
-                                                        )}
-                                                </div>
-                                            </div>
-                                        </MessageGesture>
-                                        </div>
-                                    </React.Fragment>
-                                );
-                            })}
+                            {messages.map((msg, idx) => (
+                                <MessageRow
+                                    key={msg._id || msg.clientMsgId}
+                                    msg={msg}
+                                    prevCreatedAt={
+                                        idx > 0 ? messages[idx - 1].createdAt : null
+                                    }
+                                    myId={myId}
+                                    isGroup={activeConversation.type === "group"}
+                                    members={activeConversation?.members || EMPTY_MEMBERS}
+                                    highlighted={highlightedMsgId === String(msg._id)}
+                                    welcomeName={currentUser?.fullName || ""}
+                                    onReply={handleRowReply}
+                                    onLongPress={handleRowLongPress}
+                                    onOpenReactions={handleRowOpenReactions}
+                                    onOpenLightbox={setLightboxUrl}
+                                    registerRow={registerMsgRow}
+                                />
+                            ))}
 
                             <ActivityBubble
                                 info={activeTypingInfo}
@@ -2400,7 +1834,7 @@ export default function ChatPage() {
                                             <button
                                                 type="button"
                                                 className="sync-btn primary"
-                                                onClick={startVoiceRecording}
+                                                onClick={() => voiceApiRef.current?.start()}
                                             >
                                                 <Mic size={16} /> Try Again
                                             </button>
@@ -2471,7 +1905,7 @@ export default function ChatPage() {
                                 </div>
                             )}
 
-                            {!canSendInActive ? (
+                            {!canSendInActive && (
                                 activeDisplay?.isOfficialAccount ? (
                                     <div className="sync-official-readonly-bar">
                                         <VerifiedBadge
@@ -2492,264 +1926,25 @@ export default function ChatPage() {
                                         </span>
                                     </div>
                                 )
-                            ) : (
-                                <form
-                                    ref={composerBarRef}
-                                    className={`sync-composer-bar ${
-                                        isRecording && holdMode
-                                            ? "is-holding"
-                                            : ""
-                                    }`}
-                                    onSubmit={handleSendText}
-                                >
-                                    {recPhase === "idle" && (
-                                        <>
-                                            <button
-                                                type="button"
-                                                className={`sync-icon-btn ${
-                                                    showAttachSheet
-                                                        ? "active"
-                                                        : ""
-                                                }`}
-                                                title="Attach"
-                                                aria-label="Attach"
-                                                aria-expanded={showAttachSheet}
-                                                onClick={() =>
-                                                    setShowAttachSheet(v => !v)
-                                                }
-                                                disabled={uploadingMedia}
-                                            >
-                                                <Paperclip size={20} />
-                                            </button>
-                                            {activeIsGroup && (
-                                                <button
-                                                    type="button"
-                                                    className="sync-icon-btn sync-poll-trigger"
-                                                    title="Create Poll"
-                                                    aria-label="Create Poll"
-                                                    onClick={() =>
-                                                        setShowCreatePoll(true)
-                                                    }
-                                                >
-                                                    <PollIcon size={21} />
-                                                </button>
-                                            )}
-                                        </>
-                                    )}
-
-                                    {isRecording && holdMode ? (
-                                        <div
-                                            className={`sync-voice-hold ${
-                                                holdArm === "delete"
-                                                    ? "arm-delete"
-                                                    : ""
-                                            } ${
-                                                recPhase === "discarding"
-                                                    ? "discarding"
-                                                    : ""
-                                            }`}
-                                            role="group"
-                                            aria-label="Recording voice message"
-                                        >
-                                            <span className="sync-hold-trash">
-                                                <VoiceTrash
-                                                    size={18}
-                                                    open={
-                                                        holdArm === "delete" ||
-                                                        recPhase === "discarding"
-                                                    }
-                                                    shake={recPhase === "discarding"}
-                                                />
-                                            </span>
-                                            <span className="rec-dot" />
-                                            <span
-                                                className="sync-voice-time"
-                                                aria-live="off"
-                                            >
-                                                {formatRecTime(recordingSeconds)}
-                                            </span>
-                                            <div
-                                                className="sync-hold-hint"
-                                                aria-hidden="true"
-                                            >
-                                                <ChevronLeft size={16} />
-                                                <span>
-                                                    {holdArm === "delete"
-                                                        ? "Release to delete"
-                                                        : "Slide to delete"}
-                                                </span>
-                                            </div>
-                                            <span
-                                                className="sync-hold-pause-hint"
-                                                aria-hidden="true"
-                                            >
-                                                <Pause size={12} />
-                                                <ChevronUp size={14} />
-                                            </span>
-                                        </div>
-                                    ) : isRecording ? (
-                                        <div
-                                            className={`sync-voice-rec ${recPhase} ${
-                                                pausedFromHold ? "from-hold" : ""
-                                            }`}
-                                            role="group"
-                                            aria-label="Voice message recorder"
-                                        >
-                                            <button
-                                                type="button"
-                                                className="sync-voice-btn delete"
-                                                title="Delete recording"
-                                                aria-label="Delete recording"
-                                                onClick={() => discardVoiceRecording()}
-                                                disabled={recPhase === "discarding"}
-                                            >
-                                                <VoiceTrash
-                                                    size={20}
-                                                    open={recPhase === "discarding"}
-                                                />
-                                            </button>
-
-                                            <div className="sync-voice-panel">
-                                                <span className="rec-dot" />
-                                                <span
-                                                    className="sync-voice-time"
-                                                    aria-live="off"
-                                                >
-                                                    {formatRecTime(recordingSeconds)}
-                                                </span>
-                                                <div
-                                                    className="sync-voice-wave"
-                                                    aria-hidden="true"
-                                                >
-                                                    {Array.from(
-                                                        { length: VOICE_BAR_COUNT },
-                                                        (_, i) => (
-                                                            <span
-                                                                key={i}
-                                                                ref={el => {
-                                                                    recBarsRef.current[i] = el;
-                                                                }}
-                                                            />
-                                                        )
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            <button
-                                                type="button"
-                                                className="sync-voice-btn pause"
-                                                title={
-                                                    recPhase === "paused"
-                                                        ? "Resume recording"
-                                                        : "Pause recording"
-                                                }
-                                                aria-label={
-                                                    recPhase === "paused"
-                                                        ? "Resume recording"
-                                                        : "Pause recording"
-                                                }
-                                                onClick={togglePauseVoiceRecording}
-                                                disabled={recPhase === "discarding"}
-                                            >
-                                                {recPhase === "paused" ? (
-                                                    <Play key="play" size={19} />
-                                                ) : (
-                                                    <Pause key="pause" size={19} />
-                                                )}
-                                            </button>
-
-                                            <button
-                                                type="button"
-                                                className="sync-send-btn sync-voice-send"
-                                                title="Send voice message"
-                                                aria-label="Send voice message"
-                                                onClick={sendVoiceRecording}
-                                                disabled={recPhase === "discarding"}
-                                            >
-                                                <Send size={18} />
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <textarea
-                                            ref={composerInputRef}
-                                            rows={1}
-                                            className="sync-composer-input"
-                                            placeholder="Type a message..."
-                                            maxLength={4000}
-                                            value={draftText}
-                                            onChange={e =>
-                                                handleTypingChange(
-                                                    e.target.value
-                                                )
-                                            }
-                                            onKeyDown={e => {
-                                                // কম্পিউটারে Enter = পাঠানো, Shift+Enter = নতুন লাইন। ফোনে Enter নতুন লাইন, পাঠাতে বাটন।
-                                                if (
-                                                    e.key === "Enter" &&
-                                                    !e.shiftKey &&
-                                                    !e.nativeEvent.isComposing &&
-                                                    window.matchMedia(
-                                                        "(pointer: fine)"
-                                                    ).matches
-                                                ) {
-                                                    e.preventDefault();
-                                                    handleSendText(e);
-                                                }
-                                            }}
-                                        />
-                                    )}
-
-                                    {(!isRecording || holdMode) &&
-                                        (!draftText.trim() ? (
-                                            <button
-                                                type="button"
-                                                className={`sync-icon-btn sync-mic-btn ${
-                                                    isRecording && holdMode
-                                                        ? "is-holding"
-                                                        : ""
-                                                } ${
-                                                    holdArm === "delete"
-                                                        ? "arm-delete"
-                                                        : ""
-                                                } ${
-                                                    isRecording &&
-                                                    holdMode &&
-                                                    recPhase === "discarding"
-                                                        ? "is-discarding"
-                                                        : ""
-                                                }`}
-                                                title="Tap to record · hold to record and release to send"
-                                                aria-label="Record voice message"
-                                                onPointerDown={handleMicPointerDown}
-                                                onPointerMove={handleMicPointerMove}
-                                                onPointerUp={handleMicPointerUp}
-                                                onPointerCancel={handleMicPointerCancel}
-                                                onContextMenu={e => e.preventDefault()}
-                                                onClick={e => {
-                                                    // কিবোর্ড (Enter/Space) থেকে এলে detail === 0; টাচ/মাউস pointer হ্যান্ডলারে সামলানো
-                                                    if (e.detail === 0) startVoiceRecording();
-                                                }}
-                                                disabled={uploadingMedia}
-                                            >
-                                                <Mic size={20} />
-                                            </button>
-                                        ) : (
-                                            <button
-                                                type="submit"
-                                                className="sync-send-btn"
-                                                title="Send Message"
-                                                onPointerDown={event => event.preventDefault()}
-                                            >
-                                                <Send size={18} />
-                                            </button>
-                                        ))}
-                                </form>
                             )}
 
-                            <AttachmentSheet
-                                open={showAttachSheet && canSendInActive && !isRecording}
-                                disabled={uploadingMedia || !canSendInActive}
-                                onClose={() => setShowAttachSheet(false)}
+                            <ChatComposer
+                                canSendInActive={canSendInActive}
+                                activeConversationId={activeConversationId}
+                                replyingTo={replyingTo}
+                                activeIsGroup={activeIsGroup}
+                                draftText={draftText}
+                                composerInputRef={composerInputRef}
+                                typingStopTimerRef={typingStopTimerRef}
+                                isTypingSentRef={isTypingSentRef}
+                                voiceApiRef={voiceApiRef}
+                                showAttachSheet={showAttachSheet}
+                                setShowAttachSheet={setShowAttachSheet}
+                                setComposerError={setComposerError}
+                                setShowMicrophoneHelp={setShowMicrophoneHelp}
+                                setShowCreatePoll={setShowCreatePoll}
+                                onTypingChange={handleTypingChange}
+                                onSendText={handleSendText}
                                 onFilesSelected={handleFilesSelected}
                                 onSendLocation={handleSendLocation}
                                 onSendContact={handleSendContact}
