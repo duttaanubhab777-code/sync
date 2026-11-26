@@ -318,6 +318,7 @@ function prewarm() {
         if (!name) return;
         try {
             if (ctx && ctx.state !== "closed") getBuffer(ctx, name);
+            getAudioPool(name);
         } catch {
             // পরে বাজানোর সময় আবার চেষ্টা হবে
         }
@@ -329,6 +330,79 @@ function prewarm() {
             : setTimeout(fn, 30);
     schedule(step);
 }
+
+// ---------------- নিশ্চিত-বাজার ব্যাকআপ: HTMLAudio + WAV ----------------
+// মাইক খুললে মোবাইলে (বিশেষ করে Android WebView) AudioContext থেমে যায়, আর resume হতে সময় লাগে বা হয়ই না।
+// তখন সাউন্ড হারিয়ে যেত। তাই context "running" না থাকলে একই সাউন্ড আগে-থেকে-বানানো WAV হিসেবে
+// <audio> দিয়ে বাজে — এর AudioContext লাগে না, তাই সঙ্গে সঙ্গে বাজে।
+const toWavBlobUrl = (samples, rate) => {
+    const n = samples.length;
+    const bytes = new ArrayBuffer(44 + n * 2);
+    const v = new DataView(bytes);
+    const str = (o, t) => [...t].forEach((ch, i) => v.setUint8(o + i, ch.charCodeAt(0)));
+    str(0, "RIFF");
+    v.setUint32(4, 36 + n * 2, true);
+    str(8, "WAVE");
+    str(12, "fmt ");
+    v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true);
+    v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true);
+    v.setUint32(28, rate * 2, true);
+    v.setUint16(32, 2, true);
+    v.setUint16(34, 16, true);
+    str(36, "data");
+    v.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i += 1) {
+        const x = Math.max(-1, Math.min(1, samples[i]));
+        v.setInt16(44 + i * 2, x < 0 ? x * 0x8000 : x * 0x7fff, true);
+    }
+    return URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
+};
+
+const POOL = 2; // দ্রুত পরপর চাপলে একটার ওপর আরেকটা বাজতে পারে
+const audioPool = {};
+
+const getAudioPool = name => {
+    const def = SOUNDS[name];
+    if (!def || !def.layersFn || typeof Audio === "undefined") return null;
+    if (!audioPool[name]) {
+        const url = toWavBlobUrl(mixLayers(PRELOAD_RATE, def.layersFn(PRELOAD_RATE)), PRELOAD_RATE);
+        const els = [];
+        for (let i = 0; i < POOL; i += 1) {
+            const el = new Audio(url);
+            el.preload = "auto";
+            el.volume = 1;
+            try {
+                el.load();
+            } catch {
+                // ignore
+            }
+            els.push(el);
+        }
+        audioPool[name] = { els, next: 0 };
+    }
+    return audioPool[name];
+};
+
+const playFallback = name => {
+    try {
+        const pool = getAudioPool(name);
+        if (!pool) return false;
+        const el = pool.els[pool.next];
+        pool.next = (pool.next + 1) % pool.els.length;
+        try {
+            el.currentTime = 0;
+        } catch {
+            // metadata এখনো আসেনি — ঠিক আছে, শুরু থেকেই বাজবে
+        }
+        const p = el.play();
+        if (p && p.catch) p.catch(() => {});
+        return true;
+    } catch {
+        return false;
+    }
+};
 
 const startSound = (c, name) => {
     const def = SOUNDS[name];
@@ -383,8 +457,16 @@ export const playSound = name => {
         return;
     }
 
-    // মাইক/রেকর্ডার চালু হওয়ায় context থেমে গেলে: resume করে বাজাও,
-    // না হলে (যেমন iOS "interrupted") নতুন context বানিয়ে আবার চেষ্টা
+    // মাইক/রেকর্ডার চালু হওয়ায় context থেমে গেছে: অপেক্ষা না করে ব্যাকআপ (<audio>) দিয়ে এখনই বাজাও,
+    // আর পরের বারের জন্য পেছনে context-টা আবার চালু করার চেষ্টা চলুক
+    if (SOUNDS[name].layersFn && playFallback(name)) {
+        waitRunning(c).then(ok => {
+            if (!ok) rebuildCtx();
+        });
+        return;
+    }
+
+    // oscillator সাউন্ড: resume করে বাজাও, না হলে (যেমন iOS "interrupted") নতুন context বানিয়ে আবার চেষ্টা
     waitRunning(c).then(ok => {
         if (ok) return fire(c);
         const fresh = rebuildCtx();

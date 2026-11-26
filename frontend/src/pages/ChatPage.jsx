@@ -850,6 +850,9 @@ export default function ChatPage() {
         recStartingRef.current = true;
         // রেকর্ডার চালুর আগেই বাজে, যাতে শব্দটা রেকর্ডিংয়ে না ঢোকে
         playSound("recStart");
+        // মাইক খুললেই মোবাইলের অডিও-মোড বদলে যায় এবং চলতি সাউন্ড কেটে যায়।
+        // তাই সাউন্ডটা শেষ হতে দিয়ে তারপর মাইক খোলা হয় (সাউন্ডও রেকর্ডিংয়ে ঢোকে না)
+        await new Promise(resolve => setTimeout(resolve, 230));
 
         setComposerError("");
         setShowMicrophoneHelp(false);
