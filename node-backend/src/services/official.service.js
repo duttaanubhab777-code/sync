@@ -365,12 +365,18 @@ export const sendWelcomeMessage = async (user, io) => {
 };
 
 // অ্যাডমিন প্যানেল থেকে অফিশিয়াল Sync অ্যাকাউন্ট দিয়ে সব ইউজারকে পার্সোনাল ব্রডকাস্ট কার্ড পাঠানো
-export const sendOfficialBroadcast = async ({ title, body, tag = "Announcement" }, io) => {
+// broadcastKey দিলে (যেমন commit SHA) একই key দিয়ে দুবার পাঠালেও প্রতি ইউজার একটাই কার্ড পায় (idempotent)
+export const sendOfficialBroadcast = async (
+    { title, body, tag = "Announcement", broadcastKey = "" },
+    io
+) => {
     const sync = await getSyncUser();
     const cleanTitle = String(title || "").trim().slice(0, 120);
     const cleanBody = String(body || "").trim().slice(0, 1500);
     const cleanTag = String(tag || "Announcement").trim().slice(0, 40) || "Announcement";
-    const broadcastId = `broadcast:${Date.now()}:${randomBytes(4).toString("hex")}`;
+    const broadcastId = broadcastKey
+        ? `broadcast:${broadcastKey}`
+        : `broadcast:${Date.now()}:${randomBytes(4).toString("hex")}`;
 
     const users = await User.find(
         { isOfficial: { $ne: true }, isBlocked: { $ne: true } },
@@ -491,6 +497,77 @@ ${cleanBody}`,
     }
 
     return { deliveredCount: delivered, totalUsers: users.length };
+};
+
+// অফিশিয়াল "Sync" গ্রুপে একই ব্রডকাস্ট কার্ড পোস্ট করা (সদস্যরা গ্রুপে কার্ডটা দেখবে)।
+// DM-এ আগেই push যায়, তাই এখানে আলাদা push পাঠানো হয় না (একই খবরে দুবার নোটিফিকেশন এড়াতে)।
+export const sendOfficialGroupPost = async (
+    { title, body, tag = "Announcement", broadcastKey = "" },
+    io
+) => {
+    const [sync, group] = await Promise.all([getSyncUser(), getSyncGroup()]);
+    const cleanTitle = String(title || "").trim().slice(0, 120);
+    const cleanBody = String(body || "").trim().slice(0, 1500);
+    const cleanTag = String(tag || "Announcement").trim().slice(0, 40) || "Announcement";
+    const clientMsgId = broadcastKey
+        ? `broadcast-group:${broadcastKey}`
+        : `broadcast-group:${Date.now()}:${randomBytes(4).toString("hex")}`;
+
+    const memberIds = (group.members || [])
+        .map(idOf)
+        .filter(id => id !== String(sync._id));
+    if (memberIds.length === 0) return { posted: false, reason: "no-members" };
+
+    let msg;
+    try {
+        msg = await Message.create({
+            conversationId: group._id,
+            sender: sync._id,
+            clientMsgId,
+            type: "text",
+            text: `${cleanTitle}
+
+${cleanBody}`,
+            card: {
+                kind: "broadcast",
+                title: cleanTitle,
+                body: cleanBody,
+                tag: cleanTag
+            },
+            status: "sent"
+        });
+    } catch (err) {
+        // একই key-র পোস্ট আগেই হয়ে গেছে
+        if (err?.code === 11000) return { posted: false, reason: "duplicate" };
+        throw err;
+    }
+    msg = await msg.populate("sender", "username fullName avatar isOfficial");
+
+    const inc = {};
+    for (const id of memberIds) inc[`unread.${id}`] = 1;
+    await Conversation.updateOne(
+        { _id: group._id },
+        {
+            $set: {
+                lastMessage: {
+                    messageId: msg._id,
+                    text: `${cleanTitle} — ${cleanBody}`.slice(0, 100),
+                    type: "text",
+                    sender: sync._id,
+                    createdAt: msg.createdAt
+                }
+            },
+            $inc: inc
+        }
+    );
+
+    if (io) {
+        emitToUsers(io, memberIds, "message:new", {
+            message: msg,
+            conversationId: group._id
+        });
+    }
+    return { posted: true, memberCount: memberIds.length };
 };
 
 // নতুন অ্যাকাউন্ট হলে যা যা করতে হয়: গ্রুপে যোগ + welcome মেসেজ (একটা ব্যর্থ হলে আরেকটা আটকায় না, signup-ও আটকায় না)

@@ -22,7 +22,8 @@ import { permanentlyDeleteUserData } from "../services/userDeletion.service.js";
 import {
     onboardNewUser,
     refreshSyncGroupAdmins,
-    sendOfficialBroadcast
+    sendOfficialBroadcast,
+    sendOfficialGroupPost
 } from "../services/official.service.js";
 
 /*
@@ -272,10 +273,10 @@ export const setUserRole = asyncHandler(async (req, res) => {
     );
 });
 
-// POST /api/v1/admin/admins   (শুধু Super Admin) — সরাসরি নতুন Admin অ্যাকাউন্ট বানানো
-// body: { fullName, username, email, phoneNumber, password }  (validate: createAdminSchema)
-export const createAdmin = asyncHandler(async (req, res) => {
+// নতুন অ্যাকাউন্ট (Admin বা সাধারণ User) তৈরির সাধারণ অংশ
+const createAccountByRole = async (req, res, role) => {
     const { username, fullName, email, phoneNumber, password } = req.body;
+    const isAdminRole = role === "admin";
 
     if (isSuperAdminEmail(email)) {
         throw new ApiError(
@@ -299,15 +300,15 @@ export const createAdmin = asyncHandler(async (req, res) => {
         throw new ApiError(409, `${field} is already registered`);
     }
 
-    let admin;
+    let account;
     try {
-        admin = await User.create({
+        account = await User.create({
             username,
             fullName,
             email,
             phoneNumber,
             password,
-            role: "admin",
+            role,
             isSuperAdmin: false
         });
     } catch (err) {
@@ -317,13 +318,29 @@ export const createAdmin = asyncHandler(async (req, res) => {
         throw err;
     }
 
-    await onboardNewUser(admin, req.app.get("io"));
+    // Sync গ্রুপে যোগ + ওয়েলকাম মেসেজ (সাধারণ signup-এর মতোই)
+    await onboardNewUser(account, req.app.get("io"));
 
-    const fresh = await User.findById(admin._id).select(ADMIN_USER_FIELDS).lean();
+    const fresh = await User.findById(account._id).select(ADMIN_USER_FIELDS).lean();
     res.status(201).json(
-        new ApiResponse(201, withOnline(fresh), "New admin account created")
+        new ApiResponse(
+            201,
+            withOnline(fresh),
+            isAdminRole ? "New admin account created" : "New user account created"
+        )
     );
-});
+};
+
+// POST /api/v1/admin/admins   (শুধু Super Admin) — সরাসরি নতুন Admin অ্যাকাউন্ট বানানো
+// body: { fullName, username, email, phoneNumber, password }  (validate: createAdminSchema)
+export const createAdmin = asyncHandler((req, res) =>
+    createAccountByRole(req, res, "admin")
+);
+
+// POST /api/v1/admin/users   (শুধু Super Admin) — সরাসরি নতুন সাধারণ User অ্যাকাউন্ট বানানো
+export const createUserByAdmin = asyncHandler((req, res) =>
+    createAccountByRole(req, res, "user")
+);
 
 // DELETE /api/v1/admin/users/:id — ইউজার অ্যাকাউন্ট স্থায়ীভাবে মুছে ফেলা
 export const deleteUserByAdmin = asyncHandler(async (req, res) => {
@@ -603,14 +620,23 @@ export const broadcastFromSync = asyncHandler(async (req, res) => {
     if (!title || !body) {
         throw new ApiError(400, "Broadcast title and message are required");
     }
-    const result = await sendOfficialBroadcast(
-        { title, body, tag },
-        req.app.get("io")
-    );
+    const io = req.app.get("io");
+    const result = await sendOfficialBroadcast({ title, body, tag }, io);
+
+    // ঐচ্ছিক: একই কার্ড অফিশিয়াল Sync গ্রুপেও পোস্ট করা
+    let groupPosted = false;
+    if (req.body?.alsoPostToGroup) {
+        try {
+            const g = await sendOfficialGroupPost({ title, body, tag }, io);
+            groupPosted = Boolean(g.posted);
+        } catch (err) {
+            console.error("[Broadcast Group Post]", err?.message || err);
+        }
+    }
     res.status(201).json(
         new ApiResponse(
             201,
-            result,
+            { ...result, groupPosted },
             `Official Sync broadcast sent to ${result.deliveredCount} users`
         )
     );

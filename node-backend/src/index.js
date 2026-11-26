@@ -14,6 +14,7 @@ import "./models/push-subscription.model.js";
 import "./models/notice.model.js";
 import "./models/pending-signup.model.js";
 import "./models/app-update-state.model.js";
+import "./models/commit-announcement.model.js";
 import {
     migrateTtlIndexes,
     startMediaSweeper

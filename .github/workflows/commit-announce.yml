@@ -1,0 +1,65 @@
+name: Announce commits to Sync
+
+# প্রতিটা push-এর commit মেসেজ অটোমেটিক অফিশিয়াল "Sync" অ্যাকাউন্টের DM + Sync অফিশিয়াল গ্রুপে অ্যানাউন্সমেন্ট হয়ে যায়।
+# তাই নতুন ফিচার হাতে লিখে আলাদা announcement দিতে হয় না — শুধু সুন্দর করে commit মেসেজ লিখলেই হবে।
+#
+# commit মেসেজ:  feat(chat): Poll votes now show who voted      ← শিরোনাম (প্রথম লাইন)
+#                - See who voted for each option                 ← বার্তা (বাকি লাইন, • বুলেট হয়)
+# announce করতে না চাইলে মেসেজে [skip announce] লেখো।
+#
+# সেটআপ (একবার): GitHub repo → Settings → Secrets → Actions
+#   COMMIT_ANNOUNCE_SECRET  (না দিলে APP_UPDATE_NOTIFY_SECRET-ই ব্যবহার হবে)  — Render-এর env-এর একই নামের মানের সাথে এক
+#   SYNC_API_URL            (ঐচ্ছিক, ডিফল্ট https://sync-5lfm.onrender.com)
+on:
+    push:
+        branches: [main]
+
+permissions:
+    contents: read
+
+concurrency:
+    group: commit-announce
+    cancel-in-progress: false
+
+jobs:
+    announce:
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            - name: Send commit messages to Sync
+              env:
+                  SYNC_API_URL: ${{ secrets.SYNC_API_URL }}
+                  ANNOUNCE_SECRET: ${{ secrets.COMMIT_ANNOUNCE_SECRET || secrets.APP_UPDATE_NOTIFY_SECRET }}
+              run: |
+                  set -euo pipefail
+                  if [ -z "${ANNOUNCE_SECRET:-}" ]; then
+                      echo "COMMIT_ANNOUNCE_SECRET নেই, তাই commit announcement বাদ"
+                      exit 0
+                  fi
+
+                  # commit মেসেজ অবিশ্বস্ত ইনপুট: shell-এ না বসিয়ে event JSON থেকে jq দিয়ে সরাসরি payload বানানো
+                  jq '{
+                      branch: (.ref | sub("^refs/heads/"; "")),
+                      commits: [ .commits[] | select(.distinct != false) | {
+                          id: .id,
+                          author: (.author.name // ""),
+                          message: (.message | .[0:2000])
+                      } ]
+                  }' "$GITHUB_EVENT_PATH" > payload.json
+
+                  if [ "$(jq '.commits | length' payload.json)" = "0" ]; then
+                      echo "নতুন commit নেই"
+                      exit 0
+                  fi
+
+                  API="${SYNC_API_URL:-https://sync-5lfm.onrender.com}"
+
+                  # Render নতুন ভার্সন deploy করা পর্যন্ত (পুরনো ভার্সনে endpoint নেই) অপেক্ষা করে আবার চেষ্টা করে।
+                  # সার্ভার প্রতিটা commit একবারই ঘোষণা করে, তাই retry-তে দুবার যাবে না।
+                  curl -sS --fail-with-body --max-time 60 \
+                      --retry 20 --retry-delay 30 --retry-all-errors \
+                      -X POST "${API%/}/api/v1/app/commits/announce" \
+                      -H "Content-Type: application/json" \
+                      -H "x-update-secret: $ANNOUNCE_SECRET" \
+                      --data @payload.json
+                  echo

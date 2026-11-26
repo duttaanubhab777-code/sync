@@ -16,7 +16,8 @@ import {
     listGroups,
     deleteGroupByAdmin,
     listLoginHistory,
-    broadcastFromSync
+    broadcastFromSync,
+    createUserByAdmin
 } from "../controllers/admin.controller.js";
 import { createNotice, listNotices, deleteNotice } from "../controllers/notice.controller.js";
 import {
@@ -46,6 +47,7 @@ router.delete("/users/:id/block", unblockUserByAdmin);
 router.delete("/users/:id", deleteUserByAdmin);
 // নতুন admin বানানো এবং admin বানানো/সরানো শুধু Super Admin পারবে
 router.post("/admins", verifySuperAdmin, validate(createAdminSchema), createAdmin);
+router.post("/users", verifySuperAdmin, validate(createAdminSchema), createUserByAdmin);
 router.patch("/users/:id/role", verifySuperAdmin, setUserRole);
 
 router.get("/media", listMedia);

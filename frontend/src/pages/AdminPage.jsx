@@ -36,7 +36,10 @@ import {
     History,
     ChevronDown,
     Check,
-    Lightbulb
+    Lightbulb,
+    AtSign,
+    Mail,
+    Phone
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncLogo from "../components/SyncLogo.jsx";
@@ -321,6 +324,8 @@ export default function AdminPage() {
 
     // Super Admin: নতুন Admin তৈরির ফর্ম
     const [showCreateAdmin, setShowCreateAdmin] = useState(false);
+    // একই ফর্ম দিয়ে "admin" বা সাধারণ "user" বানানো যায়
+    const [createMode, setCreateMode] = useState("admin");
     const [newAdminForm, setNewAdminForm] = useState({
         fullName: "",
         username: "",
@@ -355,6 +360,7 @@ export default function AdminPage() {
     const [previewNowMs, setPreviewNowMs] = useState(() => Date.now());
     const [broadcastTitle, setBroadcastTitle] = useState("");
     const [broadcastTag, setBroadcastTag] = useState("Announcement");
+    const [broadcastToGroup, setBroadcastToGroup] = useState(true);
     const [broadcastBody, setBroadcastBody] = useState("");
     const [sendingBroadcast, setSendingBroadcast] = useState(false);
 
@@ -513,18 +519,31 @@ export default function AdminPage() {
         return true;
     };
 
+    const openCreateForm = mode => {
+        if (showCreateAdmin && createMode === mode) {
+            setShowCreateAdmin(false);
+            return;
+        }
+        setCreateMode(mode);
+        setShowCreateAdmin(true);
+    };
+
     const handleCreateAdminSubmit = async e => {
         e.preventDefault();
         setCreatingAdmin(true);
         setBannerErr("");
+        const asUser = createMode === "user";
         try {
-            const res = await api.post("/api/v1/admin/admins", {
+            const res = await api.post(
+                asUser ? "/api/v1/admin/users" : "/api/v1/admin/admins",
+                {
                 fullName: newAdminForm.fullName.trim(),
                 username: newAdminForm.username.trim().toLowerCase(),
                 email: newAdminForm.email.trim().toLowerCase(),
                 phoneNumber: newAdminForm.phoneNumber.trim(),
                 password: newAdminForm.password
-            });
+                }
+            );
             const created = res.data?.data;
             if (created) {
                 setUsers(prev => [created, ...prev]);
@@ -539,7 +558,9 @@ export default function AdminPage() {
             });
             setShowCreateAdmin(false);
             flashSuccess(
-                `New Platform Admin @${created?.username || "admin"} created!`
+                asUser
+                    ? `New user @${created?.username || "user"} created!`
+                    : `New Platform Admin @${created?.username || "admin"} created!`
             );
             loadStats();
         } catch (err) {
@@ -753,13 +774,16 @@ export default function AdminPage() {
             const res = await api.post("/api/v1/admin/broadcast", {
                 title: broadcastTitle.trim(),
                 body: broadcastBody.trim(),
-                tag: broadcastTag
+                tag: broadcastTag,
+                alsoPostToGroup: broadcastToGroup
             });
             const data = res.data?.data || {};
             setBroadcastTitle("");
             setBroadcastBody("");
             flashSuccess(
-                `Official Sync broadcast card delivered to ${data.deliveredCount || 0} users!`
+                `Official Sync broadcast card delivered to ${data.deliveredCount || 0} users${
+                    data.groupPosted ? " and posted in the Sync group" : ""
+                }!`
             );
         } catch (err) {
             flashError(err);
@@ -875,6 +899,7 @@ export default function AdminPage() {
                                 className="sync-btn primary sm"
                                 onClick={() => {
                                     setActiveTab("users");
+                                    setCreateMode("admin");
                                     setShowCreateAdmin(true);
                                 }}
                             >
@@ -1212,32 +1237,67 @@ export default function AdminPage() {
                                 </p>
                             </div>
                             {isSuperAdmin && (
-                                <button
-                                    type="button"
-                                    className="sync-btn primary sm"
-                                    onClick={() =>
-                                        setShowCreateAdmin(v => !v)
-                                    }
-                                >
-                                    <UserPlus size={15} />
-                                    <span>
-                                        {showCreateAdmin
-                                            ? "Close Form"
-                                            : "Create New Admin"}
-                                    </span>
-                                </button>
+                                <div className="sync-create-actions">
+                                    <button
+                                        type="button"
+                                        className={`sync-btn primary sm ${
+                                            showCreateAdmin &&
+                                            createMode === "admin"
+                                                ? "is-open"
+                                                : ""
+                                        }`}
+                                        onClick={() => openCreateForm("admin")}
+                                    >
+                                        <Crown size={15} />
+                                        <span>
+                                            {showCreateAdmin &&
+                                            createMode === "admin"
+                                                ? "Close Form"
+                                                : "Create New Admin"}
+                                        </span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`sync-btn secondary sm sync-create-user-btn ${
+                                            showCreateAdmin &&
+                                            createMode === "user"
+                                                ? "is-open"
+                                                : ""
+                                        }`}
+                                        onClick={() => openCreateForm("user")}
+                                    >
+                                        <UserPlus size={15} />
+                                        <span>
+                                            {showCreateAdmin &&
+                                            createMode === "user"
+                                                ? "Close Form"
+                                                : "Create New User"}
+                                        </span>
+                                    </button>
+                                </div>
                             )}
                         </div>
 
                         {isSuperAdmin && showCreateAdmin && (
                             <form
-                                className="sync-profile-card sync-create-admin-card"
+                                className={`sync-profile-card sync-create-admin-card ${
+                                    createMode === "user" ? "is-user" : ""
+                                }`}
                                 onSubmit={handleCreateAdminSubmit}
                             >
                                 <div className="sync-admin-section-head">
                                     <h3>
-                                        <Crown size={18} /> Create New Platform
-                                        Admin Account
+                                        {createMode === "user" ? (
+                                            <>
+                                                <UserPlus size={18} /> Create
+                                                New User Account
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Crown size={18} /> Create New
+                                                Platform Admin Account
+                                            </>
+                                        )}
                                     </h3>
                                     <button
                                         type="button"
@@ -1250,11 +1310,25 @@ export default function AdminPage() {
                                     </button>
                                 </div>
                                 <p className="sync-muted">
-                                    This account will immediately have{" "}
-                                    <strong>Platform Admin</strong> access on
-                                    the same login page (can send notices,
-                                    inspect images/videos, and block regular
-                                    users).
+                                    {createMode === "user" ? (
+                                        <>
+                                            A regular <strong>User</strong>{" "}
+                                            account is created instantly — no
+                                            OTP needed. They are added to the
+                                            official Sync group and get the
+                                            welcome message, then can log in
+                                            with this username/email and
+                                            password.
+                                        </>
+                                    ) : (
+                                        <>
+                                            This account will immediately have{" "}
+                                            <strong>Platform Admin</strong>{" "}
+                                            access on the same login page (can
+                                            send notices, inspect images/videos,
+                                            and block regular users).
+                                        </>
+                                    )}
                                 </p>
                                 <div className="sync-grid-2">
                                     <div className="sync-field">
@@ -1360,12 +1434,20 @@ export default function AdminPage() {
                                                     size={15}
                                                     className="spin"
                                                 />
-                                                <span>Creating Admin...</span>
+                                                <span>
+                                                    {createMode === "user"
+                                                        ? "Creating User..."
+                                                        : "Creating Admin..."}
+                                                </span>
                                             </>
                                         ) : (
                                             <>
                                                 <UserPlus size={15} />
-                                                <span>Create Admin</span>
+                                                <span>
+                                                    {createMode === "user"
+                                                        ? "Create User"
+                                                        : "Create Admin"}
+                                                </span>
                                             </>
                                         )}
                                     </button>
@@ -1484,15 +1566,30 @@ export default function AdminPage() {
                                                 </div>
 
                                                 <div className="sync-admin-user-meta">
-                                                    <span>@{u.username}</span>
-                                                    <span>· {u.email}</span>
-                                                    <span>
-                                                        · {u.phoneNumber}
+                                                    <span className="sync-adm-chip">
+                                                        <AtSign size={13} />
+                                                        {u.username}
                                                     </span>
-                                                    <span>
-                                                        ·{" "}
+                                                    <span className="sync-adm-chip">
+                                                        <Mail size={13} />
+                                                        {u.email}
+                                                    </span>
+                                                    {u.phoneNumber && (
+                                                        <span className="sync-adm-chip">
+                                                            <Phone size={13} />
+                                                            {u.phoneNumber}
+                                                        </span>
+                                                    )}
+                                                    <span
+                                                        className={`sync-adm-chip seen ${
+                                                            u.online
+                                                                ? "online"
+                                                                : ""
+                                                        }`}
+                                                    >
+                                                        <Clock size={13} />
                                                         {u.online
-                                                            ? "🟢 Online"
+                                                            ? "Online now"
                                                             : formatLastSeen(
                                                                   u.lastSeen
                                                               )}
@@ -2161,7 +2258,7 @@ export default function AdminPage() {
                             <div className="sync-admin-section-head">
                                 <div>
                                     <h3 className="sync-name-with-badge">
-                                        <span>Official Sync DM Broadcast</span>
+                                        <span>Official Sync Broadcast</span>
                                         <VerifiedBadge
                                             variant="official"
                                             size={16}
@@ -2171,7 +2268,8 @@ export default function AdminPage() {
                                         Send a permanent styled announcement
                                         card directly to every user&apos;s
                                         personal <strong>Sync</strong> chat
-                                        (with push notification).
+                                        (with push notification) and,
+                                        optionally, the official Sync group.
                                     </p>
                                 </div>
                             </div>
@@ -2211,6 +2309,31 @@ export default function AdminPage() {
                                         }
                                         required
                                     />
+                                </div>
+                                <label className="sync-checkbox-row sync-broadcast-group-toggle">
+                                    <input
+                                        type="checkbox"
+                                        checked={broadcastToGroup}
+                                        onChange={e =>
+                                            setBroadcastToGroup(e.target.checked)
+                                        }
+                                    />
+                                    <Users size={15} />
+                                    <span>
+                                        Also post in the official Sync group
+                                    </span>
+                                </label>
+                                <div className="sync-auto-announce-note">
+                                    <Sparkles size={15} />
+                                    <span>
+                                        <strong>Auto announcements:</strong>{" "}
+                                        every <code>git push</code> commit
+                                        message is sent automatically as a
+                                        broadcast card to every user&apos;s Sync
+                                        DM and the official Sync group. Add{" "}
+                                        <code>[skip announce]</code> to a
+                                        commit message to skip it.
+                                    </span>
                                 </div>
                                 <button
                                     type="submit"

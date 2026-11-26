@@ -1,0 +1,146 @@
+/* ==========================================================================
+   Admin panel polish — Users & Admins, Create User/Admin, tabs, broadcast
+   ========================================================================== */
+
+/* ---------- Tab bar: solid surface so content never shows through ---------- */
+.sync-admin-tabs {
+    background: #0a1d18;
+    border: 1px solid rgba(110, 255, 190, 0.14);
+    box-shadow: 0 10px 26px -14px rgba(0, 0, 0, 0.7);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+}
+.sync-admin-tab.active {
+    box-shadow: 0 0 0 1px rgba(0, 237, 100, 0.35) inset, 0 6px 18px -8px rgba(0, 237, 100, 0.45);
+}
+
+/* ---------- Section head + create buttons ---------- */
+.sync-create-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.sync-create-actions .sync-btn { flex: 1 1 auto; justify-content: center; white-space: nowrap; }
+.sync-create-actions .sync-btn.is-open { box-shadow: 0 0 0 2px rgba(0, 237, 100, 0.35); }
+.sync-create-user-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(110, 255, 190, 0.3);
+    color: #9cf1c8;
+}
+.sync-create-user-btn:hover { background: rgba(0, 237, 100, 0.12); }
+
+/* "Create user" form gets a green accent (admin form keeps its gold accent) */
+.sync-admin-page .sync-create-admin-card.is-user {
+    border-color: rgba(0, 237, 100, 0.34);
+    background:
+        radial-gradient(60% 100% at 100% 0%, rgba(0, 237, 100, 0.1), transparent 70%),
+        var(--adm-surface);
+}
+
+/* ---------- Toolbar (search + filters) ---------- */
+.sync-admin-toolbar {
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.sync-admin-toolbar .sync-search-input-wrap { border-radius: 14px; }
+
+/* ---------- User cards ---------- */
+.sync-admin-user-list { gap: 12px; }
+.sync-admin-user-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 14px;
+    padding: 16px;
+    border-radius: 22px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015)),
+        #0a1f19;
+}
+.sync-admin-user-info { min-width: 0; display: flex; flex-direction: column; gap: 10px; flex: initial; }
+.sync-admin-user-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.sync-admin-user-top strong { font-size: 1.02rem; font-weight: 800; overflow-wrap: anywhere; }
+
+.sync-admin-user-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.sync-adm-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: #bcd6cb;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+.sync-adm-chip svg { flex: 0 0 auto; color: #6eeab0; }
+.sync-adm-chip.seen { color: #9db5ab; }
+.sync-adm-chip.seen.online { color: #86f3bd; background: rgba(0, 237, 100, 0.12); border-color: rgba(0, 237, 100, 0.3); }
+
+/* actions: one tidy row under the info, full card width */
+.sync-admin-user-actions {
+    grid-column: 1 / -1;
+    margin: 0;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 8px;
+}
+.sync-admin-user-actions .sync-btn { flex: 1 1 0; min-width: 0; justify-content: center; min-height: 40px; border-radius: 12px; white-space: nowrap; }
+.sync-admin-user-actions .sync-icon-btn.danger {
+    flex: 0 0 44px;
+    width: 44px;
+    height: auto;
+    min-height: 40px;
+    border-radius: 12px;
+    background: rgba(255, 90, 105, 0.1);
+    border: 1px solid rgba(255, 110, 125, 0.28);
+    color: #ff8f9a;
+}
+.sync-admin-user-actions:empty { display: none; }
+
+.sync-role-pill { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; }
+
+@media (max-width: 760px) {
+    .sync-admin-user-card { padding: 14px; gap: 12px; grid-template-columns: auto minmax(0, 1fr); }
+    .sync-admin-user-actions { display: flex; grid-template-columns: none; }
+    .sync-admin-user-actions .sync-btn { width: auto; }
+    .sync-admin-user-actions .sync-icon-btn.danger { width: 44px; }
+    .sync-create-actions { width: 100%; }
+    .sync-create-actions .sync-btn { flex: 1 1 calc(50% - 5px); }
+}
+
+/* ---------- Broadcast form ---------- */
+.sync-admin-form .sync-field + .sync-field,
+.sync-admin-form .sync-field { margin-top: 2px; }
+.sync-admin-form .sync-field > label { display: block; margin-bottom: 8px; }
+.sync-broadcast-group-toggle {
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    font-weight: 600;
+}
+.sync-auto-announce-note {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: rgba(0, 237, 100, 0.08);
+    border: 1px dashed rgba(0, 237, 100, 0.35);
+    color: #bfe9d3;
+    font-size: 0.82rem;
+    line-height: 1.5;
+}
+.sync-auto-announce-note > svg { flex: 0 0 auto; margin-top: 2px; color: #6eeab0; }
+.sync-auto-announce-note code {
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.35);
+    color: #8bf0c0;
+    font-size: 0.78rem;
+}
