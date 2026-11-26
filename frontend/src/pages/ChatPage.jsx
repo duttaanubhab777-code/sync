@@ -27,7 +27,7 @@ import {
     BellOff,
     Forward,
     ChevronLeft,
-    ChevronRight
+    ChevronUp
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncBrandBar from "../components/SyncBrandBar.jsx";
@@ -234,7 +234,7 @@ const MIN_VOICE_MS = 800;
 // mic চেপে ধরা (hold-to-record): কত ms ধরলে hold ধরা হবে, আর কতটা swipe করলে কী হবে
 const HOLD_DELAY_MS = 260;
 const HOLD_DELETE_PX = 96; // বামে এতটা টানলে ছাড়লে delete
-const HOLD_PAUSE_PX = 44; // ডানে এতটা টানলেই pause (mic ডান কিনারায় থাকে, তাই কম রাখা)
+const HOLD_PAUSE_UP_PX = 56; // উপরে এতটা টানলেই pause (mic ডান কিনারায় থাকে, তাই ডানে নয়, উপরে)
 const HOLD_SLOP_PX = 14; // hold শুরুর আগে এর বেশি নড়লে hold বাতিল
 
 function formatRecTime(totalSeconds) {
@@ -974,7 +974,7 @@ export default function ChatPage() {
                 recorder.resume();
                 recAudioCtxRef.current?.resume?.().catch(() => {});
                 setRecPhase("recording");
-            }, 200);
+            }, 300);
         }
     };
 
@@ -1017,7 +1017,7 @@ export default function ChatPage() {
         recorder.stop();
     };
 
-    // ---- Hold-to-record: mic চেপে ধরলে রেকর্ড · ছাড়লে send · বামে swipe = delete · ডানে swipe = pause ----
+    // ---- Hold-to-record: mic চেপে ধরলে রেকর্ড · ছাড়লে send · বামে swipe = delete · উপরে swipe = pause ----
     // (ছোট টাচ/ক্লিক আগের মতই locked রেকর্ডিং চালু করে: delete · pause/play · send বাটনসহ)
     voiceActionsRef.current = {
         start: startVoiceRecording,
@@ -1035,11 +1035,15 @@ export default function ChatPage() {
     };
 
     // swipe-এর দূরত্ব CSS variable-এ বসে (re-render ছাড়া, তাই লাগে না)
-    const setHoldVisual = dx => {
+    const setHoldVisual = (dx, dy = 0) => {
         const bar = composerBarRef.current;
         if (!bar) return;
         const clamped = Math.max(-150, Math.min(30, dx));
         bar.style.setProperty("--hold-dx", `${clamped}px`);
+        bar.style.setProperty(
+            "--hold-dy",
+            `${Math.max(-90, Math.min(0, dy))}px`
+        );
         bar.style.setProperty(
             "--hold-p",
             String(Math.min(1, Math.max(0, -dx / HOLD_DELETE_PX)))
@@ -1112,11 +1116,12 @@ export default function ChatPage() {
         }
         if (h.done) return;
 
+        const dy = e.clientY - h.startY;
         h.dx = dx;
-        setHoldVisual(dx);
+        setHoldVisual(dx, dy);
 
-        // ডানে swipe → সাথে সাথে pause, তারপর locked প্যানেল (delete · play · send)
-        if (dx >= HOLD_PAUSE_PX) {
+        // উপরে swipe → সাথে সাথে pause, তারপর locked প্যানেল (delete · play · send)
+        if (dy <= -HOLD_PAUSE_UP_PX && Math.abs(dy) > Math.abs(dx) * 0.8) {
             if (mediaRecorderRef.current?.state === "recording") {
                 h.done = true;
                 buzz(14);
@@ -1124,7 +1129,7 @@ export default function ChatPage() {
                 setPausedFromHold(true);
                 setHoldMode(false);
                 setHoldArm(null);
-                setHoldVisual(0);
+                setHoldVisual(0, 0);
             }
             return;
         }
@@ -1192,6 +1197,7 @@ export default function ChatPage() {
         setPausedFromHold(false);
         const bar = composerBarRef.current;
         bar?.style.removeProperty("--hold-dx");
+        bar?.style.removeProperty("--hold-dy");
         bar?.style.removeProperty("--hold-p");
     }, [recPhase]);
 
@@ -2571,7 +2577,7 @@ export default function ChatPage() {
                                                 aria-hidden="true"
                                             >
                                                 <Pause size={12} />
-                                                <ChevronRight size={14} />
+                                                <ChevronUp size={14} />
                                             </span>
                                         </div>
                                     ) : isRecording ? (
