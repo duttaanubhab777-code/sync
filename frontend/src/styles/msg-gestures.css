@@ -159,3 +159,26 @@
 @media (prefers-reduced-motion: reduce) {
     .sync-msgsheet { animation: none; }
 }
+
+/* Copy: কপি হলে আইকন টিক হয়ে পপ করে, লেবেল সবুজ হয় */
+.sync-copy-item.is-copied { color: #4ade80; pointer-events: none; }
+.sync-copy-item.is-copied .sync-sheet-ico {
+    background: rgba(34, 197, 94, 0.18);
+    color: #4ade80;
+    animation: sync-copy-pop 0.42s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.sync-copy-item.is-copied .sync-sheet-ico svg {
+    stroke-dasharray: 26;
+    stroke-dashoffset: 26;
+    animation: sync-copy-draw 0.38s 0.08s ease-out forwards;
+}
+@keyframes sync-copy-pop {
+    0% { transform: scale(0.6); }
+    60% { transform: scale(1.18); }
+    100% { transform: scale(1); }
+}
+@keyframes sync-copy-draw { to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) {
+    .sync-copy-item.is-copied .sync-sheet-ico,
+    .sync-copy-item.is-copied .sync-sheet-ico svg { animation: none; stroke-dashoffset: 0; }
+}

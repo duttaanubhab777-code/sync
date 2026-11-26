@@ -13,7 +13,8 @@ import {
     Pin,
     PinOff,
     Plus,
-    SmilePlus
+    SmilePlus,
+    Copy
 } from "lucide-react";
 import Avatar from "../Avatar.jsx";
 import PollIcon from "./PollIcon.jsx";
@@ -89,8 +90,51 @@ function SheetHeader({ title, icon, onBack }) {
     );
 }
 
+// ক্লিপবোর্ডে কপি: নতুন API না চললে (পুরনো WebView / non-HTTPS) textarea দিয়ে fallback
+async function copyToClipboard(text) {
+    try {
+        if (navigator.clipboard?.writeText && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return true;
+        }
+    } catch {
+        // নিচের fallback চেষ্টা হবে
+    }
+    try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.top = "0";
+        ta.style.left = "0";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, text.length);
+        const ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        return ok;
+    } catch {
+        return false;
+    }
+}
+
+// কপি করার মত লেখা: সাধারণ মেসেজের text, অথবা ব্রডকাস্ট কার্ডের title + body
+function getCopyableText(message) {
+    if (!message || message.deletedForEveryone) return "";
+    if (message.card?.kind === "broadcast") {
+        return [message.card.title, message.card.body]
+            .filter(Boolean)
+            .join("\n\n")
+            .trim();
+    }
+    if (message.card?.kind) return "";
+    return String(message.text || "").trim();
+}
+
 // মেসেজ টিপে ধরলে নিচ থেকে ওঠা মেনু:
-// রিয়্যাকশন বার (+ পূর্ণ ইমোজি পিকার) · Reply · Edit · Forward · Pin · Message info
+// রিয়্যাকশন বার (+ পূর্ণ ইমোজি পিকার) · Reply · Copy · Edit · Forward · Pin · Message info
 // · কে কী রিয়্যাক্ট করেছে · পোলে কে কোন অপশনে ভোট দিয়েছে · Delete for everyone
 export default function MessageActionSheet({
     message,
@@ -128,6 +172,9 @@ export default function MessageActionSheet({
     const [error, setError] = useState("");
     const [catId, setCatId] = useState(EMOJI_CATEGORIES[0].id);
     const [rxTab, setRxTab] = useState("all");
+    const [copied, setCopied] = useState(false);
+    const [copyFailed, setCopyFailed] = useState(false);
+    const copyText = useMemo(() => getCopyableText(message), [message]);
 
     useEffect(() => {
         const off = pushBackHandler(() => {
@@ -160,6 +207,18 @@ export default function MessageActionSheet({
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleCopy = async () => {
+        if (copied || !copyText) return;
+        const ok = await copyToClipboard(copyText);
+        if (!ok) {
+            setCopyFailed(true);
+            setTimeout(() => setCopyFailed(false), 1600);
+            return;
+        }
+        setCopied(true);
+        setTimeout(() => onClose?.(), 750);
     };
 
     const react = emoji => {
@@ -255,6 +314,24 @@ export default function MessageActionSheet({
                                 </span>
                                 Reply
                             </button>
+                            {copyText && (
+                                <button
+                                    type="button"
+                                    className={`sync-msgsheet-item sync-copy-item ${
+                                        copied ? "is-copied" : ""
+                                    }`}
+                                    onClick={handleCopy}
+                                >
+                                    <span className="sync-sheet-ico">
+                                        {copied ? (
+                                            <Check size={18} strokeWidth={2.8} />
+                                        ) : (
+                                            <Copy size={17} />
+                                        )}
+                                    </span>
+                                    {copied ? "Copied" : copyFailed ? "Copy failed" : "Copy"}
+                                </button>
+                            )}
                             {canEdit && onEdit && (
                                 <button
                                     type="button"
