@@ -79,7 +79,7 @@ import {
 import { enqueueMediaMessage } from "../services/outbox.js";
 import UploadBubbleOverlay from "../components/chat/UploadBubbleOverlay.jsx";
 import CompressingCard from "../components/chat/CompressingCard.jsx";
-import { playSound, hasNativeSound, getSharedAudioContext, resumeAudio } from "../services/sounds.js";
+import { playSound, getSharedAudioContext, resumeAudio } from "../services/sounds.js";
 import MoreMenu from "../components/MoreMenu.jsx";
 import QrCodeModal from "../components/QrCodeModal.jsx";
 import ChatFab from "../components/ChatFab.jsx";
@@ -831,7 +831,7 @@ export default function ChatPage() {
         }
     };
 
-    const startVoiceRecording = async () => {
+    const startVoiceRecording = async opts => {
         if (recPhase !== "idle") return false;
         // getUserMedia requires HTTPS (or localhost) and a user gesture.
         if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
@@ -849,13 +849,8 @@ export default function ChatPage() {
         if (recStartingRef.current) return false;
         recStartingRef.current = true;
         // রেকর্ডার চালুর আগেই বাজে, যাতে শব্দটা রেকর্ডিংয়ে না ঢোকে
-        playSound("recStart");
-        // মাইক খুললেই মোবাইলের অডিও-মোড বদলে যায় এবং চলতি সাউন্ড কেটে যায়।
-        // তাই সাউন্ডটা শেষ হতে দিয়ে তারপর মাইক খোলা হয় (সাউন্ডও রেকর্ডিংয়ে ঢোকে না)
-        // (নেটিভ APK সাউন্ড মাইকের ওপর নির্ভর করে না, তাই সেখানে অপেক্ষা নেই — UI সঙ্গে সঙ্গে দেখায়)
-        if (!hasNativeSound()) {
-            await new Promise(resolve => setTimeout(resolve, 230));
-        }
+        // mic বাটনে আঙুল পড়ার মুহূর্তেই সাউন্ড বেজে গেছে (handleMicPointerDown) — না হলে (অন্য বাটন) এখানে বাজে
+        if (!opts?.soundPlayed) playSound("recStart");
 
         setComposerError("");
         setShowMicrophoneHelp(false);
@@ -1070,7 +1065,7 @@ export default function ChatPage() {
         setHoldArm(null);
         setHoldMode(true);
         buzz(12);
-        const ok = await voiceActionsRef.current.start();
+        const ok = await voiceActionsRef.current.start({ soundPlayed: true });
         if (!ok) {
             h.active = false;
             h.done = true;
@@ -1104,6 +1099,8 @@ export default function ChatPage() {
         } catch {
             /* ignore */
         }
+        // সাউন্ড আঙুল পড়ার মুহূর্তেই — hold-টাইমার ও ভারী re-render-এর অপেক্ষা না করে (ফোনে সেটা ~০.৫–১ সেকেন্ড লাগছিল)
+        playSound("recStart");
         h.timer = setTimeout(beginHoldRecording, HOLD_DELAY_MS);
     };
 
@@ -1167,7 +1164,7 @@ export default function ChatPage() {
 
         // hold হওয়ার আগেই ছেড়ে দিয়েছে = সাধারণ টাচ → locked রেকর্ডিং
         if (!h.started) {
-            voiceActionsRef.current.start();
+            voiceActionsRef.current.start({ soundPlayed: true });
             return;
         }
         if (h.done) return;
