@@ -22,8 +22,21 @@ export const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 export const maxBytesFor = file =>
     detectMessageTypeFromFile(file) === "video" ? MAX_VIDEO_BYTES : MAX_BYTES;
 
-export const CHUNK_THRESHOLD = 10 * 1024 * 1024;
-export const CHUNK_SIZE = 6 * 1024 * 1024; // Cloudinary: শেষেরটা বাদে প্রতিটা chunk >= 5MB
+// দ্রুত নেটে (4G/5G/Wi-Fi) ২০MB পর্যন্ত একটানা হাই-স্পিড স্ট্রিমে আপলোড (chunk-এর মাঝে থামা নয়),
+// আর ২০MB-এর বড় ফাইলে ১২MB চাঙ্ক যাতে TCP স্পিড পুরোটা পাওয়া যায়। ধীর 2G/3G নেটে ৬MB চাঙ্ক।
+export const CHUNK_THRESHOLD = 20 * 1024 * 1024;
+export const CHUNK_SIZE = 12 * 1024 * 1024; // Cloudinary: শেষেরটা বাদে প্রতিটা chunk >= 5MB
+const SLOW_CHUNK_THRESHOLD = 10 * 1024 * 1024;
+const SLOW_CHUNK_SIZE = 6 * 1024 * 1024;
+
+const isSlowNetwork = () => {
+    try {
+        const t = navigator.connection?.effectiveType;
+        return t === "slow-2g" || t === "2g" || t === "3g";
+    } catch {
+        return false;
+    }
+};
 const STALL_MS = 25 * 1000;
 const NON_PERSISTENT_MAX_ATTEMPTS = 6;
 const NON_PERSISTENT_ONLINE_WAIT_MS = 3 * 60 * 1000;
@@ -159,7 +172,7 @@ const createTracker = (total, onProgress, initialLoaded = 0) => {
             const dt = (now - lastT) / 1000;
             if (dt >= 0.15) {
                 const instant = (loaded - lastLoaded) / dt;
-                if (instant >= 0) speed = speed ? speed * 0.65 + instant * 0.35 : instant;
+                if (instant >= 0) speed = speed ? speed * 0.5 + instant * 0.5 : instant;
                 lastT = now;
                 lastLoaded = loaded;
             }
@@ -354,7 +367,7 @@ const runWithRetry = async (attemptFn, { persistent, signal, onWait, onResign })
                 throw new Error("No internet connection. Please check your network and try again.");
             }
             // নেট ফিরলেও সংযোগ স্থির হতে একটু সময় দেওয়া
-            await sleep(800, signal);
+            await sleep(300, signal);
         }
 
         try {
@@ -387,8 +400,38 @@ const newUploadId = () =>
         .toString(36)
         .slice(2, 10)}`;
 
-// Python সার্ভিস থেকে আপলোডের signature আনা (401 হলে token refresh করে আবার চেষ্টা)
-const fetchUploadSignature = async options => {
+// Cloudinary signature ১ ঘণ্টা বৈধ থাকে; ৪৫ মিনিট ক্যাশ করে রাখলে প্রতি আপলোডে
+// আলাদা করে Python সার্ভিসে অপেক্ষা করতে হয় না — আপলোড সাথে সাথে ফুল স্পিডে শুরু হয়
+const SIG_TTL_MS = 45 * 60 * 1000;
+const sigCache = new Map(); // purpose -> { data, at }
+const sigInflight = new Map(); // purpose -> Promise
+
+export const clearSignatureCache = purpose => {
+    if (purpose) sigCache.delete(purpose);
+    else sigCache.clear();
+};
+
+export const prewarmUploadSignature = (purpose = "chat") => {
+    try {
+        const key = String(purpose || "chat");
+        const hit = sigCache.get(key);
+        if (hit && Date.now() - hit.at < SIG_TTL_MS) return;
+        fetchUploadSignature({ purpose: key }).catch(() => {});
+    } catch {
+        /* ignore */
+    }
+};
+
+// Python সার্ভিস থেকে আপলোডের signature আনা (ক্যাশ + 401 হলে token refresh করে আবার চেষ্টা)
+const fetchUploadSignature = async (options = {}) => {
+    const cacheKey = String(options?.purpose || "chat");
+    if (!options?.bypassCache) {
+        const hit = sigCache.get(cacheKey);
+        if (hit && Date.now() - hit.at < SIG_TTL_MS) return hit.data;
+        if (sigInflight.has(cacheKey)) return sigInflight.get(cacheKey);
+    }
+
+    const work = (async () => {
     const pyBaseUrl = (
         import.meta.env.VITE_PYTHON_SERVICE_URL ||
         localStorage.getItem(PY_URL_KEY) ||
@@ -438,7 +481,14 @@ const fetchUploadSignature = async options => {
     if (!cloudName || !apiKey || !signature) {
         throw new Error("Invalid upload signature from Python service");
     }
+    sigCache.set(cacheKey, { data: signData, at: Date.now() });
     return signData;
+    })().finally(() => {
+        sigInflight.delete(cacheKey);
+    });
+
+    if (!options?.bypassCache) sigInflight.set(cacheKey, work);
+    return work;
 };
 
 const buildFields = (signData, resourceEndpoint) => {
@@ -465,7 +515,10 @@ const uploadFileResilient = async (
     const detectedType = detectMessageTypeFromFile(file);
     // ডকুমেন্টের জন্য /raw/upload ব্যবহার করলে PDF/ZIP/DOCX আসল ফাইল হিসেবে নিরাপদে ডেলিভার হয়
     const resourceEndpoint = detectedType === "file" ? "raw" : "auto";
-    const useChunks = total > CHUNK_THRESHOLD;
+    const slowNet = isSlowNetwork();
+    const chunkThreshold = slowNet ? SLOW_CHUNK_THRESHOLD : CHUNK_THRESHOLD;
+    const chunkSize = slowNet ? SLOW_CHUNK_SIZE : CHUNK_SIZE;
+    const useChunks = total > chunkThreshold;
 
     // আগের সেভ করা chunk state (অ্যাপ বন্ধ/রিলোড হলেও যে chunk-এ থেমেছিল সেখান থেকে শুরু)
     const canResume =
@@ -523,7 +576,7 @@ const uploadFileResilient = async (
 
                 let last = null;
                 while (offset < total) {
-                    const end = Math.min(offset + CHUNK_SIZE, total);
+                    const end = Math.min(offset + chunkSize, total);
                     const isLast = end >= total;
                     const part = file.slice(offset, end);
                     const fd = new FormData();
@@ -555,7 +608,8 @@ const uploadFileResilient = async (
                 signal,
                 onWait: handleWait,
                 onResign: () => {
-                    // signature পুরনো: নতুন signature ও নতুন upload id নিয়ে শুরু থেকে
+                    // signature পুরনো: ক্যাশ মুছে নতুন signature ও নতুন upload id নিয়ে শুরু থেকে
+                    clearSignatureCache(purpose || "chat");
                     signData = null;
                     uploadId = newUploadId();
                     offset = 0;

@@ -397,6 +397,23 @@ export default function AdminPage() {
         }
     }, []);
 
+    // Socket সংযুক্ত হলে লোডিং স্পিনার ছাড়াই নীরবে অনলাইন কাউন্ট সিঙ্ক করে নেওয়া
+    useEffect(() => {
+        let alive = true;
+        const syncLiveStats = () => {
+            api.get("/api/v1/admin/stats")
+                .then(res => {
+                    if (alive && res.data?.data) setStats(res.data.data);
+                })
+                .catch(() => {});
+        };
+        window.addEventListener("sync:socket-connect", syncLiveStats);
+        return () => {
+            alive = false;
+            window.removeEventListener("sync:socket-connect", syncLiveStats);
+        };
+    }, []);
+
     const loadUsers = useCallback(
         async (page = userPage) => {
             setLoadingUsers(true);

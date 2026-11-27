@@ -28,7 +28,9 @@ import {
 import {
     detectMessageTypeFromFile,
     isCancelError,
+    clearSignatureCache,
     prepareMediaFile,
+    prewarmUploadSignature,
     SEND_ORIGINAL_MAX_BYTES,
     STORY_VIDEO_COMPRESS_THRESHOLD,
     uploadPreparedFile
@@ -331,7 +333,8 @@ const buildOptimistic = (job, previewUrl) => {
             url: previewUrl,
             mime: job.fileType,
             fileName: job.fileName,
-            bytes: job.originalSize
+            bytes: job.originalSize,
+            ...(job.duration > 0 ? { duration: job.duration } : {})
         },
         location: null,
         contact: null,
@@ -591,6 +594,8 @@ const runEntry = async entry => {
         if (needsUpload) {
             let file = job.prepared || job.file;
 
+            // কমপ্রেশন চলাকালীনই আপলোড signature আগেভাগে এনে রাখা (০ms-এ আপলোড শুরু)
+            prewarmUploadSignature(job.options?.purpose || (job.kind === "story" ? "story" : "chat"));
             if (!job.prepared && !job.compressDone && job.options?.compress) {
                 const out = await compressPhase(entry, ctrl.signal);
                 if (entry.cancelled || ctrl.signal.aborted) {
@@ -634,6 +639,7 @@ const runEntry = async entry => {
                 },
                 { originalSize: job.file.size, willCompress: Boolean(job.options?.compress) }
             );
+            if (!media.duration && job.duration > 0) media.duration = job.duration;
             job.media = media;
             job.chunkState = null;
             job.stage = "sending";
@@ -667,7 +673,7 @@ const runEntry = async entry => {
 
 // সর্বোচ্চ ২টি job একসাথে চলবে (যেমন ১টা বড় ভিডিও আপলোড হওয়ার পাশাপাশি ১টা ছবি/স্টোরিও চলে যাবে)
 // কমপ্রেশন আলাদা লক দিয়ে ১টা করে চলে যাতে ফ্রেম ড্রপ না হয়
-const MAX_CONCURRENT_JOBS = 2;
+const MAX_CONCURRENT_JOBS = 3;
 let activeWorkers = 0;
 
 const pump = () => {
@@ -704,7 +710,8 @@ export const enqueueMediaMessage = ({
     replyToMessage = null,
     asDocument = false,
     purpose,
-    type
+    type,
+    duration = 0
 }) => {
     const me = store.getState().auth.user;
     const id = generateClientMsgId();
@@ -739,6 +746,7 @@ export const enqueueMediaMessage = ({
         fileName: file.name || "",
         fileType: file.type || "",
         originalSize: file.size,
+        duration: Number(duration) > 0 ? Number(duration) : 0,
         prepared: null,
         compressDone: false,
         chunkState: null,
@@ -888,6 +896,8 @@ export const startOutbox = async () => {
     if (!me?._id || started) return;
     started = true;
     syncAuthMeta();
+    prewarmUploadSignature("chat");
+    prewarmUploadSignature("story");
 
     try {
         navigator.storage?.persist?.();
@@ -946,6 +956,7 @@ export const resetOutbox = async () => {
         revoke(entry.previewUrl);
     }
     entries.clear();
+    clearSignatureCache();
     await Promise.all([dbClearJobs(), dbClearMeta()]);
     emit();
 };

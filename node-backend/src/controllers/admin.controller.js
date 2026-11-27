@@ -91,11 +91,16 @@ export const getStats = asyncHandler(async (_req, res) => {
         PushSubscription.estimatedDocumentCount()
     ]);
 
+    // অ্যাপ খোলার সাথে সাথে HTTP রিকোয়েস্ট Socket-এর আগে পৌঁছাতে পারে,
+    // তাই যিনি অ্যাডমিন ড্যাশবোর্ড খুলছেন তাকেও অনলাইন সেটে ধরা হচ্ছে (0 online দেখানো বন্ধ)
+    const onlineSet = new Set(getOnlineUserIds().map(String));
+    if (req.user?._id) onlineSet.add(String(req.user._id));
+
     res.status(200).json(
         new ApiResponse(200, {
             users: {
                 total: totalUsers,
-                online: getOnlineUserIds().length,
+                online: onlineSet.size,
                 blocked: blockedUsers,
                 admins,
                 superAdmins,
@@ -138,9 +143,14 @@ export const listUsers = asyncHandler(async (req, res) => {
         User.countDocuments(query)
     ]);
 
+    const meId = req.user?._id ? String(req.user._id) : "";
     res.status(200).json(
         new ApiResponse(200, {
-            users: users.map(withOnline),
+            users: users.map(u => {
+                const row = withOnline(u);
+                if (meId && String(u._id) === meId) row.isOnline = true;
+                return row;
+            }),
             total,
             page,
             pages: Math.max(Math.ceil(total / limit), 1)

@@ -1,12 +1,44 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronRight, Users } from "lucide-react";
 import PollIcon from "./PollIcon.jsx";
 import Avatar from "../Avatar.jsx";
 import PollVotersSheet from "./PollVoters.jsx";
 import { buildMemberMap, resolvePerson } from "./people.js";
 
+// লোকালি সাথে সাথে ভোটের অবস্থা আপডেট করা (0ms রেসপন্স, সার্ভারের উত্তরের জন্য অপেক্ষা নয়)
+function applyLocalVote(poll, optionId, myId) {
+    if (!poll || !Array.isArray(poll.options) || !myId) return poll;
+    const me = String(myId);
+    const target = poll.options.find(o => o.id === optionId);
+    if (!target) return poll;
+    const already = (target.votes || []).some(v => String(v) === me);
+
+    return {
+        ...poll,
+        options: poll.options.map(opt => {
+            const votes = (opt.votes || []).map(String);
+            if (opt.id === optionId) {
+                return {
+                    ...opt,
+                    votes: already
+                        ? votes.filter(v => v !== me)
+                        : [...votes, me]
+                };
+            }
+            if (!already && !poll.allowMultiple) {
+                return {
+                    ...opt,
+                    votes: votes.filter(v => v !== me)
+                };
+            }
+            return opt;
+        })
+    };
+}
+
 /**
  * গ্রুপ পোলের রিয়েল-টাইম ভোটিং কার্ড
+ * — ট্যাপ করা মাত্রই 0ms-এ অপশন, বার ও কাউন্ট আপডেট হয় (optimistic UI)
  * — প্রতিটি অপশনে ভোটারদের ছোট অবতার, আর নিচে "View votes" দিয়ে পূর্ণ তালিকা
  */
 export default function PollCard({
@@ -16,24 +48,51 @@ export default function PollCard({
     disabled = false,
     onVote
 }) {
-    const [busyId, setBusyId] = useState(null);
+    const [optimisticPoll, setOptimisticPoll] = useState(null);
     const [showVoters, setShowVoters] = useState(false);
+    const inflightRef = useRef(0);
     const map = useMemo(() => buildMemberMap(members), [members]);
-    if (!poll || !Array.isArray(poll.options)) return null;
 
-    const totalVotes = poll.options.reduce(
+    // সার্ভার থেকে নতুন poll এলে এবং কোনো লোকাল ভোট পেন্ডিং না থাকলে সিঙ্ক করা
+    useEffect(() => {
+        if (inflightRef.current === 0) {
+            setOptimisticPoll(null);
+        }
+    }, [poll]);
+
+    const shownPoll = optimisticPoll || poll;
+    if (!shownPoll || !Array.isArray(shownPoll.options)) return null;
+
+    const totalVotes = shownPoll.options.reduce(
         (sum, opt) => sum + (opt.votes?.length || 0),
         0
     );
 
-    const handleClick = async optionId => {
-        if (disabled || busyId) return;
-        setBusyId(optionId);
-        try {
-            await onVote?.(optionId);
-        } finally {
-            setBusyId(null);
-        }
+    const handleClick = optionId => {
+        if (disabled) return;
+        const base = optimisticPoll || poll;
+        const next = applyLocalVote(base, optionId, myId);
+        setOptimisticPoll(next);
+
+        inflightRef.current += 1;
+        Promise.resolve(onVote?.(optionId))
+            .then(ack => {
+                inflightRef.current = Math.max(0, inflightRef.current - 1);
+                if (inflightRef.current === 0) {
+                    // সার্ভার ব্যর্থ হলে আগের আসল অবস্থায় ফিরে যাওয়া; সফল হলে সার্ভারের ডেটা বসবে
+                    if (ack && ack.ok === false) {
+                        setOptimisticPoll(null);
+                    } else if (ack?.poll) {
+                        setOptimisticPoll(null);
+                    }
+                }
+            })
+            .catch(() => {
+                inflightRef.current = Math.max(0, inflightRef.current - 1);
+                if (inflightRef.current === 0) {
+                    setOptimisticPoll(null);
+                }
+            });
     };
 
     return (
@@ -43,14 +102,14 @@ export default function PollCard({
                     <PollIcon size={16} /> Poll
                 </span>
                 <span className="sync-poll-mode">
-                    {poll.allowMultiple ? "Multiple choice" : "Single choice"}
+                    {shownPoll.allowMultiple ? "Multiple choice" : "Single choice"}
                 </span>
             </div>
 
-            <div className="sync-poll-question">{poll.question}</div>
+            <div className="sync-poll-question">{shownPoll.question}</div>
 
             <div className="sync-poll-options">
-                {poll.options.map(opt => {
+                {shownPoll.options.map(opt => {
                     const votes = opt.votes || [];
                     const count = votes.length;
                     const pct =
@@ -67,7 +126,7 @@ export default function PollCard({
                             key={opt.id}
                             type="button"
                             className={`sync-poll-opt ${voted ? "voted" : ""}`}
-                            disabled={disabled || busyId === opt.id}
+                            disabled={disabled}
                             onClick={e => {
                                 e.stopPropagation();
                                 handleClick(opt.id);
@@ -145,7 +204,7 @@ export default function PollCard({
 
             {showVoters && (
                 <PollVotersSheet
-                    poll={poll}
+                    poll={shownPoll}
                     members={members}
                     myId={myId}
                     onClose={() => setShowVoters(false)}

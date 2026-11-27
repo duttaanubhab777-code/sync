@@ -505,3 +505,155 @@
     .sync-act-row { animation: none !important; }
     .sync-act-wave i { transform: scaleY(0.6); }
 }
+
+/* ==========================================================================
+   Media players v2 enhancements (Voice scrub tip, speed pill, Video buffer,
+   duration badge, double-tap ±10s indicator, speed button, HUD pause)
+   ========================================================================== */
+.sync-ap-wave {
+    height: 34px;
+}
+
+.sync-ap-dur {
+    font-style: normal;
+    opacity: 0.72;
+}
+
+.sync-ap-tip,
+.sync-vp-tip {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    transform: translateX(-50%);
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgba(5, 22, 18, 0.92);
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+    z-index: 4;
+}
+
+/* স্পিড বাটন সবসময় দেখা যাবে (1x হলে হালকা, 1.5x/2x হলে হাইলাইট) */
+.sync-ap:not(.is-playing) .sync-ap-rate.is-default {
+    display: inline-flex;
+    opacity: 0.72;
+}
+
+.sync-ap-rate.is-fast {
+    background: rgba(0, 237, 100, 0.28);
+    color: #fff;
+}
+
+.sync-msg-row.incoming .sync-ap-rate.is-fast {
+    background: rgba(0, 237, 100, 0.22);
+    color: var(--mongo);
+}
+
+.sync-vp-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.62);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.sync-vp-buf {
+    position: absolute;
+    left: 0;
+    width: var(--b, 0%);
+    height: 4px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.34);
+    pointer-events: none;
+    transition: width 0.25s linear, height 0.15s;
+}
+
+.sync-vp-track:hover .sync-vp-buf,
+.sync-vp-track.drag .sync-vp-buf {
+    height: 6px;
+}
+
+.sync-vp.playing .sync-vp-big.is-hud-pause {
+    opacity: 0.92;
+    transform: scale(0.9);
+    pointer-events: auto;
+    background: rgba(0, 0, 0, 0.56);
+    color: #fff;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+
+.sync-vp.playing .sync-vp-big.is-hud-pause svg {
+    margin-left: 0;
+}
+
+.sync-vp-seek-pill {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 7px 13px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.68);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+    z-index: 3;
+    animation: sync-pop 0.2s var(--ease) both;
+}
+
+.sync-vp-seek-pill.back {
+    left: 16px;
+}
+
+.sync-vp-seek-pill.fwd {
+    right: 16px;
+}
+
+.sync-vp-rate {
+    border: 0;
+    border-radius: 999px;
+    padding: 3px 8px;
+    margin-right: 2px;
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.18s, transform 0.15s var(--ease);
+}
+
+.sync-vp-rate:hover {
+    background: rgba(255, 255, 255, 0.26);
+}
+
+.sync-vp-rate:active {
+    transform: scale(0.9);
+}
+
+.sync-vp-rate.is-fast {
+    background: rgba(0, 237, 100, 0.28);
+    color: #b6f34d;
+}

@@ -203,13 +203,14 @@ export default function ChatComposer({
     };
 
     // ভয়েস মেসেজও background queue দিয়ে যায় (নেট গেলে নিজে অপেক্ষা করে আবার পাঠায়)
-    const uploadAndSendVoice = (audioFile, conversationId, replyTarget) => {
+    const uploadAndSendVoice = (audioFile, conversationId, replyTarget, duration = 0) => {
         enqueueMediaMessage({
             file: audioFile,
             conversationId,
             replyToMessage: replyTarget,
             purpose: "voice",
-            type: "audio"
+            type: "audio",
+            duration
         });
         if (replyTarget) {
             dispatch(setReplyTo({ conversationId, message: null }));
@@ -289,16 +290,21 @@ export default function ChatComposer({
                 setRecPhase("idle");
                 setRecordingSeconds(0);
 
-                const blob = new Blob(chunks, { type: recordingType });
-                const extension = recordingType.includes("mp4") ? "m4a" : "webm";
+                const cleanMime = String(recordingType || "audio/webm").split(";")[0];
+                const blob = new Blob(chunks, { type: cleanMime });
+                const extension = cleanMime.includes("mp4") ? "m4a" : "webm";
                 const audioFile = new File(
                     [blob],
                     `voice_${Date.now()}.${extension}`,
-                    { type: recordingType }
+                    { type: cleanMime }
+                );
+                const recordedDuration = Math.max(
+                    1,
+                    Math.round((recElapsedRef.current || 0) / 1000)
                 );
                 const { conversationId, replyingTo: replyTarget } =
                     recContextRef.current;
-                uploadAndSendVoice(audioFile, conversationId, replyTarget);
+                uploadAndSendVoice(audioFile, conversationId, replyTarget, recordedDuration);
             };
 
             mediaRecorderRef.current = recorder;

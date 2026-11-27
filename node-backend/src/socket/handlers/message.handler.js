@@ -607,14 +607,19 @@ export const registerMessageHandlers = (io, socket) => {
         }
     });
 
-    // ৫. গ্রুপ পোলে ভোট দেওয়া/বদলানো
+    // ৫. গ্রুপ পোলে ভোট দেওয়া/বদলানো (দ্রুত lean + updateOne)
     socket.on("poll:vote", async (payload, ack) => {
         try {
             const { messageId, optionId } = payload || {};
             if (!isObjectId(messageId) || typeof optionId !== "string" || !optionId) {
                 return ack?.({ ok: false, error: "INVALID_PAYLOAD" });
             }
-            const msg = await Message.findById(messageId);
+            const msg = await Message.findById(messageId, {
+                conversationId: 1,
+                deletedForEveryone: 1,
+                type: 1,
+                poll: 1
+            }).lean();
             if (!msg || msg.deletedForEveryone || msg.type !== "poll" || !msg.poll) {
                 return ack?.({ ok: false, error: "NOT_FOUND" });
             }
@@ -625,40 +630,46 @@ export const registerMessageHandlers = (io, socket) => {
                 return ack?.({ ok: false, error: "FORBIDDEN" });
             }
 
-            const targetOpt = msg.poll.options.find(o => o.id === optionId);
+            const options = (msg.poll.options || []).map(o => ({
+                id: o.id,
+                text: o.text,
+                votes: (o.votes || []).map(String)
+            }));
+            const targetOpt = options.find(o => o.id === optionId);
             if (!targetOpt) {
                 return ack?.({ ok: false, error: "INVALID_OPTION" });
             }
 
-            const alreadyVoted = targetOpt.votes.some(v => String(v) === userId);
+            const alreadyVoted = targetOpt.votes.includes(userId);
             if (alreadyVoted) {
-                targetOpt.votes = targetOpt.votes.filter(v => String(v) !== userId);
+                targetOpt.votes = targetOpt.votes.filter(v => v !== userId);
             } else {
                 if (!msg.poll.allowMultiple) {
-                    for (const opt of msg.poll.options) {
-                        opt.votes = opt.votes.filter(v => String(v) !== userId);
+                    for (const opt of options) {
+                        opt.votes = opt.votes.filter(v => v !== userId);
                     }
                 }
                 targetOpt.votes.push(userId);
             }
-            await msg.save();
+
+            await Message.updateOne(
+                { _id: msg._id },
+                { $set: { "poll.options": options } }
+            );
 
             const pollData = {
                 question: msg.poll.question,
                 allowMultiple: Boolean(msg.poll.allowMultiple),
-                options: msg.poll.options.map(o => ({
-                    id: o.id,
-                    text: o.text,
-                    votes: (o.votes || []).map(String)
-                }))
+                options
             };
+            ack?.({ ok: true, poll: pollData });
+
             const memberRooms = conv.members.map(m => `user:${m.toString()}`);
             io.to(memberRooms).emit("poll:updated", {
                 conversationId: String(msg.conversationId),
                 messageId: String(msg._id),
                 poll: pollData
             });
-            ack?.({ ok: true, poll: pollData });
         } catch (err) {
             console.error("[Socket poll:vote Error]:", err.message);
             ack?.({ ok: false, error: "SERVER_ERROR" });
