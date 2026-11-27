@@ -57,7 +57,7 @@ const assertCanManage = (actor, target) => {
 };
 
 // GET /api/v1/admin/stats
-export const getStats = asyncHandler(async (_req, res) => {
+export const getStats = asyncHandler(async (req, res) => {
     const now = new Date();
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
@@ -148,7 +148,7 @@ export const listUsers = asyncHandler(async (req, res) => {
         new ApiResponse(200, {
             users: users.map(u => {
                 const row = withOnline(u);
-                if (meId && String(u._id) === meId) row.isOnline = true;
+                if (meId && String(u._id) === meId) row.online = true;
                 return row;
             }),
             total,
