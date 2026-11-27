@@ -1,13 +1,15 @@
-// চ্যাটের ছবি/ভিডিও/ফাইল/ভয়েস পাঠানোর background queue ("outbox")।
+// চ্যাট ও স্টোরির ছবি/ভিডিও/ফাইল/ভয়েস/টেক্সট পাঠানোর WhatsApp-এর মতো background queue ("outbox")।
 //
-// আগে আপলোড ChatPage-এর ভেতরে চলত: চ্যাট ছেড়ে গেলে, অ্যাপ ব্যাকগ্রাউন্ডে গেলে বা নেট কেটে গেলে
-// আপলোড ব্যর্থ হতো। এখন:
-//   - ফাইল বাছাই করলেই চ্যাটে মেসেজ (প্রিভিউ সহ) বসে যায়, ইউজার চাইলে অন্য কাজ/চ্যাটে চলে যেতে পারে
-//   - আপলোড ও পাঠানো পেজের বাইরে (এই module-এ) চলে, তাই পেজ বদলালেও থামে না
-//   - নেট গেলে error না দেখিয়ে অপেক্ষা করে, নেট এলে নিজে থেকে বাকিটা চালায় (media.js-এ resume/retry)
-//   - ফাইল ও অবস্থা IndexedDB-তে রাখা হয়: অ্যাপ বন্ধ/ক্র্যাশ হলেও পরের বার খুললে নিজে থেকে চলতে থাকে
-//   - Android অ্যাপে আপলোড চলাকালীন foreground service চালু থাকে, যাতে অ্যাপ minimize করলেও OS মেরে না ফেলে
-//   - সার্ভার clientMsgId দিয়ে duplicate আটকায়, তাই আবার পাঠালেও একই মেসেজ দুবার যায় না
+// বৈশিষ্ট্য:
+//   - চ্যাট ও স্টোরি দুটোরই কমপ্রেশন, আপলোড ও পাঠানো পেজের বাইরে (এই module-এ) চলে
+//   - ট্যাব/অ্যাপ ব্যাকগ্রাউন্ডে গেলেও ভিডিও কমপ্রেশন ও আপলোড থামে না (স্মুথভাবে চলতে থাকে)
+//   - নেট গেলে error না দেখিয়ে অপেক্ষা করে, নেট এলে নিজে থেকে বাকিটা (যে chunk-এ থেমেছিল সেখান থেকে) চালায়
+//   - ফাইল, chunk অবস্থা ও auth মেটা IndexedDB-তে রাখা হয়:
+//       * ট্যাব কেটে দিলে Service Worker Background Sync ("sync-outbox") ব্যাকগ্রাউন্ডে আপলোড ও পাঠানো শেষ করে
+//       * অ্যাপ বন্ধ/ক্র্যাশ হলেও পরের বার খুললে নিজে থেকে বাকিটা চালায়
+//   - স্টোরির ভিডিও শুধু ২৫ MB-এর বেশি হলেই কমপ্রেস হয়; চ্যাটে ২৫ MB-এর কম ভিডিওতেই শুধু "Send original" চলে
+//   - Android অ্যাপে কমপ্রেশন/আপলোড চলাকালীন foreground service চালু থাকে
+//   - সার্ভার clientMsgId / clientStoryId দিয়ে duplicate আটকায়, তাই রিট্রাইয়ে দুবার যায় না
 import { store } from "../store/index.js";
 import {
     addOptimisticMessage,
@@ -16,11 +18,19 @@ import {
     markMessageRetrying,
     removeLocalMessage
 } from "../store/chatSlice.js";
+import { fetchStories } from "../store/storySlice.js";
+import {
+    api,
+    getStoredRefreshToken,
+    getStoredToken,
+    PY_URL_KEY
+} from "./api.js";
 import {
     detectMessageTypeFromFile,
     isCancelError,
-    MAX_VIDEO_BYTES,
     prepareMediaFile,
+    SEND_ORIGINAL_MAX_BYTES,
+    STORY_VIDEO_COMPRESS_THRESHOLD,
     uploadPreparedFile
 } from "./media.js";
 import { emitWithAck, getSocket, isPermanentSendError } from "./socket.js";
@@ -28,10 +38,13 @@ import { playSound } from "./sounds.js";
 import { generateClientMsgId } from "../utils/format.js";
 
 // ---------------------------------------------------------------------------
-// IndexedDB (ফাইল সহ job রাখার জায়গা)। না পেলে শুধু মেমোরিতে চলে, কিছু ভাঙে না।
+// IndexedDB (v2: "jobs" + "meta")। Service Worker-ও এই একই DB পড়ে।
 // ---------------------------------------------------------------------------
 const DB_NAME = "sync-outbox";
-const STORE = "jobs";
+const DB_VERSION = 2;
+const STORE_JOBS = "jobs";
+const STORE_META = "meta";
+const BG_SYNC_TAG = "sync-outbox";
 let dbPromise = null;
 
 const openDb = () => {
@@ -39,10 +52,14 @@ const openDb = () => {
     dbPromise = new Promise(resolve => {
         try {
             if (typeof indexedDB === "undefined") return resolve(null);
-            const req = indexedDB.open(DB_NAME, 1);
+            const req = indexedDB.open(DB_NAME, DB_VERSION);
             req.onupgradeneeded = () => {
-                if (!req.result.objectStoreNames.contains(STORE)) {
-                    req.result.createObjectStore(STORE, { keyPath: "id" });
+                const db = req.result;
+                if (!db.objectStoreNames.contains(STORE_JOBS)) {
+                    db.createObjectStore(STORE_JOBS, { keyPath: "id" });
+                }
+                if (!db.objectStoreNames.contains(STORE_META)) {
+                    db.createObjectStore(STORE_META, { keyPath: "key" });
                 }
             };
             req.onsuccess = () => resolve(req.result);
@@ -55,14 +72,14 @@ const openDb = () => {
     return dbPromise;
 };
 
-const withStore = async (mode, run) => {
+const withStore = async (storeName, mode, run) => {
     try {
         const db = await openDb();
         if (!db) return null;
         return await new Promise(resolve => {
             let result = null;
-            const tx = db.transaction(STORE, mode);
-            const os = tx.objectStore(STORE);
+            const tx = db.transaction(storeName, mode);
+            const os = tx.objectStore(storeName);
             const req = run(os);
             if (req) {
                 req.onsuccess = () => {
@@ -78,15 +95,66 @@ const withStore = async (mode, run) => {
     }
 };
 
-const dbPut = job => withStore("readwrite", os => os.put(job));
-const dbDelete = id => withStore("readwrite", os => os.delete(id));
-const dbAll = async () => (await withStore("readonly", os => os.getAll())) || [];
-const dbClear = () => withStore("readwrite", os => os.clear());
+const dbPut = job => withStore(STORE_JOBS, "readwrite", os => os.put(job));
+const dbDelete = id => withStore(STORE_JOBS, "readwrite", os => os.delete(id));
+const dbAll = async () => (await withStore(STORE_JOBS, "readonly", os => os.getAll())) || [];
+const dbClearJobs = () => withStore(STORE_JOBS, "readwrite", os => os.clear());
+const dbPutMeta = rec => withStore(STORE_META, "readwrite", os => os.put(rec));
+const dbClearMeta = () => withStore(STORE_META, "readwrite", os => os.clear());
+
+// Service Worker localStorage পড়তে পারে না, তাই টোকেন ও URL-গুলো IndexedDB meta-তে রাখা
+const syncAuthMeta = () => {
+    try {
+        const me = store.getState().auth.user;
+        const accessToken = getStoredToken();
+        if (!me?._id || !accessToken) return;
+        const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
+        const pyBaseUrl = (
+            import.meta.env.VITE_PYTHON_SERVICE_URL ||
+            localStorage.getItem(PY_URL_KEY) ||
+            ""
+        ).replace(/\/+$/, "");
+        dbPutMeta({
+            key: "auth",
+            userId: String(me._id),
+            accessToken,
+            refreshToken: getStoredRefreshToken() || "",
+            apiBaseUrl,
+            pyBaseUrl,
+            updatedAt: Date.now()
+        });
+    } catch {
+        /* ignore */
+    }
+};
+
+// ব্রাউজার সমর্থন করলে Background Sync রেজিস্টার করা (ট্যাব কেটে দিলেও নেট এলেই SW চালাবে)
+const registerBackgroundSync = async () => {
+    try {
+        if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+        const reg = await navigator.serviceWorker.ready;
+        if (reg && "sync" in reg && typeof reg.sync.register === "function") {
+            await reg.sync.register(BG_SYNC_TAG);
+        }
+    } catch {
+        /* সব ব্রাউজারে Background Sync নেই, pagehide message ও reopen resume কাজ করবে */
+    }
+};
+
+const notifySwBackgroundTakeover = () => {
+    try {
+        if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+        const sw = navigator.serviceWorker.controller;
+        if (sw) sw.postMessage({ type: "SYNC_OUTBOX_BG" });
+    } catch {
+        /* ignore */
+    }
+};
 
 // ---------------------------------------------------------------------------
 // অবস্থা (UI-র জন্য useSyncExternalStore)
 // ---------------------------------------------------------------------------
-// entry = { job, stage, pct, info, error, ctrl, compressCtrl, cancelled, previewUrl }
+// entry = { job, stage, pct, info, error, ctrl, compressCtrl, cancelled, previewUrl, running }
 // stage: "queued" | "compressing" | "uploading" | "sending" | "failed"
 const entries = new Map();
 let snapshot = [];
@@ -95,14 +163,17 @@ let lastKeepAlive = null;
 
 const toView = e => ({
     id: e.job.id,
-    conversationId: e.job.conversationId,
+    kind: e.job.kind || "chat",
+    conversationId: e.job.conversationId || "",
+    storyType: e.job.storyType || e.job.type || "",
+    caption: e.job.caption || "",
     stage: e.stage,
     pct: e.pct,
     info: e.info,
     error: e.error,
-    name: e.job.fileName,
-    size: e.job.originalSize,
-    file: e.job.file
+    name: e.job.fileName || (e.job.kind === "story" ? "Story" : ""),
+    size: e.job.originalSize || 0,
+    file: e.job.file || null
 });
 
 const emit = () => {
@@ -124,22 +195,33 @@ export const subscribeOutbox = listener => {
 export const getOutboxSnapshot = () => snapshot;
 
 // ---------------------------------------------------------------------------
-// Android: আপলোড চলাকালীন foreground service (native bridge থাকলে)
+// Android: কমপ্রেশন/আপলোড চলাকালীন foreground service (native bridge থাকলে)
 // ---------------------------------------------------------------------------
 const ACTIVE_STAGES = new Set(["queued", "compressing", "uploading", "sending"]);
 
 function updateKeepAlive() {
     const active = [...entries.values()].filter(e => ACTIVE_STAGES.has(e.stage));
-    const key = active.length ? `on:${active.length}` : "off";
+    const compressing = active.some(e => e.stage === "compressing");
+    const stories = active.filter(e => e.job.kind === "story").length;
+    const key = active.length
+        ? `on:${active.length}:${compressing ? "c" : "u"}:${stories}`
+        : "off";
     if (key === lastKeepAlive) return;
     lastKeepAlive = key;
     try {
         const bridge = typeof window !== "undefined" ? window.SyncNativeNotif : null;
         if (bridge && typeof bridge.setUploadActive === "function") {
-            bridge.setUploadActive(
-                active.length > 0,
-                active.length === 1 ? "Sending 1 file…" : `Sending ${active.length} files…`
-            );
+            let text = "";
+            if (active.length === 1) {
+                if (compressing) text = "Compressing video in background…";
+                else if (stories === 1) text = "Posting story in background…";
+                else text = "Sending 1 file…";
+            } else if (active.length > 1) {
+                text = compressing
+                    ? `Processing ${active.length} items in background…`
+                    : `Sending ${active.length} items…`;
+            }
+            bridge.setUploadActive(active.length > 0, text);
         }
     } catch {
         /* native bridge না থাকলে/ব্যর্থ হলে সমস্যা নেই */
@@ -150,6 +232,7 @@ function updateKeepAlive() {
 // ছোট সহায়ক
 // ---------------------------------------------------------------------------
 const safeObjectUrl = blob => {
+    if (!blob) return "";
     try {
         return URL.createObjectURL(blob);
     } catch {
@@ -171,6 +254,8 @@ const clone = v => {
         return null;
     }
 };
+const isOnline = () => typeof navigator === "undefined" || navigator.onLine !== false;
+
 const sleep = (ms, signal) =>
     new Promise((resolve, reject) => {
         if (signal?.aborted) return reject(Object.assign(new Error("cancelled"), { cancelled: true }));
@@ -183,6 +268,34 @@ const sleep = (ms, signal) =>
             reject(Object.assign(new Error("cancelled"), { cancelled: true }));
         };
         signal?.addEventListener("abort", onAbort, { once: true });
+    });
+
+const waitForOnline = (signal, maxMs = Infinity) =>
+    new Promise((resolve, reject) => {
+        if (signal?.aborted) return reject(Object.assign(new Error("cancelled"), { cancelled: true }));
+        if (isOnline()) return resolve(true);
+        let timer = null;
+        const cleanup = () => {
+            window.removeEventListener("online", onOnline);
+            signal?.removeEventListener("abort", onAbort);
+            if (timer) clearTimeout(timer);
+        };
+        const onOnline = () => {
+            cleanup();
+            resolve(true);
+        };
+        const onAbort = () => {
+            cleanup();
+            reject(Object.assign(new Error("cancelled"), { cancelled: true }));
+        };
+        window.addEventListener("online", onOnline);
+        signal?.addEventListener("abort", onAbort);
+        if (Number.isFinite(maxMs)) {
+            timer = setTimeout(() => {
+                cleanup();
+                resolve(false);
+            }, maxMs);
+        }
     });
 
 const friendlyError = code => {
@@ -214,7 +327,6 @@ const buildOptimistic = (job, previewUrl) => {
         },
         type: job.type,
         text: job.caption || "",
-        // আপলোড শেষ হওয়া পর্যন্ত ফোনের ফাইল থেকেই প্রিভিউ দেখানো হয়
         media: {
             url: previewUrl,
             mime: job.fileType,
@@ -232,10 +344,7 @@ const buildOptimistic = (job, previewUrl) => {
     };
 };
 
-const persist = job => {
-    // Blob সহ পুরো job; ব্যর্থ হলে (কোটা ভরা ইত্যাদি) চুপচাপ মেমোরির উপর ভরসা
-    return dbPut({ ...job });
-};
+const persist = job => dbPut({ ...job });
 
 const setStage = (entry, stage, extra = {}) => {
     entry.stage = stage;
@@ -250,71 +359,68 @@ const setProgress = (entry, pct, info) => {
 };
 
 // ---------------------------------------------------------------------------
-// Job চালানো
+// ১টা করে কমপ্রেশন লক (CPU/GPU-তে চাপ না ফেলে স্মুথ ৩০fps ধরে রাখতে)
 // ---------------------------------------------------------------------------
-const waitForSocket = async signal => {
-    for (;;) {
-        const s = getSocket();
-        if (s && s.connected) return;
-        if (signal?.aborted) throw Object.assign(new Error("cancelled"), { cancelled: true });
-        if (s && !s.connected && navigator.onLine !== false) {
-            try {
-                s.connect();
-            } catch {
-                /* ignore */
-            }
-        }
-        await new Promise((resolve, reject) => {
-            const done = () => {
-                clearTimeout(t);
-                window.removeEventListener("sync:socket-connect", done);
-                window.removeEventListener("online", done);
-                signal?.removeEventListener("abort", onAbort);
-                resolve();
-            };
-            const onAbort = () => {
-                clearTimeout(t);
-                window.removeEventListener("sync:socket-connect", done);
-                window.removeEventListener("online", done);
-                reject(Object.assign(new Error("cancelled"), { cancelled: true }));
-            };
-            const t = setTimeout(done, 3000);
-            window.addEventListener("sync:socket-connect", done);
-            window.addEventListener("online", done);
-            signal?.addEventListener("abort", onAbort, { once: true });
-        });
-    }
+let compressChain = Promise.resolve();
+const withCompressLock = fn => {
+    const run = compressChain.then(fn, fn);
+    compressChain = run.catch(() => {});
+    return run;
 };
 
-const compressPhase = async entry => {
+// ---------------------------------------------------------------------------
+// Job চালানো (Chat + Story)
+// ---------------------------------------------------------------------------
+const compressPhase = async (entry, signal) => {
     const { job } = entry;
     const file = job.file;
-    const kind = detectMessageTypeFromFile(file);
+    if (!file) return null;
 
-    // ভিডিও compress ভিডিও চালিয়ে করতে হয়, ব্যাকগ্রাউন্ডে সেটা চলে না।
-    // তাই অ্যাপ ব্যাকগ্রাউন্ডে গেলে compress বাদ দিয়ে আসল ফাইলই আপলোড হয় (ইউজারকে অপেক্ষা করতে হয় না)।
-    const canSkipInBackground = kind === "video" && file.size <= MAX_VIDEO_BYTES;
-    if (canSkipInBackground && document.hidden) return file;
+    return withCompressLock(async () => {
+        if (entry.cancelled || signal?.aborted) {
+            throw Object.assign(new Error("cancelled"), { cancelled: true });
+        }
+        setStage(entry, "compressing", {
+            pct: 0,
+            info: {
+                phase: "compressing",
+                file: job.file,
+                name: job.fileName,
+                total: job.file.size,
+                originalSize: job.file.size,
+                willCompress: true
+            }
+        });
 
-    const ctrl = new AbortController();
-    entry.compressCtrl = ctrl;
-    const onVisibility = () => {
-        if (document.hidden && canSkipInBackground) ctrl.abort();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    try {
-        return await prepareMediaFile(
-            file,
-            (pct, info) => setProgress(entry, pct, { file, name: job.fileName, ...info }),
-            { compress: true, compressSignal: ctrl.signal }
-        );
-    } finally {
-        document.removeEventListener("visibilitychange", onVisibility);
-        entry.compressCtrl = null;
-    }
+        // ব্যাকগ্রাউন্ডে গেলেও আর abort করা হয় না — video.js নিজেই ব্যাকগ্রাউন্ডে স্মুথভাবে কমপ্রেস করে
+        const ctrl = new AbortController();
+        entry.compressCtrl = ctrl;
+        const onOuterAbort = () => ctrl.abort();
+        signal?.addEventListener("abort", onOuterAbort, { once: true });
+        try {
+            return await prepareMediaFile(
+                file,
+                (pct, info) =>
+                    setProgress(entry, info?.compressPct ?? pct, {
+                        file: job.file,
+                        name: job.fileName,
+                        ...info
+                    }),
+                {
+                    compress: true,
+                    forceCompress: Boolean(job.options?.forceCompress),
+                    compressSignal: ctrl.signal
+                }
+            );
+        } finally {
+            signal?.removeEventListener("abort", onOuterAbort);
+            entry.compressCtrl = null;
+        }
+    });
 };
 
-const sendPhase = async (entry, signal) => {
+// চ্যাট মেসেজ পাঠানো: Socket.IO চালু থাকলে সকেট, নইলে REST POST /api/v1/messages (দুই পথেই clientMsgId ইডেম্পোটেন্ট)
+const sendChatPhase = async (entry, signal) => {
     const { job } = entry;
     const wire = {
         conversationId: job.conversationId,
@@ -329,20 +435,117 @@ const sendPhase = async (entry, signal) => {
     let hardFailures = 0;
     for (;;) {
         if (signal.aborted) throw Object.assign(new Error("cancelled"), { cancelled: true });
-        await waitForSocket(signal);
-        const ack = await emitWithAck("message:send", wire, 20000);
-        if (ack?.ok && ack.message) {
-            store.dispatch(confirmMessageSent({ clientMsgId: job.id, message: ack.message }));
+        if (!isOnline()) {
+            setProgress(entry, 99, {
+                phase: "waiting",
+                waitReason: "offline",
+                file: job.file,
+                name: job.fileName
+            });
+            await waitForOnline(signal);
+            await sleep(600, signal);
+        }
+
+        const s = getSocket();
+        if (s && s.connected) {
+            const ack = await emitWithAck("message:send", wire, 15000);
+            if (ack?.ok && ack.message) {
+                store.dispatch(confirmMessageSent({ clientMsgId: job.id, message: ack.message }));
+                return;
+            }
+            if (isPermanentSendError(ack?.error)) {
+                throw Object.assign(new Error(friendlyError(ack.error)), { permanent: true });
+            }
+            if (!ack?.retryable) {
+                hardFailures += 1;
+                if (hardFailures >= 6) {
+                    throw Object.assign(new Error(friendlyError(ack?.error)), { permanent: true });
+                }
+            }
+        } else {
+            // Socket সংযুক্ত না থাকলেও নেট থাকলে REST দিয়ে সাথে সাথে পাঠিয়ে দেওয়া
+            try {
+                const res = await api.post("/api/v1/messages", wire, { timeout: 20000 });
+                const msg = res.data?.data?.message || res.data?.data;
+                if (msg) {
+                    store.dispatch(confirmMessageSent({ clientMsgId: job.id, message: msg }));
+                    return;
+                }
+            } catch (err) {
+                const code = err?.response?.data?.error || err?.response?.data?.message;
+                const status = err?.response?.status || 0;
+                if (isPermanentSendError(code) || (status >= 400 && status < 500 && status !== 408 && status !== 429 && status !== 401)) {
+                    throw Object.assign(new Error(friendlyError(code) || err?.response?.data?.message || "Could not send."), {
+                        permanent: true
+                    });
+                }
+                if (isOnline()) hardFailures += 1;
+            }
+        }
+
+        setProgress(entry, 99, {
+            phase: "waiting",
+            waitReason: isOnline() ? "retry" : "offline",
+            file: job.file,
+            name: job.fileName
+        });
+        await sleep(Math.min(10000, 1200 * Math.max(1, hardFailures)), signal);
+    }
+};
+
+// স্টোরি পোস্ট করা (অফলাইন/নেটওয়ার্ক এরর হলে নিজে থেকে রিট্রাই)
+const sendStoryPhase = async (entry, signal) => {
+    const { job } = entry;
+    const payload = {
+        type: job.storyType || job.type || "text",
+        caption: job.caption || "",
+        backgroundColor: job.backgroundColor || "#0F4C3A",
+        clientStoryId: job.id
+    };
+    if (job.media) payload.media = job.media;
+
+    let hardFailures = 0;
+    for (;;) {
+        if (signal.aborted) throw Object.assign(new Error("cancelled"), { cancelled: true });
+        if (!isOnline()) {
+            setProgress(entry, 99, {
+                phase: "waiting",
+                waitReason: "offline",
+                file: job.file,
+                name: job.fileName || "Story"
+            });
+            await waitForOnline(signal);
+            await sleep(600, signal);
+        }
+
+        try {
+            await api.post("/api/v1/stories", payload, { timeout: 25000 });
+            store.dispatch(fetchStories());
             return;
+        } catch (err) {
+            const status = err?.response?.status || 0;
+            const retryable =
+                !err?.response || status === 408 || status === 429 || status >= 500;
+            if (!retryable) {
+                throw Object.assign(
+                    new Error(err?.response?.data?.message || "Could not post story."),
+                    { permanent: true }
+                );
+            }
+            if (isOnline()) {
+                hardFailures += 1;
+                if (hardFailures >= 20) {
+                    throw new Error("Could not post story. Tap to retry.");
+                }
+            }
+            setProgress(entry, 99, {
+                phase: "waiting",
+                waitReason: isOnline() ? "retry" : "offline",
+                file: job.file,
+                name: job.fileName || "Story"
+            });
+            await sleep(Math.min(12000, 1500 * Math.max(1, hardFailures)), signal);
         }
-        if (isPermanentSendError(ack?.error)) {
-            throw new Error(friendlyError(ack.error));
-        }
-        if (!ack?.retryable) {
-            hardFailures += 1;
-            if (hardFailures >= 6) throw new Error(friendlyError(ack?.error));
-        }
-        await sleep(ack?.error === "RATE_LIMITED" ? 3000 : Math.min(8000, 1000 * (hardFailures + 1)), signal);
     }
 };
 
@@ -350,7 +553,6 @@ const finishSuccess = entry => {
     const { job } = entry;
     entries.delete(job.id);
     dbDelete(job.id);
-    // সার্ভারের মেসেজ বসে গেছে; একটু পরে লোকাল প্রিভিউ ছাড়া
     const url = entry.previewUrl;
     setTimeout(() => revoke(url), 1500);
     emit();
@@ -358,18 +560,20 @@ const finishSuccess = entry => {
 
 const finishFailed = (entry, err) => {
     const { job } = entry;
-    const message =
-        (err && err.message) || "Could not send. Tap to retry.";
+    const message = (err && err.message) || "Could not send. Tap to retry.";
     job.error = message;
     job.stage = "failed";
+    job.retryable = !err?.permanent;
     persist(job);
-    store.dispatch(
-        markMessageFailed({
-            conversationId: job.conversationId,
-            clientMsgId: job.id,
-            error: message
-        })
-    );
+    if (job.kind !== "story") {
+        store.dispatch(
+            markMessageFailed({
+                conversationId: job.conversationId,
+                clientMsgId: job.id,
+                error: message
+            })
+        );
+    }
     playSound("error");
     setStage(entry, "failed", { error: message, pct: 0, info: null });
 };
@@ -378,62 +582,101 @@ const runEntry = async entry => {
     const { job } = entry;
     const ctrl = new AbortController();
     entry.ctrl = ctrl;
+    entry.running = true;
     entry.error = "";
+    syncAuthMeta();
+
     try {
-        if (!job.media) {
+        const needsUpload = Boolean(job.file) && !job.media;
+        if (needsUpload) {
             let file = job.prepared || job.file;
 
             if (!job.prepared && !job.compressDone && job.options?.compress) {
-                setStage(entry, "compressing", { pct: 0, info: { phase: "compressing", file: job.file, name: job.fileName, total: job.file.size } });
-                const out = await compressPhase(entry);
-                if (entry.cancelled) throw Object.assign(new Error("cancelled"), { cancelled: true });
+                const out = await compressPhase(entry, ctrl.signal);
+                if (entry.cancelled || ctrl.signal.aborted) {
+                    throw Object.assign(new Error("cancelled"), { cancelled: true });
+                }
                 file = out;
                 // compress হয়ে গেলে আবার করতে হয় না (retry/restart-এও)
                 job.prepared = out !== job.file ? out : null;
                 job.compressDone = true;
+                job.chunkState = null;
                 await persist(job);
             }
 
-            setStage(entry, "uploading", { pct: 0, info: { phase: "uploading", file: job.file, name: job.fileName, total: file.size } });
+            setStage(entry, "uploading", {
+                pct: job.chunkState?.offset && file.size
+                    ? Math.floor((job.chunkState.offset / file.size) * 100)
+                    : 0,
+                info: {
+                    phase: "uploading",
+                    file: job.file,
+                    name: job.fileName,
+                    total: file.size,
+                    originalSize: job.file.size,
+                    compressedSize: file.size,
+                    willCompress: Boolean(job.options?.compress)
+                }
+            });
+
             const media = await uploadPreparedFile(
                 file,
                 (pct, info) => setProgress(entry, pct, { file: job.file, name: job.fileName, ...info }),
-                { purpose: job.options?.purpose, persistent: true, signal: ctrl.signal },
+                {
+                    purpose: job.options?.purpose,
+                    persistent: true,
+                    signal: ctrl.signal,
+                    initialChunkState: job.chunkState || null,
+                    onChunkCommitted: chunkState => {
+                        job.chunkState = chunkState;
+                        persist(job);
+                    }
+                },
                 { originalSize: job.file.size, willCompress: Boolean(job.options?.compress) }
             );
             job.media = media;
+            job.chunkState = null;
             job.stage = "sending";
             await persist(job); // আপলোড হয়ে গেছে: অ্যাপ বন্ধ হলেও আবার আপলোড লাগবে না
         }
 
-        setStage(entry, "sending", { pct: 100, info: { phase: "done", file: job.file, name: job.fileName } });
-        await sendPhase(entry, ctrl.signal);
+        setStage(entry, "sending", {
+            pct: 100,
+            info: { phase: "processing", file: job.file, name: job.fileName || "Story" }
+        });
+
+        if (job.kind === "story") {
+            await sendStoryPhase(entry, ctrl.signal);
+        } else {
+            await sendChatPhase(entry, ctrl.signal);
+        }
         finishSuccess(entry);
     } catch (err) {
         if (entry.cancelled || isCancelError(err) || err?.cancelled) {
-            if (entry.cancelled) return; // cancel নিজেই সব পরিষ্কার করেছে
-            // অন্য কারণে abort (যেমন logout): কিছু করার নেই
             return;
         }
         finishFailed(entry, err);
     } finally {
         entry.ctrl = null;
+        entry.running = false;
+        activeWorkers = Math.max(0, activeWorkers - 1);
+        emit();
+        pump();
     }
 };
 
-let running = false;
-const pump = async () => {
-    if (running) return;
-    running = true;
-    try {
-        for (;;) {
-            const next = [...entries.values()].find(e => e.stage === "queued");
-            if (!next) break;
-            await runEntry(next);
-        }
-    } finally {
-        running = false;
-        emit();
+// সর্বোচ্চ ২টি job একসাথে চলবে (যেমন ১টা বড় ভিডিও আপলোড হওয়ার পাশাপাশি ১টা ছবি/স্টোরিও চলে যাবে)
+// কমপ্রেশন আলাদা লক দিয়ে ১টা করে চলে যাতে ফ্রেম ড্রপ না হয়
+const MAX_CONCURRENT_JOBS = 2;
+let activeWorkers = 0;
+
+const pump = () => {
+    while (activeWorkers < MAX_CONCURRENT_JOBS) {
+        const next = [...entries.values()].find(e => e.stage === "queued" && !e.running);
+        if (!next) break;
+        activeWorkers += 1;
+        next.running = true;
+        runEntry(next);
     }
 };
 
@@ -449,10 +692,11 @@ const makeEntry = (job, previewUrl) => ({
     ctrl: null,
     compressCtrl: null,
     cancelled: false,
+    running: false,
     previewUrl
 });
 
-// ফাইলটা পাঠানোর লাইনে দেওয়া। সাথে সাথে চ্যাটে মেসেজ (প্রিভিউ সহ) বসে, বাকিটা background-এ।
+// চ্যাটের মিডিয়া ফাইল পাঠানোর লাইনে দেওয়া। সাথে সাথে চ্যাটে প্রিভিউ বসে, বাকিটা background-এ।
 export const enqueueMediaMessage = ({
     file,
     conversationId,
@@ -479,6 +723,7 @@ export const enqueueMediaMessage = ({
 
     const job = {
         id,
+        kind: "chat",
         userId: String(me?._id || ""),
         conversationId: String(conversationId),
         type: msgType,
@@ -487,7 +732,8 @@ export const enqueueMediaMessage = ({
         replyToId: replyToMessage?._id || null,
         options: {
             compress: !asDocument && (msgType === "image" || msgType === "video"),
-            purpose
+            forceCompress: !asDocument && msgType === "video" && file.size >= SEND_ORIGINAL_MAX_BYTES,
+            purpose: purpose || "chat"
         },
         file,
         fileName: file.name || "",
@@ -495,8 +741,10 @@ export const enqueueMediaMessage = ({
         originalSize: file.size,
         prepared: null,
         compressDone: false,
+        chunkState: null,
         media: null,
         stage: "queued",
+        retryable: true,
         error: "",
         createdAt: Date.now()
     };
@@ -508,7 +756,71 @@ export const enqueueMediaMessage = ({
     store.dispatch(addOptimisticMessage(buildOptimistic(job, previewUrl)));
     playSound("send");
 
+    syncAuthMeta();
     persist(job);
+    registerBackgroundSync();
+    emit();
+    pump();
+    return id;
+};
+
+// স্টোরি (টেক্সট / ছবি / ভিডিও) ব্যাকগ্রাউন্ড কিউতে দেওয়া।
+// নিয়ম: স্টোরির ভিডিও ২৫ MB-এর বেশি হলেই কেবল স্মুথ কমপ্রেশন হবে; ২৫ MB বা কম হলে সরাসরি আপলোড।
+export const enqueueStoryUpload = ({
+    type = "text",
+    caption = "",
+    backgroundColor = "#0F4C3A",
+    file = null
+}) => {
+    const me = store.getState().auth.user;
+    const id = generateClientMsgId();
+    const detected = file ? detectMessageTypeFromFile(file) : "text";
+    const storyType =
+        type === "text" || !file ? "text" : detected === "video" ? "video" : "image";
+
+    const shouldCompress =
+        storyType === "image"
+            ? true
+            : storyType === "video"
+              ? Boolean(file && file.size > STORY_VIDEO_COMPRESS_THRESHOLD)
+              : false;
+
+    const job = {
+        id,
+        kind: "story",
+        userId: String(me?._id || ""),
+        conversationId: "",
+        type: storyType,
+        storyType,
+        caption: String(caption || "").trim(),
+        backgroundColor: backgroundColor || "#0F4C3A",
+        options: {
+            compress: shouldCompress,
+            forceCompress: storyType === "video" && shouldCompress,
+            purpose: "story"
+        },
+        file: file || null,
+        fileName: file?.name || "Text Story",
+        fileType: file?.type || "",
+        originalSize: file?.size || 0,
+        prepared: null,
+        compressDone: !shouldCompress,
+        chunkState: null,
+        media: null,
+        stage: "queued",
+        retryable: true,
+        error: "",
+        createdAt: Date.now()
+    };
+
+    const previewUrl = safeObjectUrl(file);
+    const entry = makeEntry(job, previewUrl);
+    entries.set(id, entry);
+
+    playSound("send");
+    syncAuthMeta();
+    persist(job);
+    registerBackgroundSync();
     emit();
     pump();
     return id;
@@ -520,13 +832,17 @@ export const retryUpload = id => {
     entry.cancelled = false;
     entry.job.error = "";
     entry.job.stage = entry.job.media ? "sending" : "queued";
+    syncAuthMeta();
     persist(entry.job);
-    store.dispatch(
-        markMessageRetrying({
-            conversationId: entry.job.conversationId,
-            clientMsgId: id
-        })
-    );
+    registerBackgroundSync();
+    if (entry.job.kind !== "story") {
+        store.dispatch(
+            markMessageRetrying({
+                conversationId: entry.job.conversationId,
+                clientMsgId: id
+            })
+        );
+    }
     setStage(entry, "queued", { error: "", pct: 0, info: null });
     pump();
 };
@@ -544,30 +860,36 @@ export const cancelUpload = id => {
     entries.delete(id);
     dbDelete(id);
     revoke(entry.previewUrl);
-    store.dispatch(
-        removeLocalMessage({
-            conversationId: entry.job.conversationId,
-            clientMsgId: id
-        })
-    );
+    if (entry.job.kind !== "story") {
+        store.dispatch(
+            removeLocalMessage({
+                conversationId: entry.job.conversationId,
+                clientMsgId: id
+            })
+        );
+    }
     emit();
 };
 
-// ভিডিও compress চলাকালীন "Send original": compress থামিয়ে আসল ফাইল আপলোড
+// চ্যাটের ভিডিও compress চলাকালীন "Send original":
+// কঠোর নিয়ম — ভিডিও ২৫ MB-এর কম হলেই কেবল compress বাদ দিয়ে আসল ফাইল আপলোড করা যাবে।
 export const skipCompression = id => {
     const entry = entries.get(id);
-    if (entry?.compressCtrl) entry.compressCtrl.abort();
+    if (!entry?.compressCtrl) return;
+    if (entry.job.kind === "story") return;
+    if (Number(entry.job.originalSize || 0) >= SEND_ORIGINAL_MAX_BYTES) return;
+    entry.compressCtrl.abort();
 };
 
-// অ্যাপ চালুর সময় (লগইন করা অবস্থায়): আগের অসমাপ্ত আপলোড আবার চালু
+// অ্যাপ চালুর সময় (লগইন করা অবস্থায়): আগের অসমাপ্ত চ্যাট ও স্টোরি আপলোড আবার চালু
 let started = false;
 export const startOutbox = async () => {
     const me = store.getState().auth.user;
     if (!me?._id || started) return;
     started = true;
+    syncAuthMeta();
 
     try {
-        // ব্রাউজারকে বলা: এই ডেটা নিজে থেকে মুছো না (সমর্থন থাকলে)
         navigator.storage?.persist?.();
     } catch {
         /* ignore */
@@ -575,11 +897,14 @@ export const startOutbox = async () => {
 
     const saved = await dbAll();
     for (const job of saved) {
-        if (!job?.id || !job.file) {
-            if (job?.id) dbDelete(job.id);
+        if (!job?.id) continue;
+        // টেক্সট স্টোরি বাদে বাকি সব job-এ file বা media থাকতে হবে
+        const isTextStory = job.kind === "story" && job.storyType === "text";
+        if (!isTextStory && !job.file && !job.media) {
+            dbDelete(job.id);
             continue;
         }
-        // অন্য ইউজারের (আগের লগইন) job আর এই ইউজারের চ্যাটে নয়
+        // অন্য ইউজারের (আগের লগইন) job মুছে ফেলা
         if (String(job.userId) !== String(me._id)) {
             dbDelete(job.id);
             continue;
@@ -589,22 +914,25 @@ export const startOutbox = async () => {
         const previewUrl = safeObjectUrl(job.file);
         const entry = makeEntry(job, previewUrl);
         entries.set(job.id, entry);
-        store.dispatch(addOptimisticMessage(buildOptimistic(job, previewUrl)));
-        if (entry.stage === "failed") {
-            store.dispatch(
-                markMessageFailed({
-                    conversationId: job.conversationId,
-                    clientMsgId: job.id,
-                    error: job.error || "SEND_FAILED"
-                })
-            );
+
+        if (job.kind !== "story") {
+            store.dispatch(addOptimisticMessage(buildOptimistic(job, previewUrl)));
+            if (entry.stage === "failed") {
+                store.dispatch(
+                    markMessageFailed({
+                        conversationId: job.conversationId,
+                        clientMsgId: job.id,
+                        error: job.error || "SEND_FAILED"
+                    })
+                );
+            }
         }
     }
     emit();
     pump();
 };
 
-// লগআউটে সব বাতিল ও মুছে ফেলা (অন্য ইউজারের ফাইল যেন না যায়)
+// লগআউটে সব বাতিল ও মুছে ফেলা (অন্য ইউজারের ফাইল/টোকেন যেন না থাকে)
 export const resetOutbox = async () => {
     started = false;
     for (const entry of entries.values()) {
@@ -618,20 +946,83 @@ export const resetOutbox = async () => {
         revoke(entry.previewUrl);
     }
     entries.clear();
-    await dbClear();
+    await Promise.all([dbClearJobs(), dbClearMeta()]);
     emit();
 };
 
 export const hasActiveUploads = () => [...entries.values()].some(e => ACTIVE_STAGES.has(e.stage));
 
-// অ্যাপ সামনে এলে/নেট ফিরলে আটকে থাকা queue আবার ঠেলে দেওয়া
+// নেট ফিরলে / অ্যাপ সামনে এলে / ট্যাব বন্ধ হলে ব্যাকগ্রাউন্ড সিঙ্ক ও রিট্রাই
 if (typeof window !== "undefined") {
     const nudge = () => {
+        syncAuthMeta();
+        // নেট ফিরলে সাময়িক কারণে ব্যর্থ হওয়া job-গুলোও নিজে থেকে আবার চেষ্টা করবে
+        if (isOnline()) {
+            let revived = false;
+            for (const entry of entries.values()) {
+                if (entry.stage === "failed" && entry.job.retryable !== false) {
+                    entry.job.error = "";
+                    entry.job.stage = entry.job.media ? "sending" : "queued";
+                    persist(entry.job);
+                    if (entry.job.kind !== "story") {
+                        store.dispatch(
+                            markMessageRetrying({
+                                conversationId: entry.job.conversationId,
+                                clientMsgId: entry.job.id
+                            })
+                        );
+                    }
+                    entry.stage = "queued";
+                    entry.error = "";
+                    revived = true;
+                }
+            }
+            if (revived) emit();
+        }
         if (entries.size) pump();
     };
+
     window.addEventListener("online", nudge);
     window.addEventListener("sync:socket-connect", nudge);
     document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") nudge();
     });
+
+    // ইউজার ট্যাব কেটে দিলে বা পেজ ছাড়লে Service Worker-কে ব্যাকগ্রাউন্ডে কাজ শেষ করতে বলা
+    const onPageExit = () => {
+        if (!hasActiveUploads()) return;
+        syncAuthMeta();
+        registerBackgroundSync();
+        notifySwBackgroundTakeover();
+    };
+    window.addEventListener("pagehide", onPageExit);
+    window.addEventListener("beforeunload", onPageExit);
+
+    // Service Worker ব্যাকগ্রাউন্ডে কোনো job শেষ করলে UI সাথে সাথে আপডেট করা
+    if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.addEventListener("message", event => {
+            const msg = event.data;
+            if (!msg || msg.type !== "SYNC_OUTBOX_DONE" || !msg.id) return;
+            const entry = entries.get(msg.id);
+            if (entry) {
+                entry.cancelled = true;
+                try {
+                    entry.compressCtrl?.abort();
+                    entry.ctrl?.abort();
+                } catch {
+                    /* ignore */
+                }
+                entries.delete(msg.id);
+                revoke(entry.previewUrl);
+                emit();
+            }
+            if (msg.kind === "story") {
+                store.dispatch(fetchStories());
+            } else if (msg.message) {
+                store.dispatch(
+                    confirmMessageSent({ clientMsgId: msg.id, message: msg.message })
+                );
+            }
+        });
+    }
 }

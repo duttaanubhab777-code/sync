@@ -298,3 +298,42 @@
     background: rgba(255, 255, 255, 0.18);
     color: #fff;
 }
+
+/* ---- স্টোরি ব্যাকগ্রাউন্ড আপলোড কিউ (StoriesPage) ---- */
+.sync-story-bg-queue {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 8px 0 12px;
+}
+.sync-story-bg-item {
+    position: relative;
+}
+.sync-story-bg-item .sync-upc {
+    margin-bottom: 0;
+}
+.sync-story-bg-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 4px;
+}
+.sync-story-bg-failed {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: rgba(220, 53, 69, 0.16);
+    border: 1px solid rgba(220, 53, 69, 0.35);
+    color: #ffe3e6;
+    font-size: 0.78rem;
+}
+.sync-story-bg-failed span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

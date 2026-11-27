@@ -17,7 +17,9 @@ import {
     Pause,
     Play,
     Volume2,
-    VolumeX
+    VolumeX,
+    AlertCircle,
+    RotateCw
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncBrandBar from "../components/SyncBrandBar.jsx";
@@ -25,7 +27,6 @@ import MoreMenu from "../components/MoreMenu.jsx";
 import UploadProgressCard from "../components/UploadProgressCard.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import {
-    createNewStory,
     deleteMyStory,
     fetchStories,
     fetchStoryViewers,
@@ -33,13 +34,16 @@ import {
     reactToStory,
     replyToStory
 } from "../store/storySlice.js";
-import { uploadMediaToCloudinary } from "../services/media.js";
+import {
+    cancelUpload,
+    enqueueStoryUpload,
+    retryUpload
+} from "../services/outbox.js";
+import useUploadQueue from "../hooks/useUploadQueue.js";
 import { pushBackHandler } from "../services/backNavigation.js";
 import {
-    formatBytes,
     formatChatListTime,
-    formatTime,
-    generateClientMsgId
+    formatTime
 } from "../utils/format.js";
 import StoryMedia from "../components/story/StoryMedia.jsx";
 import StoryProgress from "../components/story/StoryProgress.jsx";
@@ -83,7 +87,7 @@ export default function StoriesPage() {
     const { hasUpdate = false, onSignOut } = useOutletContext() || {};
     const dispatch = useDispatch();
     const { user } = useSelector(state => state.auth);
-    const { storyGroups, loading, posting, viewersByStoryId } = useSelector(
+    const { storyGroups, loading, viewersByStoryId } = useSelector(
         state => state.story
     );
 
@@ -93,17 +97,10 @@ export default function StoriesPage() {
     const [caption, setCaption] = useState("");
     const [bgColor, setBgColor] = useState(STORY_COLORS[0]);
     const [mediaFile, setMediaFile] = useState(null);
-    const [uploadProgress, setUploadProgress] = useState(0);
-    // compress / upload-এর ধাপ ও সাইজ (original → compressed) দেখানোর জন্য
-    const [uploadInfo, setUploadInfo] = useState(null);
-    // ভিডিও compress চলাকালীন "Send original" চাপলে আসল ফাইলই আপলোড হয়
-    const compressAbortRef = useRef(null);
     const [createError, setCreateError] = useState("");
-    // Share Story একবার ট্যাপেই সাথে সাথে lock: state async বলে আলাদা ref দিয়ে সিঙ্ক্রোনাস গার্ড
-    const [submitting, setSubmitting] = useState(false);
-    const submittingRef = useRef(false);
-    // এই story-র ইউনিক আইডি: ডাবল ট্যাপ/রিট্রাই হলেও সার্ভারে একবারই সেভ হয়
-    const clientStoryIdRef = useRef(null);
+    // ব্যাকগ্রাউন্ডে চলা স্টোরি আপলোড/কমপ্রেশন কিউ (WhatsApp-এর মতো ট্যাব বদলালেও/কাটলেও চলে)
+    const uploadQueue = useUploadQueue();
+    const pendingStories = uploadQueue.filter(j => j.kind === "story");
     const replyingRef = useRef(false);
 
     const [viewerState, setViewerState] = useState(null);
@@ -223,10 +220,8 @@ export default function StoriesPage() {
         }
     }, [activeStory, activeGroup, dispatch]);
 
-    const handleCreateStory = async e => {
+    const handleCreateStory = e => {
         e.preventDefault();
-        // আগের রিকোয়েস্ট চলতে থাকলে (আপলোড বা সেভ) নতুন ট্যাপ/Enter একদম উপেক্ষা
-        if (submittingRef.current || posting) return;
         setCreateError("");
 
         if (storyType === "text" ? !caption.trim() : !mediaFile) {
@@ -238,97 +233,26 @@ export default function StoriesPage() {
             return;
         }
 
-        submittingRef.current = true;
-        setSubmitting(true);
-        if (!clientStoryIdRef.current) {
-            clientStoryIdRef.current = generateClientMsgId();
-        }
-        const clientStoryId = clientStoryIdRef.current;
+        // ব্যাকগ্রাউন্ড কিউতে (outbox) দেওয়া: মডাল সাথে সাথে বন্ধ হয়, কমপ্রেশন ও আপলোড ব্যাকগ্রাউন্ডে চলে
+        enqueueStoryUpload({
+            type: storyType === "text" ? "text" : "media",
+            caption: caption.trim(),
+            backgroundColor: bgColor,
+            file: storyType === "text" ? null : mediaFile
+        });
 
-        try {
-            if (storyType === "text") {
-                if (!caption.trim()) {
-                    setCreateError("Please write some text for your story");
-                    return;
-                }
-                await dispatch(
-                    createNewStory({
-                        type: "text",
-                        caption: caption.trim(),
-                        backgroundColor: bgColor,
-                        clientStoryId
-                    })
-                ).unwrap();
-            } else {
-                if (!mediaFile) {
-                    setCreateError("Please select an image or video");
-                    return;
-                }
-                const abortCtrl = new AbortController();
-                compressAbortRef.current = abortCtrl;
-                setUploadInfo({
-                    file: mediaFile,
-                    name: mediaFile.name,
-                    size: mediaFile.size,
-                    phase: "preparing"
-                });
-                const media = await uploadMediaToCloudinary(
-                    mediaFile,
-                    (pct, info) => {
-                        setUploadProgress(pct);
-                        setUploadInfo({
-                            file: mediaFile,
-                            name: mediaFile.name,
-                            size: mediaFile.size,
-                            ...info
-                        });
-                    },
-                    {
-                        purpose: "story",
-                        compress: true,
-                        compressSignal: abortCtrl.signal
-                    }
-                );
-                const detectedType = mediaFile.type.startsWith("video/")
-                    ? "video"
-                    : "image";
-                await dispatch(
-                    createNewStory({
-                        type: detectedType,
-                        caption: caption.trim(),
-                        backgroundColor: bgColor,
-                        media,
-                        clientStoryId
-                    })
-                ).unwrap();
-            }
-            clientStoryIdRef.current = null; // পরের story-র জন্য নতুন আইডি
-            setCaption("");
-            setMediaFile(null);
-            setUploadProgress(0);
-            setUploadInfo(null);
-            setShowCreateModal(false);
-        } catch (err) {
-            setCreateError(
-                typeof err === "string"
-                    ? err
-                    : err?.message || "Could not post story"
-            );
-        } finally {
-            submittingRef.current = false;
-            setSubmitting(false);
-        }
+        setCaption("");
+        setMediaFile(null);
+        setShowCreateModal(false);
+        showToast("Posting story in background…");
     };
 
     const openCreateModal = () => {
-        clientStoryIdRef.current = null;
         setCreateError("");
         setShowCreateModal(true);
     };
 
-    // পোস্ট চলার সময় modal বন্ধ করা যাবে না (আপলোড মাঝপথে ছেড়ে গেলে ভুতুড়ে পোস্ট হয়)
     const closeCreateModal = () => {
-        if (submittingRef.current) return;
         setShowCreateModal(false);
     };
 
@@ -674,6 +598,63 @@ export default function StoriesPage() {
                             </div>
                         </div>
                     </div>
+
+                    {pendingStories.length > 0 && (
+                        <div className="sync-story-bg-queue">
+                            {pendingStories.map(job => (
+                                <div key={job.id} className="sync-story-bg-item">
+                                    {job.stage === "failed" ? (
+                                        <div className="sync-story-bg-failed" role="status">
+                                            <AlertCircle size={16} />
+                                            <span>{job.error || "Story upload failed"}</span>
+                                            <button
+                                                type="button"
+                                                className="sync-bubble-upload-btn"
+                                                onClick={() => retryUpload(job.id)}
+                                            >
+                                                <RotateCw size={13} /> Retry
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="sync-bubble-upload-btn ghost"
+                                                onClick={() => cancelUpload(job.id)}
+                                                aria-label="Cancel"
+                                            >
+                                                <X size={13} />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <UploadProgressCard
+                                                info={
+                                                    job.info || {
+                                                        file: job.file,
+                                                        name: job.name || "Story",
+                                                        size: job.size,
+                                                        phase:
+                                                            job.stage === "compressing"
+                                                                ? "compressing"
+                                                                : job.stage === "sending"
+                                                                  ? "processing"
+                                                                  : "preparing"
+                                                    }
+                                                }
+                                            />
+                                            <div className="sync-story-bg-actions">
+                                                <button
+                                                    type="button"
+                                                    className="sync-upc-skip"
+                                                    onClick={() => cancelUpload(job.id)}
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
 
                     <div className="sync-section-label mt-4">
                         Recent Updates (Contacts)
@@ -1200,7 +1181,6 @@ export default function StoriesPage() {
                                     className={`sync-pill-btn ${
                                         storyType === "text" ? "active" : ""
                                     }`}
-                                    disabled={submitting}
                                     onClick={() => setStoryType("text")}
                                 >
                                     <Type size={15} /> Text Status
@@ -1210,7 +1190,6 @@ export default function StoriesPage() {
                                     className={`sync-pill-btn ${
                                         storyType === "media" ? "active" : ""
                                     }`}
-                                    disabled={submitting}
                                     onClick={() => setStoryType("media")}
                                 >
                                     <ImageIcon size={15} /> Photo / Video
@@ -1227,7 +1206,6 @@ export default function StoriesPage() {
                                             placeholder="Type a status..."
                                             maxLength={700}
                                             value={caption}
-                                            readOnly={submitting}
                                             onChange={e =>
                                                 setCaption(e.target.value)
                                             }
@@ -1256,16 +1234,13 @@ export default function StoriesPage() {
                                         <label htmlFor="sync-story-media-input">
                                             Select Photo or Video <span aria-hidden="true">*</span>
                                         </label>
-                                        <div className={`sync-story-upload-zone ${mediaFile ? "has-file" : ""} ${submitting ? "is-disabled" : ""}`}>
+                                        <div className={`sync-story-upload-zone ${mediaFile ? "has-file" : ""}`}>
                                             <input
                                                 id="sync-story-media-input"
                                                 className="sync-story-file-input"
                                                 type="file"
                                                 accept="image/*,video/*"
-                                                disabled={submitting}
                                                 onChange={e => {
-                                                    // ফাইল বদলালে নতুন story → নতুন আইডি
-                                                    clientStoryIdRef.current = null;
                                                     setMediaFile(
                                                         e.target.files?.[0] || null
                                                     );
@@ -1310,20 +1285,12 @@ export default function StoriesPage() {
                                             placeholder="Add a caption..."
                                             maxLength={700}
                                             value={caption}
-                                            readOnly={submitting}
                                             onChange={e =>
                                                 setCaption(e.target.value)
                                             }
                                         />
                                     </div>
-                                    {submitting && uploadInfo && (
-                                        <UploadProgressCard
-                                            info={uploadInfo}
-                                            onSkip={() =>
-                                                compressAbortRef.current?.abort()
-                                            }
-                                        />
-                                    )}
+
                                 </>
                             )}
 
@@ -1337,7 +1304,6 @@ export default function StoriesPage() {
                                 <button
                                     type="button"
                                     className="sync-btn ghost"
-                                    disabled={submitting}
                                     onClick={closeCreateModal}
                                 >
                                     Cancel
@@ -1345,18 +1311,8 @@ export default function StoriesPage() {
                                 <button
                                     type="submit"
                                     className="sync-btn primary"
-                                    disabled={posting || submitting}
                                 >
-                                    {posting || submitting
-                                        ? uploadInfo?.phase === "compressing"
-                                            ? Number.isFinite(uploadInfo?.compressPct)
-                                                ? `Compressing ${Math.round(uploadInfo.compressPct)}%`
-                                                : "Compressing..."
-                                            : uploadProgress > 0 &&
-                                                uploadProgress < 100
-                                              ? `Uploading ${Math.round(uploadProgress)}%`
-                                              : "Posting..."
-                                        : "Share Story"}
+                                    Share Story
                                 </button>
                             </div>
                         </form>

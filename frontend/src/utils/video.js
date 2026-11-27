@@ -1,50 +1,52 @@
-// চ্যাট ও story-র ভিডিও আপলোডের আগে ফোনেই ছোট করা (WhatsApp-এর মতো)।
+// চ্যাট ও story-র ভিডিও আপলোডের আগে ফোনেই স্মুথভাবে ছোট করা (WhatsApp-এর মতো, ফ্রেম ড্রপ/ল্যাগ ছাড়া)।
 //
 // কীভাবে কাজ করে: কোনো বাড়তি লাইব্রেরি ছাড়াই ব্রাউজারের নিজস্ব <video> + canvas + MediaRecorder।
-// ভিডিওটা চুপচাপ (শব্দ ছাড়া, স্ক্রিনে না দেখিয়ে) চালানো হয়, প্রতিটা ফ্রেম ছোট canvas-এ এঁকে
-// নতুন bitrate-এ আবার এনকোড করা হয়, আর অডিও আলাদা পথে ধরা হয়। তাই compress-এ সময় লাগে
-// প্রায় ভিডিওর দৈর্ঘ্যের সমান (১ মিনিটের ভিডিও ≈ ১ মিনিট); progress বার সেটাই দেখায়।
+// ফ্রেম ড্রপ ও ল্যাগ দূর করতে:
+//   - রেজোলিউশন হালকা (480p থেকে শুরু) ও medium smoothing + desynchronized canvas, যাতে মোবাইল GPU/CPU সহজে ৩০fps ধরে রাখতে পারে
+//   - captureStream(30) (স্থির CFR ক্লক) ও ≤30fps ভিডিওতে কোনো ফ্রেম বাদ না দেওয়া (শুধু >40fps হলে 30fps-এ নামানো)
+//   - ধীর সফটওয়্যার VP9-এর বদলে দ্রুত হার্ডওয়্যার H.264 / VP8 কোডেক আগে বেছে নেওয়া
+//   - ব্যাকগ্রাউন্ডে (ট্যাব লুকালে/অ্যাপ মিনিমাইজ করলে) কমপ্রেশন বন্ধ না করে in-DOM ভিডিও + সাইলেন্ট AudioContext
+//     + Web Worker 30fps টাইমার দিয়ে স্মুথভাবে চালিয়ে যাওয়া
 //
-// নিয়ম: কোনো কারণে (অসমর্থিত কোডেক, ব্যাকগ্রাউন্ডে চলে যাওয়া, আটকে যাওয়া, ইউজার "Skip" চাপা ...) ব্যর্থ হলে
-// বা ফল আসলের চেয়ে ছোট না হলে আসল ফাইলই ফেরত যায়। কখনো throw করে না, আপলোড আটকায় না।
+// নিয়ম: কোনো কারণে (অসমর্থিত কোডেক, ইউজার "Send original" চাপা ...) ব্যর্থ হলে বা ফল আসলের চেয়ে
+// ছোট না হলে আসল ফাইলই ফেরত যায়। কখনো throw করে না, আপলোড আটকায় না।
 //
 // onProgress(pct, { current, duration }): pct ০–৯৯ (দশমিকসহ), current/duration সেকেন্ডে
 // signal (AbortSignal): abort হলে compress থেমে আসল ফাইল ফেরত যায়
 
-// আসল ফাইল ছোট/হালকা হলে আর ছোঁয়া হয় না (আবার এনকোড করলে কোয়ালিটি শুধু নষ্ট হতো)
+// আসল ফাইল খুব ছোট হলে আর ছোঁয়া হয় না (আবার এনকোড করলে কোয়ালিটি শুধু নষ্ট হতো)
 const SKIP_BELOW_BYTES = 1.2 * 1024 * 1024;
-// আপলোডের সীমা ২৫ MB; তার নিচে থাকতে লক্ষ্য ২৩ MB
-// লক্ষ্য ২০ MB: এনকোডার অনেক সময় নিজের bitrate-এর চেয়ে বেশি ডেটা বানায়, তাই বাড়তি জায়গা রাখা
-const TARGET_OUTPUT_BYTES = 20 * 1024 * 1024;
-// আসল সীমা (media.js-এর MAX_BYTES-এর সমান) ও চলার পথে আন্দাজ করা সাইজ এর কাছাকাছি গেলে সতর্কসীমা
+// আপলোডের সীমা ২৫ MB; তার নিচে নিরাপদে থাকতে লক্ষ্য ১৯ MB
+const TARGET_OUTPUT_BYTES = 19 * 1024 * 1024;
 const HARD_LIMIT_BYTES = 25 * 1024 * 1024;
-const SAFE_LIMIT_BYTES = 23.5 * 1024 * 1024;
+const SAFE_LIMIT_BYTES = 23 * 1024 * 1024;
 // সাইজ বেশি হলে কম bitrate-এ সর্বোচ্চ কতবার আবার চেষ্টা
 const MAX_RETRIES = 2;
-const AUDIO_BPS = 128 * 1000;
-const MAX_FPS = 30;
-// এর চেয়ে লম্বা ভিডিও compress করতে অনেক সময় লাগবে, তাই আসলটাই যায় (২৫ MB-এ আটকালে ভুল বার্তা আসবে)
+const AUDIO_BPS = 96 * 1000;
+const TARGET_FPS = 30;
+// এর চেয়ে লম্বা ভিডিও compress করতে অনেক সময় লাগবে, তাই আসলটাই যায়
 const MAX_COMPRESS_SECONDS = 10 * 60;
 
-// লম্বা দিক (px) ও ভিডিও bitrate। ছোট ভিডিওতে উপরের ধাপ (720p), লম্বা ভিডিওতে ২৩ MB-এ ঢোকাতে নিচের ধাপ।
-// আগের চেয়ে bitrate বাড়ানো হয়েছে: ব্লক/ঝাপসা ভাব কমাতে (WhatsApp-এর কাছাকাছি কোয়ালিটি)।
+// হালকা রেজোলিউশন + স্থির bitrate: কোয়ালিটি কিছুটা কম হলেও ফ্রেম একদম স্মুথ (ল্যাগ/ফ্রেম ড্রপ ছাড়া)
 const TIERS = [
-    { side: 1280, bps: 2_800_000 },
-    { side: 960, bps: 1_700_000 },
-    { side: 854, bps: 1_100_000 },
-    { side: 640, bps: 650_000 }
+    { side: 854, bps: 1_350_000 }, // 480p — ফোনে পরিষ্কার, এনকোড খুব দ্রুত
+    { side: 640, bps: 850_000 },   // 360p — মাঝারি/লম্বা ভিডিওর জন্য খুব স্মুথ
+    { side: 480, bps: 520_000 },   // লম্বা ভিডিও ২৫ MB-এ আনতে
+    { side: 360, bps: 320_000 }
 ];
 
-// iOS/Safari-তেও চলে বলে MP4 আগে, না পারলে WebM
+// দ্রুত হার্ডওয়্যার H.264 ও VP8 আগে; ধীর সফটওয়্যার VP9 সবার শেষে (VP9 মোবাইলে ফ্রেম ড্রপ করে)
 const pickRecorderType = () => {
     if (typeof MediaRecorder === "undefined" || !MediaRecorder.isTypeSupported) return null;
     const candidates = [
         ["video/mp4;codecs=avc1.42E01E,mp4a.40.2", "mp4"],
         ["video/mp4;codecs=avc1,mp4a.40.2", "mp4"],
         ["video/mp4", "mp4"],
-        ["video/webm;codecs=vp9,opus", "webm"],
+        ["video/webm;codecs=h264,opus", "webm"],
         ["video/webm;codecs=vp8,opus", "webm"],
-        ["video/webm", "webm"]
+        ["video/webm;codecs=vp8", "webm"],
+        ["video/webm", "webm"],
+        ["video/webm;codecs=vp9,opus", "webm"]
     ];
     for (const [mime, ext] of candidates) {
         try {
@@ -65,8 +67,8 @@ export const pickVideoProfile = (width, height, duration, budgetScale = 1) => {
     const longSide = Math.max(width, height);
     const budgetBps = ((TARGET_OUTPUT_BYTES * 8) / Math.max(duration, 1) - AUDIO_BPS) * budgetScale;
 
-    let tier = TIERS.find(t => t.bps <= budgetBps) || TIERS[TIERS.length - 1];
-    const videoBps = Math.max(200_000, Math.min(tier.bps, budgetBps));
+    const tier = TIERS.find(t => t.bps <= budgetBps) || TIERS[TIERS.length - 1];
+    const videoBps = Math.max(180_000, Math.min(tier.bps, budgetBps));
     const side = Math.min(tier.side, longSide); // কখনো বড় করা হয় না
     const scale = side / longSide;
     return {
@@ -75,6 +77,37 @@ export const pickVideoProfile = (width, height, duration, budgetScale = 1) => {
         videoBps: Math.round(videoBps),
         tierSide: tier.side
     };
+};
+
+// ব্যাকগ্রাউন্ড ট্যাবেও ৩০fps-এ ফ্রেম আঁকতে ইনলাইন Web Worker টাইমার
+// (মেইন থ্রেডের setInterval/rAF ব্যাকগ্রাউন্ডে ১fps-এ নেমে যায়, Worker টাইমার নামে না)
+const createBgTimer = (intervalMs, onTick) => {
+    let worker = null;
+    let workerUrl = "";
+    let fallbackId = null;
+    try {
+        if (typeof Worker !== "undefined" && typeof Blob !== "undefined") {
+            const code =
+                "let id=null;onmessage=e=>{if(id){clearInterval(id);id=null;}if(e.data>0){id=setInterval(()=>postMessage(0),e.data);}};";
+            workerUrl = URL.createObjectURL(new Blob([code], { type: "application/javascript" }));
+            worker = new Worker(workerUrl);
+            worker.onmessage = onTick;
+            worker.postMessage(intervalMs);
+            return () => {
+                try {
+                    worker.postMessage(0);
+                    worker.terminate();
+                } catch {
+                    /* ignore */
+                }
+                if (workerUrl) URL.revokeObjectURL(workerUrl);
+            };
+        }
+    } catch {
+        /* CSP বা অসমর্থিত হলে setInterval fallback */
+    }
+    fallbackId = setInterval(onTick, intervalMs);
+    return () => clearInterval(fallbackId);
 };
 
 const waitForEvent = (target, okEvent, timeoutMs) =>
@@ -110,7 +143,7 @@ const resumeWithTimeout = async (ctx, ms) => {
 };
 
 // একবারের compress। সফল/ব্যর্থ হলে File ফেরত দেয়; ফাইল সীমার চেয়ে বড় হয়ে যাচ্ছে বুঝলে { retryScale } ফেরত দেয়
-const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0 } = {}) => {
+const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0, force = false } = {}) => {
     let objectUrl = "";
     let video = null;
     let audioCtx = null;
@@ -118,12 +151,17 @@ const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0 } =
     let stream = null;
     let watchdog = null;
     let hardTimer = null;
+    let stopBgTimer = null;
     let onVisibility = null;
     let onAbort = null;
 
     const release = () => {
         clearInterval(watchdog);
         clearTimeout(hardTimer);
+        if (stopBgTimer) {
+            stopBgTimer();
+            stopBgTimer = null;
+        }
         if (onVisibility) document.removeEventListener("visibilitychange", onVisibility);
         if (onAbort && signal) signal.removeEventListener("abort", onAbort);
         try {
@@ -153,13 +191,18 @@ const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0 } =
             } catch {
                 /* ignore */
             }
+            try {
+                video.remove();
+            } catch {
+                /* ignore */
+            }
         }
         if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
 
     try {
         if (!file || typeof document === "undefined") return file;
-        if (file.size < SKIP_BELOW_BYTES) return file;
+        if (!force && file.size < SKIP_BELOW_BYTES) return file;
         if (signal?.aborted) return file;
 
         const rec = pickRecorderType();
@@ -182,16 +225,29 @@ const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0 } =
         video.preload = "auto";
         video.playsInline = true;
         video.setAttribute("playsinline", "");
+        video.setAttribute("webkit-playsinline", "");
+        video.setAttribute("aria-hidden", "true");
+        // DOM-এ যুক্ত রাখলে (অদৃশ্য ১×১px) ব্যাকগ্রাউন্ডেও ব্রাউজার ভিডিও ডিকোডার বন্ধ করে না
+        video.style.cssText =
+            "position:fixed;top:-2px;left:-2px;width:1px;height:1px;opacity:0.001;pointer-events:none;z-index:-1;";
+        if (document.body) document.body.appendChild(video);
         video.src = objectUrl;
 
-        // ---- অডিও: স্পিকারে না বাজিয়ে সরাসরি রেকর্ডারে ----
-        // AudioContext ইউজারের ট্যাপের সবচেয়ে কাছাকাছি সময়ে (কোনো await-এর আগে) বানানো হয়,
-        // নইলে অনেক ব্রাউজারে সেটা "suspended" থেকে যায় আর compress শুরুই হয় না
+        // ---- অডিও: স্পিকারে শব্দ না করে সরাসরি রেকর্ডারে + সাইলেন্ট keep-alive ----
+        // silentGain(0) → destination যুক্ত রাখলে Chrome/WebView ব্যাকগ্রাউন্ড ট্যাবেও মিডিয়া চালু রাখে
         audioCtx = new AudioCtx();
         const resumePromise = resumeWithTimeout(audioCtx, 2000);
         const audioSource = audioCtx.createMediaElementSource(video);
         const audioDest = audioCtx.createMediaStreamDestination();
         audioSource.connect(audioDest);
+        try {
+            const silentGain = audioCtx.createGain();
+            silentGain.gain.value = 0;
+            audioSource.connect(silentGain);
+            silentGain.connect(audioCtx.destination);
+        } catch {
+            /* না হলে শুধু audioDest-ই যথেষ্ট */
+        }
 
         await waitForEvent(video, "loadedmetadata", 15000);
         if (failed) return file;
@@ -204,9 +260,8 @@ const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0 } =
 
         const profile = pickVideoProfile(srcW, srcH, duration, scale);
 
-        // আগে থেকেই ছোট ও হালকা হলে আবার এনকোড না করাই ভালো (কোয়ালিটি নষ্ট, সময় নষ্ট, সাইজও কমত না)
-        // (সীমা ছাড়ানোর কারণে আবার চেষ্টার সময় এটা দেখা হয় না)
-        if (retry === 0) {
+        // আগে থেকেই খুব ছোট ও হালকা হলে আবার এনকোড না করাই ভালো (তবে >25MB হলে অবশ্যই কমপ্রেস)
+        if (retry === 0 && !force && file.size <= HARD_LIMIT_BYTES) {
             const srcBps = (file.size * 8) / duration;
             const targetTotalBps = profile.videoBps + AUDIO_BPS;
             const alreadySmall =
@@ -220,36 +275,36 @@ const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0 } =
         if (audioCtx.state !== "running") return file;
         if (failed) return file;
 
-        // ---- canvas (ভিডিও) ----
+        // ---- canvas (ভিডিও): desynchronized + medium smoothing = শূন্য ফ্রেম ড্রপ ----
         const canvas = document.createElement("canvas");
         canvas.width = profile.width;
         canvas.height = profile.height;
-        const ctx = canvas.getContext("2d", { alpha: false });
+        const ctx =
+            canvas.getContext("2d", { alpha: false, desynchronized: true }) ||
+            canvas.getContext("2d", { alpha: false });
         if (!ctx) return file;
         ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = "high";
+        ctx.imageSmoothingQuality = "medium";
 
-        // যেখানে সম্ভব, প্রতিটা আঁকা ফ্রেম হাতে হাতে রেকর্ডারে পাঠানো (requestFrame): ফ্রেম বাদ/দ্বিগুণ হয় না, তাই মসৃণ
-        const manualFrames =
-            typeof CanvasCaptureMediaStreamTrack !== "undefined" &&
-            typeof CanvasCaptureMediaStreamTrack.prototype.requestFrame === "function";
-        const canvasStream = canvas.captureStream(manualFrames ? 0 : MAX_FPS);
-        const canvasTrack = canvasStream.getVideoTracks()[0];
-        const drawFrame = () => {
+        // স্থির ৩০fps CFR স্ট্রিম: captureStream(0)+requestFrame-এর মতো VFR জ্যাম/ল্যাগ হয় না
+        const canvasStream = canvas.captureStream(TARGET_FPS);
+        let lastFrameTime = -1;
+        const drawFrame = (forceDraw = false) => {
+            if (!video || video.readyState < 2) return;
+            const cur = video.currentTime;
+            // একই ফ্রেম দুবার আঁকা এড়ানো (তবে প্রথম/শেষ ফ্রেমে forceDraw = true)
+            if (!forceDraw && cur === lastFrameTime) return;
             ctx.drawImage(video, 0, 0, profile.width, profile.height);
-            if (manualFrames) {
-                try {
-                    canvasTrack.requestFrame();
-                } catch {
-                    /* ignore */
-                }
-            }
+            lastFrameTime = cur;
         };
 
-        stream = new MediaStream([...canvasStream.getVideoTracks(), ...audioDest.stream.getAudioTracks()]);
+        stream = new MediaStream([
+            ...canvasStream.getVideoTracks(),
+            ...audioDest.stream.getAudioTracks()
+        ]);
 
         const chunks = [];
-        let bytes = 0; // এ পর্যন্ত রেকর্ড হওয়া ডেটা (আউটপুট সাইজ আন্দাজের জন্য)
+        let bytes = 0;
         let retryScale = 0;
         recorder = new MediaRecorder(stream, {
             mimeType: rec.mime,
@@ -267,65 +322,76 @@ const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0 } =
             recorder.onstop = resolve;
             recorder.onerror = () => reject(new Error("recorder error"));
         });
-        stopped.catch(() => {}); // ব্যর্থ হলে unhandled rejection আটকানো
+        stopped.catch(() => {});
 
         if (video.readyState < 2) await waitForEvent(video, "loadeddata", 15000);
         if (failed) return file;
 
         let finished = false;
+        let pausedByBrowser = false;
         const done = new Promise(resolve => {
             video.onended = () => resolve();
         });
 
-        // ---- ফ্রেম আঁকার লুপ ----
-        let lastDrawn = -1;
-        const minGap = 1 / (MAX_FPS + 2);
+        // ---- স্মুথ ফ্রেম লুপ: ফোরগ্রাউন্ডে rVFC/rAF, ব্যাকগ্রাউন্ডে Worker 30fps টাইমার ----
+        // >40fps (যেমন 60fps) ভিডিও হলে প্রতি ২য় ফ্রেম নেওয়া হয়; ≤30fps ভিডিওতে একটাও ফ্রেম বাদ পড়ে না!
+        let lastDrawnMediaTime = -1;
+        const HIGH_FPS_GAP = 0.025; // 40fps সীমা — 30fps (0.033s) সবসময় পাস করে
+
         if (typeof video.requestVideoFrameCallback === "function") {
             const tick = (_now, meta) => {
                 if (finished) return;
                 const t = meta?.mediaTime ?? video.currentTime;
-                if (t - lastDrawn >= minGap || t < lastDrawn) {
-                    drawFrame();
-                    lastDrawn = t;
+                if (lastDrawnMediaTime < 0 || t - lastDrawnMediaTime >= HIGH_FPS_GAP || t < lastDrawnMediaTime) {
+                    drawFrame(true);
+                    lastDrawnMediaTime = t;
                 }
                 video.requestVideoFrameCallback(tick);
             };
             video.requestVideoFrameCallback(tick);
         } else {
-            let lastTs = 0;
-            const loop = ts => {
+            const loop = () => {
                 if (finished) return;
-                if (ts - lastTs >= 1000 / MAX_FPS - 2) {
-                    drawFrame();
-                    lastTs = ts;
-                }
+                if (!document.hidden) drawFrame(false);
                 requestAnimationFrame(loop);
             };
             requestAnimationFrame(loop);
         }
 
-        // ---- অ্যাপ ব্যাকগ্রাউন্ডে গেলে থামিয়ে রাখা (নইলে ফ্রেম হারাত), ফিরলে চালু ----
-        onVisibility = () => {
+        // ব্যাকগ্রাউন্ডে rVFC/rAF থামলে Worker টাইমার ৩৩ms পর পর নতুন ফ্রেম ক্যানভাসে আঁকে
+        const syncBgLoop = () => {
             if (finished) return;
             if (document.hidden) {
-                try {
-                    video.pause();
-                    if (recorder.state === "recording") recorder.pause();
-                } catch {
-                    /* ignore */
+                if (!stopBgTimer) {
+                    stopBgTimer = createBgTimer(Math.round(1000 / TARGET_FPS), () => {
+                        if (finished) return;
+                        if (video.paused && !video.ended && !pausedByBrowser) {
+                            video.play().catch(() => {});
+                        }
+                        drawFrame(false);
+                    });
                 }
             } else {
-                try {
-                    if (recorder.state === "paused") recorder.resume();
-                    video.play().catch(() => failNow("resume failed"));
-                } catch {
-                    /* ignore */
+                if (stopBgTimer) {
+                    stopBgTimer();
+                    stopBgTimer = null;
+                }
+                if (pausedByBrowser) {
+                    pausedByBrowser = false;
+                    try {
+                        if (recorder.state === "paused") recorder.resume();
+                        video.play().catch(() => {});
+                    } catch {
+                        /* ignore */
+                    }
                 }
             }
         };
+        onVisibility = syncBgLoop;
         document.addEventListener("visibilitychange", onVisibility);
+        if (document.hidden) syncBgLoop();
 
-        // ---- progress রিপোর্ট + আটকে গেলে আসল ফাইলে ফিরে যাওয়া ----
+        // ---- progress রিপোর্ট + আটকে গেলে নিরাপদ হ্যান্ডলিং ----
         let lastTime = -1;
         let stuckTicks = 0;
         let lastPct = -1;
@@ -339,6 +405,7 @@ const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0 } =
             }
         };
         if (typeof onProgress === "function") onProgress(0, { current: 0, duration, retry });
+
         watchdog = setInterval(() => {
             reportPct();
 
@@ -348,34 +415,46 @@ const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0 } =
                 !retryScale &&
                 retry < MAX_RETRIES &&
                 now >= Math.max(6, duration * 0.08) &&
-                now <= duration * 0.5
+                now <= duration * 0.55
             ) {
                 const projected = (bytes / now) * duration;
                 if (projected > SAFE_LIMIT_BYTES) {
-                    retryScale = scale * (TARGET_OUTPUT_BYTES / projected) * 0.9;
+                    retryScale = scale * (TARGET_OUTPUT_BYTES / projected) * 0.88;
                     failNow("projected size too big");
                 }
             }
 
-            if (document.hidden || video.paused || video.ended) {
+            if (video.ended || pausedByBrowser) {
                 stuckTicks = 0;
                 return;
             }
             if (video.currentTime === lastTime) {
                 stuckTicks += 1;
-                if (stuckTicks >= 20) failNow("playback stalled"); // ২৫০ms × ২০ = ৫ সেকেন্ড
+                // ব্যাকগ্রাউন্ডে কোনো OS/Safari সত্যিই প্লেব্যাক থামিয়ে দিলে পজ করে রাখি (ফিরলেই চলবে)
+                if (document.hidden && stuckTicks >= 16) {
+                    pausedByBrowser = true;
+                    stuckTicks = 0;
+                    try {
+                        video.pause();
+                        if (recorder.state === "recording") recorder.pause();
+                    } catch {
+                        /* ignore */
+                    }
+                } else if (!document.hidden && stuckTicks >= 24) {
+                    failNow("playback stalled"); // ৬ সেকেন্ড আটকে থাকলে
+                }
             } else {
                 stuckTicks = 0;
                 lastTime = video.currentTime;
             }
         }, 250);
-        hardTimer = setTimeout(() => failNow("timeout"), duration * 3000 + 60000);
+        hardTimer = setTimeout(() => failNow("timeout"), duration * 3500 + 90000);
 
-        recorder.start(500);
-        drawFrame(); // শুরুতে কালো ফ্রেম এড়াতে প্রথম ফ্রেম রেকর্ডার চালুর পরপরই
+        // 2000ms timeslice: কম GC পজ = কোনো ফ্রেম ড্রপ নয়
+        recorder.start(2000);
+        drawFrame(true); // শুরুতে কালো ফ্রেম এড়াতে প্রথম ফ্রেম
         await video.play();
 
-        // শেষ বা ব্যর্থ — যেটা আগে
         await new Promise(resolve => {
             const poll = setInterval(() => {
                 if (failed) {
@@ -392,8 +471,8 @@ const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0 } =
         if (failed) throw failed;
 
         // শেষ ফ্রেম ও অডিওর লেজটুকু রেকর্ডারে পৌঁছাতে একটু সময় দেওয়া
-        drawFrame();
-        await new Promise(r => setTimeout(r, 300));
+        drawFrame(true);
+        await new Promise(r => setTimeout(r, 250));
         finished = true;
         if (recorder.state !== "inactive") recorder.stop();
         await stopped;
@@ -401,10 +480,12 @@ const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0 } =
         const blob = new Blob(chunks, { type: rec.baseMime });
         // শেষে সীমা ছাড়ালে কম bitrate-এ আবার চেষ্টা
         if (blob.size > HARD_LIMIT_BYTES && retry < MAX_RETRIES) {
-            return { retryScale: scale * (TARGET_OUTPUT_BYTES / blob.size) * 0.9 };
+            return { retryScale: scale * (TARGET_OUTPUT_BYTES / blob.size) * 0.88 };
         }
-        // খালি/ভাঙা বা ছোট হয়নি — আসলটাই ভালো
-        if (blob.size < 2048 || blob.size >= file.size * 0.95) return file;
+        // খালি/ভাঙা বা ছোট হয়নি — আসলটাই ভালো (তবে >25MB হলে ছোটটা যতটুকু হয়েছে সেটাই)
+        if (blob.size < 2048 || (blob.size >= file.size * 0.95 && file.size <= HARD_LIMIT_BYTES)) {
+            return file;
+        }
 
         if (typeof onProgress === "function") onProgress(100, { current: duration, duration, retry });
         const baseName = String(file.name || "video").replace(/\.[^./\\]+$/, "") || "video";
@@ -420,10 +501,10 @@ const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0 } =
 };
 
 // সীমার (২৫ MB) মধ্যে না ঢুকলে নিজে থেকে কম bitrate-এ আবার চেষ্টা করে (সর্বোচ্চ MAX_RETRIES বার)।
-export const compressVideoFile = async (file, { onProgress, signal } = {}) => {
+export const compressVideoFile = async (file, { onProgress, signal, force = false } = {}) => {
     let scale = 1;
     for (let retry = 0; retry <= MAX_RETRIES; retry += 1) {
-        const result = await compressOnce(file, { onProgress, signal, scale, retry });
+        const result = await compressOnce(file, { onProgress, signal, scale, retry, force });
         if (result && result.retryScale) {
             scale = result.retryScale;
             continue;

@@ -5,21 +5,25 @@ import { compressMediaFile } from "../utils/compress.js";
 // ---------------------------------------------------------------------------
 // আপলোড ইঞ্জিন: নেট চলে গেলে/ধীর হলে নিজে থেকে অপেক্ষা করে আবার চেষ্টা করে (error দেখায় না)।
 //   - নেট নেই (offline)  : "online" ইভেন্ট আসা পর্যন্ত অপেক্ষা, তারপর যেখানে থেমেছিল সেখান থেকে
-//   - বড় ফাইল (>10MB)   : ৬MB-এর chunk-এ আপলোড; নেট গেলে শুধু আটকে যাওয়া chunk আবার যায়
+//   - বড় ফাইল (>10MB)   : ৬MB-এর chunk-এ আপলোড; প্রতিটা chunk সেভ হয়, তাই নেট গেলে/অ্যাপ বন্ধ হলেও
+//                          আটকে যাওয়া chunk থেকেই আবার শুরু হয়
 //   - আটকে যাওয়া (stall) : ২৫ সেকেন্ড কোনো বাইট না গেলে request থামিয়ে আবার চেষ্টা
 //   - signature পুরনো    : নতুন signature এনে আবার শুরু
-// persistent: true (চ্যাটের queue) হলে নেট না আসা পর্যন্ত অনির্দিষ্টকাল অপেক্ষা করে।
+// persistent: true (চ্যাট ও স্টোরির background queue) হলে নেট না আসা পর্যন্ত অনির্দিষ্টকাল অপেক্ষা করে।
 // false (প্রোফাইল ছবি ইত্যাদি) হলে অল্প সময় অপেক্ষা করে তারপর স্পষ্ট বার্তা সহ ব্যর্থ হয়।
 // ---------------------------------------------------------------------------
 
 const MAX_BYTES = 25 * 1024 * 1024;
-// ভিডিও ব্যাকগ্রাউন্ডে compress হয় না (compress ভিডিও চালিয়ে করতে হয়), তাই আসল ফাইলই যায়
+// চ্যাটে ভিডিও ২৫ MB-এর কম হলেই কেবল "Send original" বোতাম দেখাবে
+export const SEND_ORIGINAL_MAX_BYTES = 25 * 1024 * 1024;
+// স্টোরিতে ভিডিও ২৫ MB-এর বেশি হলেই কেবল কমপ্রেস হবে (≤25MB হলে সরাসরি আপলোড)
+export const STORY_VIDEO_COMPRESS_THRESHOLD = 25 * 1024 * 1024;
 export const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 export const maxBytesFor = file =>
     detectMessageTypeFromFile(file) === "video" ? MAX_VIDEO_BYTES : MAX_BYTES;
 
-const CHUNK_THRESHOLD = 10 * 1024 * 1024;
-const CHUNK_SIZE = 6 * 1024 * 1024; // Cloudinary: শেষেরটা বাদে প্রতিটা chunk >= 5MB
+export const CHUNK_THRESHOLD = 10 * 1024 * 1024;
+export const CHUNK_SIZE = 6 * 1024 * 1024; // Cloudinary: শেষেরটা বাদে প্রতিটা chunk >= 5MB
 const STALL_MS = 25 * 1000;
 const NON_PERSISTENT_MAX_ATTEMPTS = 6;
 const NON_PERSISTENT_ONLINE_WAIT_MS = 3 * 60 * 1000;
@@ -99,13 +103,13 @@ const backoffMs = attempt => {
 
 // মসৃণ progress: ব্রাউজার অনেক সময় বড় লাফে জানায়, তাই আসল গতি মেপে বারকে 0→100 মসৃণভাবে বাড়ানো হয়।
 // chunk বা retry-তে বার কখনো পিছনে যায় না (shown শুধু বাড়ে)।
-const createTracker = (total, onProgress) => {
-    let loaded = 0;
-    let realPct = 0;
-    let shown = 0;
+const createTracker = (total, onProgress, initialLoaded = 0) => {
+    let loaded = Math.max(0, Math.min(initialLoaded, total));
+    let realPct = total > 0 ? Math.min(99, (loaded / total) * 100) : 0;
+    let shown = realPct;
     let speed = 0;
     let lastT = performance.now();
-    let lastLoaded = 0;
+    let lastLoaded = loaded;
     let sendDone = false;
     let finished = false;
     let lastEmitted = -1;
@@ -452,18 +456,32 @@ const buildFields = (signData, resourceEndpoint) => {
     };
 };
 
-// একটা ফাইল Cloudinary-তে তোলা (retry + resume সহ)। ফেরত: Cloudinary-র JSON
-const uploadFileResilient = async (file, { purpose, persistent, signal, onProgress }) => {
+// একটা ফাইল Cloudinary-তে তোলা (retry + resumable chunk সহ)। ফেরত: Cloudinary-র JSON
+const uploadFileResilient = async (
+    file,
+    { purpose, persistent, signal, onProgress, initialChunkState, onChunkCommitted }
+) => {
     const total = file.size;
     const detectedType = detectMessageTypeFromFile(file);
     // ডকুমেন্টের জন্য /raw/upload ব্যবহার করলে PDF/ZIP/DOCX আসল ফাইল হিসেবে নিরাপদে ডেলিভার হয়
     const resourceEndpoint = detectedType === "file" ? "raw" : "auto";
     const useChunks = total > CHUNK_THRESHOLD;
 
-    const tracker = createTracker(total, onProgress);
-    let signData = null;
-    let uploadId = newUploadId();
-    let offset = 0; // কতটুকু সার্ভারে নিশ্চিতভাবে পৌঁছেছে (chunk মোডে)
+    // আগের সেভ করা chunk state (অ্যাপ বন্ধ/রিলোড হলেও যে chunk-এ থেমেছিল সেখান থেকে শুরু)
+    const canResume =
+        useChunks &&
+        initialChunkState &&
+        initialChunkState.uploadId &&
+        initialChunkState.signData &&
+        Number(initialChunkState.offset) > 0 &&
+        Number(initialChunkState.offset) < total &&
+        Number(initialChunkState.total) === total;
+
+    let signData = canResume ? initialChunkState.signData : null;
+    let uploadId = canResume ? initialChunkState.uploadId : newUploadId();
+    let offset = canResume ? Number(initialChunkState.offset) : 0;
+
+    const tracker = createTracker(total, onProgress, offset);
 
     const handleWait = info => {
         tracker.setExtra({
@@ -524,8 +542,11 @@ const uploadFileResilient = async (file, { purpose, persistent, signal, onProgre
                         partLength: end - offset,
                         isLast
                     });
-                    offset = end; // এই chunk নিশ্চিত, retry হলে এখান থেকেই চলবে
+                    offset = end; // এই chunk নিশ্চিত, retry বা restart হলে এখান থেকেই চলবে
                     tracker.bytes(offset);
+                    if (!isLast && typeof onChunkCommitted === "function") {
+                        onChunkCommitted({ uploadId, offset, total, signData });
+                    }
                 }
                 return last;
             },
@@ -538,6 +559,7 @@ const uploadFileResilient = async (file, { purpose, persistent, signal, onProgre
                     signData = null;
                     uploadId = newUploadId();
                     offset = 0;
+                    if (typeof onChunkCommitted === "function") onChunkCommitted(null);
                 }
             }
         );
@@ -550,7 +572,7 @@ const uploadFileResilient = async (file, { purpose, persistent, signal, onProgre
 };
 
 // ছবি/ভিডিও ফোনেই ছোট করা। ফেরত: যে ফাইল আপলোড হবে (ব্যর্থ বা বাতিল হলে আসলটাই)
-// options.compressSignal: abort করলে আসল ফাইলই যায় (ভিডিওর "Send original" / ব্যাকগ্রাউন্ডে চলে গেলে)
+// options.compressSignal: abort করলে আসল ফাইলই যায় (ভিডিওর "Send original")
 export const prepareMediaFile = async (file, onProgress, options = {}) => {
     const originalSize = file.size;
     const originalKind = detectMessageTypeFromFile(file);
@@ -568,6 +590,7 @@ export const prepareMediaFile = async (file, onProgress, options = {}) => {
     report(0, { phase: "compressing", total: originalSize });
     const out = await compressMediaFile(file, {
         signal: options?.compressSignal,
+        force: Boolean(options?.forceCompress),
         onProgress: (compressPct, detail) =>
             report(0, {
                 phase: "compressing",
@@ -581,7 +604,7 @@ export const prepareMediaFile = async (file, onProgress, options = {}) => {
     return out;
 };
 
-// compress হয়ে যাওয়া (বা আসল) ফাইল আপলোড; ফল সরাসরি মেসেজে বসানোর মতো
+// compress হয়ে যাওয়া (বা আসল) ফাইল আপলোড; ফল সরাসরি মেসেজে বা স্টোরিতে বসানোর মতো
 export const uploadPreparedFile = async (file, onProgress, options = {}, sizes = {}) => {
     if (!file) throw new Error("No file selected");
     const maxBytes = maxBytesFor(file);
@@ -601,6 +624,8 @@ export const uploadPreparedFile = async (file, onProgress, options = {}, sizes =
         purpose: options?.purpose,
         persistent: options?.persistent === true,
         signal: options?.signal,
+        initialChunkState: options?.initialChunkState || null,
+        onChunkCommitted: options?.onChunkCommitted,
         onProgress: (pct, info) => report(pct, info)
     });
 
@@ -619,11 +644,7 @@ export const uploadPreparedFile = async (file, onProgress, options = {}, sizes =
 // options.purpose (ঐচ্ছিক): "chat" (ডিফল্ট) | "voice" | "avatar" | "story" | "group"
 // options.compress === true হলে ছবি/ভিডিও আপলোডের আগে ফোনেই ছোট করা হয়।
 // options.compressSignal / options.signal (AbortSignal, ঐচ্ছিক)।
-// options.persistent === true হলে নেট না আসা পর্যন্ত অপেক্ষা করে (চ্যাটের background queue)।
-//
-// onProgress(percent, info) এর info.phase:
-//   "compressing" | "preparing" | "uploading" | "processing" | "done"
-//   "waiting" -> নেট নেই/আবার চেষ্টা চলছে (info.waitReason: "offline" | "retry")
+// options.persistent === true হলে নেট না আসা পর্যন্ত অপেক্ষা করে (চ্যাট ও স্টোরির background queue)।
 export const uploadMediaToCloudinary = async (file, onProgress, options = {}) => {
     if (!file) throw new Error("No file selected");
     const originalSize = file.size;

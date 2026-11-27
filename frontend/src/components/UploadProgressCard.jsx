@@ -1,12 +1,12 @@
 import React, { useEffect, useId, useState } from "react";
 import { ArrowUp, Check, FileText, Minimize2, Music } from "lucide-react";
-import { detectMessageTypeFromFile } from "../services/media.js";
+import { detectMessageTypeFromFile, SEND_ORIGINAL_MAX_BYTES } from "../services/media.js";
 import { formatBytes } from "../utils/format.js";
 
 // ছবি/ভিডিও/ফাইল আপলোডের সুন্দর progress কার্ড (Chat ও Story দুই জায়গাতেই এটা)।
 // info = uploadMediaToCloudinary-এর onProgress-এর info + { file, name }:
-//   phase: "compressing" | "preparing" | "uploading" | "processing" | "done"
-// onSkip থাকলে ভিডিও compress চলাকালীন "Send original" বোতাম দেখায়।
+//   phase: "compressing" | "preparing" | "uploading" | "processing" | "done" | "waiting"
+// onSkip থাকলে এবং ভিডিওর আসল সাইজ ২৫ MB-এর কম হলেই কেবল "Send original" বোতাম দেখায়।
 
 const RING_R = 24;
 const RING_C = 2 * Math.PI * RING_R;
@@ -110,7 +110,15 @@ export default function UploadProgressCard({ info, onSkip, className = "" }) {
             : [formatSpeed(info.speed), formatLeft(info.eta)].filter(Boolean).join(" · ");
     }
 
-    const canSkip = Boolean(onSkip) && isCompress && kind === "video";
+    // ভিডিও ২৫ MB-এর কম হলে তবেই "Send original" বোতাম দেখাবে, নইলে আসবেই না
+    const originalBytes = Number(info.originalSize || info.size || file?.size || 0);
+    const canSkip =
+        Boolean(onSkip) &&
+        isCompress &&
+        kind === "video" &&
+        originalBytes > 0 &&
+        originalBytes < SEND_ORIGINAL_MAX_BYTES;
+
     const stateClass = isDone ? "is-done" : isCompress ? "is-compress" : isPrepare ? "is-prepare" : "is-upload";
 
     return (

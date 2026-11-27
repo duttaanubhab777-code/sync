@@ -3,7 +3,7 @@ import { AlertCircle, Loader2, RotateCw, WifiOff, X } from "lucide-react";
 import useUploadQueue from "../../hooks/useUploadQueue.js";
 import { cancelUpload, retryUpload } from "../../services/outbox.js";
 
-// মেসেজ বাবলের ওপর আপলোডের অবস্থা: % রিং, "Waiting for network…", ব্যর্থ হলে Retry/Delete।
+// মেসেজ বাবলের ওপর আপলোডের অবস্থা: কমপ্রেশন %, আপলোড % রিং, "Waiting for network…", ব্যর্থ হলে Retry/Delete।
 // অবস্থা outbox থেকে সরাসরি আসে (Redux নয়), তাই প্রগ্রেসে পুরো চ্যাট লিস্ট রি-রেন্ডার হয় না।
 export default function UploadBubbleOverlay({ clientMsgId }) {
     const queue = useUploadQueue();
@@ -16,16 +16,21 @@ export default function UploadBubbleOverlay({ clientMsgId }) {
     const compressing = job.stage === "compressing";
     const sending = job.stage === "sending";
     const queued = job.stage === "queued";
-    const pct = Math.max(0, Math.min(100, Math.floor(info.precise ?? job.pct ?? 0)));
+    const compressPct = Number.isFinite(info.compressPct) ? Math.floor(info.compressPct) : null;
+    const pct = compressing
+        ? compressPct ?? 0
+        : Math.max(0, Math.min(100, Math.floor(info.precise ?? job.pct ?? 0)));
 
     let label;
     if (failed) label = job.error || "Failed";
     else if (waiting && info.waitReason === "offline") label = "Waiting for network…";
     else if (waiting) label = "Retrying…";
-    else if (compressing) label = "Compressing…";
+    else if (compressing) label = compressPct !== null ? `Compressing ${compressPct}%` : "Compressing…";
     else if (queued) label = "Waiting…";
     else if (sending) label = "Sending…";
     else label = `${pct}%`;
+
+    const showBar = !waiting && !sending && !queued && (!compressing || compressPct !== null);
 
     return (
         <div className={`sync-bubble-upload${failed ? " is-failed" : ""}`} role="status">
@@ -57,7 +62,7 @@ export default function UploadBubbleOverlay({ clientMsgId }) {
                         <Loader2 size={16} className="spin" />
                     )}
                     <span className="sync-bubble-upload-label">{label}</span>
-                    {!waiting && !compressing && !sending && !queued && (
+                    {showBar && (
                         <span className="sync-bubble-upload-bar">
                             <i style={{ width: `${pct}%` }} />
                         </span>

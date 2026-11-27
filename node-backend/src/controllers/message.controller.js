@@ -14,6 +14,7 @@ import {
     markDelivered
 } from "../services/message.service.js";
 import { loadMemberConversation } from "./conversation.controller.js";
+import { sendMessageCore } from "../socket/handlers/message.handler.js";
 
 const clamp = (value, fallback, min, max) =>
     Math.min(Math.max(Number(value) || fallback, min), max);
@@ -397,5 +398,39 @@ export const forwardMessage = asyncHandler(async (req, res) => {
             { forwarded: created },
             `Forwarded to ${created.length} chat${created.length > 1 ? "s" : ""}`
         )
+    );
+});
+
+// POST /api/v1/messages
+// Service Worker Background Sync ও Socket অফলাইন থাকা অবস্থায় মেসেজ পাঠানোর REST এন্ডপয়েন্ট
+export const sendMessageRest = asyncHandler(async (req, res) => {
+    const result = await sendMessageCore({
+        io: req.app.get("io"),
+        userId: req.user._id,
+        senderFullName: req.user.fullName || "",
+        payload: req.body || {}
+    });
+
+    if (!result.ok) {
+        const status =
+            result.error === "FORBIDDEN_NOT_MEMBER" ||
+            result.error === "ONLY_ADMINS_CAN_MESSAGE" ||
+            result.error === "BLOCKED" ||
+            result.error === "OFFICIAL_ACCOUNT_READ_ONLY"
+                ? 403
+                : 400;
+        return res.status(status).json({
+            statusCode: status,
+            success: false,
+            error: result.error,
+            message: result.error
+        });
+    }
+
+    res.status(result.duplicate ? 200 : 201).json(
+        new ApiResponse(result.duplicate ? 200 : 201, {
+            message: result.message,
+            duplicate: Boolean(result.duplicate)
+        })
     );
 });

@@ -205,6 +205,206 @@ async function notifyRecipients({
     }
 }
 
+// Socket.IO এবং REST (Service Worker Background Sync) দুটোর জন্য একটাই মেসেজ পাঠানোর কোর লজিক
+export async function sendMessageCore({
+    io,
+    userId,
+    senderFullName = "",
+    payload,
+    excludeSocketId = null,
+    onAck = null
+}) {
+    const uid = String(userId);
+    const {
+        conversationId,
+        clientMsgId,
+        type = "text",
+        text = "",
+        media = null,
+        location = null,
+        contact = null,
+        poll = null,
+        replyTo = null
+    } = payload || {};
+
+    if (
+        !isObjectId(conversationId) ||
+        typeof clientMsgId !== "string" ||
+        !clientMsgId ||
+        clientMsgId.length > 100 ||
+        typeof text !== "string" ||
+        !ALLOWED_TYPES.includes(type)
+    ) {
+        return { ok: false, error: "INVALID_PAYLOAD" };
+    }
+
+    // আগে duplicate চেক: নেটওয়ার্ক রিট্রাই/SW সিঙ্ক হলে নতুন করে সেভ না করে আগেরটাই ফেরত দেওয়া
+    let msg = await Message.findOne({ sender: uid, clientMsgId })
+        .populate(POPULATE_SENDER)
+        .populate(POPULATE_REPLY);
+    if (msg) {
+        return { ok: true, message: msg, duplicate: true };
+    }
+
+    const conv = await Conversation.findById(conversationId);
+    if (!conv || !conv.isMember(uid)) {
+        return { ok: false, error: "FORBIDDEN_NOT_MEMBER" };
+    }
+    if (!conv.canSendMessage(uid)) {
+        return { ok: false, error: "ONLY_ADMINS_CAN_MESSAGE" };
+    }
+    if (conv.type === "direct") {
+        const partnerId = conv.members
+            .map(m => m.toString())
+            .find(id => id !== uid);
+        const partner = await User.findById(partnerId)
+            .select("isOfficial blockedUser")
+            .lean();
+        if (partner?.isOfficial) {
+            return { ok: false, error: "OFFICIAL_ACCOUNT_READ_ONLY" };
+        }
+        const blocked =
+            partner?.blockedUser?.some(b => String(b) === uid) ||
+            (await User.exists({
+                _id: uid,
+                blockedUser: partnerId
+            }));
+        if (blocked) return { ok: false, error: "BLOCKED" };
+    }
+
+    const cleanText = text.trim();
+    let cleanMedia;
+    let cleanLocation;
+    let cleanContact;
+    let cleanPoll;
+
+    if (type === "text") {
+        if (!cleanText) return { ok: false, error: "EMPTY_MESSAGE" };
+    } else if (type === "location") {
+        cleanLocation = pickLocation(location);
+        if (!cleanLocation) return { ok: false, error: "INVALID_LOCATION" };
+    } else if (type === "contact") {
+        cleanContact = pickContact(contact);
+        if (!cleanContact) return { ok: false, error: "INVALID_CONTACT" };
+    } else if (type === "poll") {
+        const question = String(poll?.question || "").trim().slice(0, 200);
+        const rawOpts = Array.isArray(poll?.options) ? poll.options : [];
+        const cleanOpts = rawOpts
+            .map(o => String(typeof o === "string" ? o : o?.text || "").trim().slice(0, 100))
+            .filter(Boolean)
+            .slice(0, 6);
+        if (!question || cleanOpts.length < 2) {
+            return { ok: false, error: "INVALID_POLL" };
+        }
+        cleanPoll = {
+            question,
+            allowMultiple: Boolean(poll?.allowMultiple),
+            options: cleanOpts.map((optText, i) => ({
+                id: `opt_${i}`,
+                text: optText,
+                votes: []
+            }))
+        };
+    } else {
+        cleanMedia = pickMedia(media);
+        if (!cleanMedia?.url || !isValidCloudinaryUrl(cleanMedia.url)) {
+            return { ok: false, error: "INVALID_MEDIA_URL" };
+        }
+    }
+    if (cleanText.length > MAX_TEXT) {
+        return { ok: false, error: "MESSAGE_TOO_LONG" };
+    }
+
+    let replyId = null;
+    if (replyTo) {
+        if (!isObjectId(replyTo)) return { ok: false, error: "INVALID_REPLY" };
+        const target = await Message.exists({ _id: replyTo, conversationId });
+        if (!target) return { ok: false, error: "INVALID_REPLY" };
+        replyId = replyTo;
+    }
+
+    try {
+        msg = await Message.create({
+            conversationId,
+            sender: uid,
+            clientMsgId,
+            type,
+            text: cleanText,
+            media: cleanMedia,
+            location: cleanLocation,
+            contact: cleanContact,
+            poll: cleanPoll,
+            replyTo: replyId,
+            status: "sent"
+        });
+    } catch (err) {
+        if (err?.code === 11000) {
+            const existing = await Message.findOne({ sender: uid, clientMsgId })
+                .populate(POPULATE_SENDER)
+                .populate(POPULATE_REPLY);
+            return { ok: true, message: existing, duplicate: true };
+        }
+        throw err;
+    }
+    msg = await msg.populate([POPULATE_SENDER, POPULATE_REPLY]);
+
+    const inc = {};
+    for (const m of conv.members) {
+        const id = m.toString();
+        if (id !== uid) inc[`unread.${id}`] = 1;
+    }
+    const lastMessageText =
+        type === "poll"
+            ? `📊 ${cleanPoll.question}`.slice(0, 100)
+            : buildLastMessagePreview({
+                  type,
+                  text: cleanText,
+                  media: cleanMedia,
+                  location: cleanLocation,
+                  contact: cleanContact
+              });
+    await Conversation.updateOne(
+        { _id: conv._id },
+        {
+            $set: {
+                lastMessage: {
+                    messageId: msg._id,
+                    text: lastMessageText,
+                    type,
+                    sender: uid,
+                    createdAt: msg.createdAt
+                }
+            },
+            $inc: inc
+        }
+    );
+
+    const result = { ok: true, message: msg };
+    onAck?.(result);
+
+    if (io) {
+        const memberRooms = conv.members.map(m => `user:${m.toString()}`);
+        const emitter = excludeSocketId
+            ? io.to(memberRooms).except(excludeSocketId)
+            : io.to(memberRooms);
+        emitter.emit("message:new", {
+            message: msg,
+            conversationId
+        });
+    }
+
+    notifyRecipients({
+        conv,
+        msg,
+        type,
+        cleanText,
+        senderId: uid,
+        senderName: msg.sender?.fullName || senderFullName
+    }).catch(err => console.error("[Message notify]", err.message));
+
+    return result;
+}
+
 export const registerMessageHandlers = (io, socket) => {
     const userId = socket.user.id;
     let sentAt = [];
@@ -220,215 +420,22 @@ export const registerMessageHandlers = (io, socket) => {
     // ১. নতুন মেসেজ পাঠানো (১-টু-১ ও গ্রুপ দুটোর জন্যই)
     socket.on("message:send", async (payload, ack) => {
         try {
-            const {
-                conversationId,
-                clientMsgId,
-                type = "text",
-                text = "",
-                media = null,
-                location = null,
-                contact = null,
-                poll = null,
-                replyTo = null
-            } = payload || {};
-
-            if (
-                !isObjectId(conversationId) ||
-                typeof clientMsgId !== "string" ||
-                !clientMsgId ||
-                clientMsgId.length > 100 ||
-                typeof text !== "string" ||
-                !ALLOWED_TYPES.includes(type)
-            ) {
-                return ack?.({ ok: false, error: "INVALID_PAYLOAD" });
-            }
-
             if (isRateLimited()) {
                 return ack?.({ ok: false, error: "RATE_LIMITED" });
             }
-
-            // আগে duplicate চেক: নেটওয়ার্ক রিট্রাই হলে নতুন করে সেভ না করে আগেরটাই ফেরত দেওয়া
-            let msg = await Message.findOne({ sender: userId, clientMsgId })
-                .populate(POPULATE_SENDER)
-                .populate(POPULATE_REPLY);
-            if (msg) {
-                return ack?.({ ok: true, message: msg, duplicate: true });
-            }
-
-            // কনভারসেশন আছে কিনা, ইউজার সদস্য কিনা, গ্রুপে "শুধু admin" চালু আছে কিনা
-            const conv = await Conversation.findById(conversationId);
-            if (!conv || !conv.isMember(userId)) {
-                return ack?.({ ok: false, error: "FORBIDDEN_NOT_MEMBER" });
-            }
-            if (!conv.canSendMessage(userId)) {
-                return ack?.({ ok: false, error: "ONLY_ADMINS_CAN_MESSAGE" });
-            }
-            // direct চ্যাটে কেউ কাউকে block করে থাকলে বা অফিশিয়াল Sync অ্যাকাউন্ট হলে মেসেজ যাবে না
-            if (conv.type === "direct") {
-                const partnerId = conv.members
-                    .map(m => m.toString())
-                    .find(id => id !== userId);
-                const partner = await User.findById(partnerId)
-                    .select("isOfficial blockedUser")
-                    .lean();
-                if (partner?.isOfficial) {
-                    return ack?.({
-                        ok: false,
-                        error: "OFFICIAL_ACCOUNT_READ_ONLY"
-                    });
+            let acked = false;
+            const res = await sendMessageCore({
+                io,
+                userId,
+                senderFullName: socket.user.fullName,
+                payload,
+                excludeSocketId: socket.id,
+                onAck: r => {
+                    acked = true;
+                    ack?.(r);
                 }
-                const blocked =
-                    partner?.blockedUser?.some(b => String(b) === userId) ||
-                    (await User.exists({
-                        _id: userId,
-                        blockedUser: partnerId
-                    }));
-                if (blocked) return ack?.({ ok: false, error: "BLOCKED" });
-            }
-
-            const cleanText = text.trim();
-            let cleanMedia;
-            let cleanLocation;
-            let cleanContact;
-            let cleanPoll;
-
-            if (type === "text") {
-                if (!cleanText) return ack?.({ ok: false, error: "EMPTY_MESSAGE" });
-            } else if (type === "location") {
-                cleanLocation = pickLocation(location);
-                if (!cleanLocation) {
-                    return ack?.({ ok: false, error: "INVALID_LOCATION" });
-                }
-            } else if (type === "contact") {
-                cleanContact = pickContact(contact);
-                if (!cleanContact) {
-                    return ack?.({ ok: false, error: "INVALID_CONTACT" });
-                }
-            } else if (type === "poll") {
-                const question = String(poll?.question || "").trim().slice(0, 200);
-                const rawOpts = Array.isArray(poll?.options) ? poll.options : [];
-                const cleanOpts = rawOpts
-                    .map(o => String(typeof o === "string" ? o : o?.text || "").trim().slice(0, 100))
-                    .filter(Boolean)
-                    .slice(0, 6);
-                if (!question || cleanOpts.length < 2) {
-                    return ack?.({ ok: false, error: "INVALID_POLL" });
-                }
-                cleanPoll = {
-                    question,
-                    allowMultiple: Boolean(poll?.allowMultiple),
-                    options: cleanOpts.map((optText, i) => ({
-                        id: `opt_${i}`,
-                        text: optText,
-                        votes: []
-                    }))
-                };
-            } else {
-                cleanMedia = pickMedia(media);
-                if (!cleanMedia?.url || !isValidCloudinaryUrl(cleanMedia.url)) {
-                    return ack?.({ ok: false, error: "INVALID_MEDIA_URL" });
-                }
-            }
-            if (cleanText.length > MAX_TEXT) {
-                return ack?.({ ok: false, error: "MESSAGE_TOO_LONG" });
-            }
-
-            // reply করলে ওই মেসেজ একই চ্যাটের কিনা দেখা
-            let replyId = null;
-            if (replyTo) {
-                if (!isObjectId(replyTo)) {
-                    return ack?.({ ok: false, error: "INVALID_REPLY" });
-                }
-                const target = await Message.exists({
-                    _id: replyTo,
-                    conversationId
-                });
-                if (!target) return ack?.({ ok: false, error: "INVALID_REPLY" });
-                replyId = replyTo;
-            }
-
-            try {
-                msg = await Message.create({
-                    conversationId,
-                    sender: userId,
-                    clientMsgId,
-                    type,
-                    text: cleanText,
-                    media: cleanMedia,
-                    location: cleanLocation,
-                    contact: cleanContact,
-                    poll: cleanPoll,
-                    replyTo: replyId,
-                    status: "sent"
-                });
-            } catch (err) {
-                // দুটো একই মেসেজ একসাথে এলে unique index একটাকে আটকায়, তখন আগেরটাই ফেরত দিই
-                if (err?.code === 11000) {
-                    const existing = await Message.findOne({
-                        sender: userId,
-                        clientMsgId
-                    })
-                        .populate(POPULATE_SENDER)
-                        .populate(POPULATE_REPLY);
-                    return ack?.({ ok: true, message: existing, duplicate: true });
-                }
-                throw err;
-            }
-            msg = await msg.populate([POPULATE_SENDER, POPULATE_REPLY]);
-
-            // চ্যাট লিস্টের প্রিভিউ আর বাকিদের unread সংখ্যা এক query-তে atomic ভাবে আপডেট
-            // (conv.save() না করে updateOne, যাতে দুটো মেসেজ একসাথে এলে একটা আরেকটাকে ওভাররাইট না করে)
-            const inc = {};
-            for (const m of conv.members) {
-                const id = m.toString();
-                if (id !== userId) inc[`unread.${id}`] = 1;
-            }
-            const lastMessageText =
-                type === "poll"
-                    ? `📊 ${cleanPoll.question}`.slice(0, 100)
-                    : buildLastMessagePreview({
-                          type,
-                          text: cleanText,
-                          media: cleanMedia,
-                          location: cleanLocation,
-                          contact: cleanContact
-                      });
-            await Conversation.updateOne(
-                { _id: conv._id },
-                {
-                    $set: {
-                        lastMessage: {
-                            messageId: msg._id,
-                            text: lastMessageText,
-                            type,
-                            sender: userId,
-                            createdAt: msg.createdAt
-                        }
-                    },
-                    $inc: inc
-                }
-            );
-
-            // প্রেরককে প্রাপ্তিস্বীকার (Ack -> Single Tick ✓)
-            // notification-এর কাজ ack-এর পরে (নিচে) হয়, তাই notification-এ কোনো সমস্যা হলেও
-            // মেসেজ "ব্যর্থ" দেখায় না আর দ্বিতীয়বার পাঠিয়ে duplicate-ও হয় না
-            ack?.({ ok: true, message: msg });
-
-            // সব সদস্যের সব ডিভাইসে রিয়েল-টাইম মেসেজ (যে socket থেকে পাঠানো হলো সেটা বাদে)
-            const memberRooms = conv.members.map(m => `user:${m.toString()}`);
-            io.to(memberRooms).except(socket.id).emit("message:new", {
-                message: msg,
-                conversationId
             });
-
-            notifyRecipients({
-                conv,
-                msg,
-                type,
-                cleanText,
-                senderId: userId,
-                senderName: msg.sender?.fullName || socket.user.fullName
-            }).catch(err => console.error("[Message notify]", err.message));
+            if (!acked) ack?.(res);
         } catch (error) {
             console.error("[Socket message:send Error]:", error.message);
             ack?.({ ok: false, error: "SERVER_ERROR" });
