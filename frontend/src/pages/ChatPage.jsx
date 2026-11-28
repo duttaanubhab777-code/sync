@@ -86,6 +86,9 @@ import {
 } from "../utils/format.js";
 import { LocalImg } from "../components/LocalImg.jsx";
 import ChatComposer from "../components/chat/ChatComposer.jsx";
+import VideoTrimmer from "../components/VideoTrimmer.jsx";
+import { canTrimVideo, CHAT_VIDEO_MAX_SECONDS } from "../utils/video.js";
+import { detectMessageTypeFromFile } from "../services/media.js";
 
 const MESSAGE_URL_REGEX = /https?:\/\/[^\s<>"']+/gi;
 
@@ -623,6 +626,8 @@ export default function ChatPage() {
     const dispatch = useDispatch();
     const signOut = useSignOut();
     const [confirmLogout, setConfirmLogout] = useState(false);
+    // চ্যাটে ভিডিও পাঠানোর আগে trim: যে আইটেমগুলো এখনো কিউতে যায়নি (প্রথমটার trim এডিটর খোলা থাকে)
+    const [trimQueue, setTrimQueue] = useState([]);
     const [confirmDeleteMsgId, setConfirmDeleteMsgId] = useState(null);
     const [deletingMsg, setDeletingMsg] = useState(false);
     const [loggingOut, setLoggingOut] = useState(false);
@@ -995,7 +1000,31 @@ export default function ChatPage() {
 
     // এক বা একাধিক ফাইল background queue-তে দেওয়া। সাথে সাথে চ্যাটে মেসেজ বসে যায় (প্রিভিউ সহ)
     // আর আপলোড/পাঠানো পেজের বাইরে চলে: চ্যাট ছেড়ে গেলে, অ্যাপ minimize করলে বা নেট কেটে গেলেও থামে না।
-    // options.asDocument = true হলে (Document বোতাম থেকে) কোনো compress হবে না, আসল ফাইলই যাবে
+    // options.asDocument = true হলে (Document বোতাম থেকে) কোনো compress/trim হবে না, আসল ফাইলই যাবে
+    // ভিডিও হলে (Document ছাড়া) আগে trim এডিটর খোলে (WhatsApp-এর মতো); Done চাপলে ছাঁটা অংশ যায়, Cancel করলে ওই ভিডিও বাদ
+    const needsTrim = item => !item.asDocument && detectMessageTypeFromFile(item.file) === "video" && canTrimVideo();
+
+    // কিউয়ের আইটেম ক্রমানুসারে পাঠানো; ট্রিম লাগে এমন আইটেম এলে থেমে এডিটর খোলে
+    const processItems = items => {
+        let rest = items;
+        while (rest.length > 0) {
+            const item = rest[0];
+            if (needsTrim(item)) {
+                setTrimQueue(rest);
+                return;
+            }
+            rest = rest.slice(1);
+            enqueueMediaMessage({
+                file: item.file,
+                conversationId: item.conversationId,
+                caption: item.caption,
+                replyToMessage: item.replyTo,
+                asDocument: item.asDocument
+            });
+        }
+        setTrimQueue([]);
+    };
+
     const handleFilesSelected = (selectedFiles, options = {}) => {
         const files = Array.from(selectedFiles || []).filter(Boolean);
         if (files.length === 0 || !activeConversationId || !canSendInActive) return;
@@ -1005,6 +1034,7 @@ export default function ChatPage() {
         let pendingReply = replyingTo;
         setComposerError("");
 
+        const items = [];
         for (const file of files) {
             const replyForThis = pendingReply;
             if (replyForThis) {
@@ -1016,14 +1046,34 @@ export default function ChatPage() {
                 pendingCaption = "";
                 setDraftText("");
             }
-            enqueueMediaMessage({
+            items.push({
                 file,
                 conversationId: targetConvId,
                 caption: captionForThis,
-                replyToMessage: replyForThis,
+                replyTo: replyForThis,
                 asDocument: Boolean(options?.asDocument)
             });
         }
+        processItems(items);
+    };
+
+    const handleChatTrimDone = result => {
+        const [item, ...rest] = trimQueue;
+        if (item) {
+            enqueueMediaMessage({
+                file: item.file,
+                conversationId: item.conversationId,
+                caption: item.caption,
+                replyToMessage: item.replyTo,
+                asDocument: false,
+                trim: result?.trimmed ? { start: result.start, end: result.end } : null
+            });
+        }
+        processItems(rest);
+    };
+
+    const handleChatTrimCancel = () => {
+        processItems(trimQueue.slice(1));
     };
 
     const handleSendLocation = async locationData => {
@@ -2016,6 +2066,16 @@ export default function ChatPage() {
                     busy={deletingMsg}
                     onConfirm={handleConfirmDeleteMessage}
                     onCancel={() => setConfirmDeleteMsgId(null)}
+                />
+            )}
+
+            {trimQueue.length > 0 && (
+                <VideoTrimmer
+                    key={`${trimQueue[0].file.name}-${trimQueue[0].file.size}-${trimQueue[0].file.lastModified}-${trimQueue.length}`}
+                    file={trimQueue[0].file}
+                    maxSeconds={CHAT_VIDEO_MAX_SECONDS}
+                    onCancel={handleChatTrimCancel}
+                    onDone={handleChatTrimDone}
                 />
             )}
 

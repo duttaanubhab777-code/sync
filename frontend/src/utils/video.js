@@ -32,6 +32,8 @@ const TARGET_FPS = 30;
 const MAX_COMPRESS_SECONDS = 10 * 60;
 // একটা স্টোরিতে সর্বোচ্চ কত সেকেন্ড বাছা যাবে (২ মিনিট)। আসল ভিডিও যত লম্বাই হোক, বাছাইয়ের কোনো সীমা নেই — এখান থেকে ২ মিনিটের একটা অংশ ছাঁটা হয়
 export const STORY_VIDEO_MAX_SECONDS = 120;
+// চ্যাটে ভিডিও ছাঁটার সময় সর্বোচ্চ কত সেকেন্ডের অংশ বাছা যাবে (compress সীমার সমান: ১০ মিনিট)
+export const CHAT_VIDEO_MAX_SECONDS = MAX_COMPRESS_SECONDS;
 // এর চেয়ে ছোট অংশ বাছা যায় না
 export const TRIM_MIN_SECONDS = 1;
 

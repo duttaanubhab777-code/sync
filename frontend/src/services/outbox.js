@@ -714,11 +714,22 @@ export const enqueueMediaMessage = ({
     asDocument = false,
     purpose,
     type,
-    duration = 0
+    duration = 0,
+    // ভিডিওর ছাঁটা অংশ: { start, end } সেকেন্ডে (না দিলে পুরো ভিডিও)
+    trim = null
 }) => {
     const me = store.getState().auth.user;
     const id = generateClientMsgId();
     const msgType = type || detectMessageTypeFromFile(file);
+
+    const hasTrim =
+        !asDocument &&
+        msgType === "video" &&
+        Boolean(trim) &&
+        Number.isFinite(Number(trim.start)) &&
+        Number.isFinite(Number(trim.end)) &&
+        Number(trim.end) > Number(trim.start);
+    const trimRange = hasTrim ? { start: Number(trim.start), end: Number(trim.end) } : null;
     const replyTo = replyToMessage
         ? clone({
               _id: replyToMessage._id,
@@ -742,14 +753,21 @@ export const enqueueMediaMessage = ({
         replyToId: replyToMessage?._id || null,
         options: {
             compress: !asDocument && (msgType === "image" || msgType === "video"),
-            forceCompress: !asDocument && msgType === "video" && file.size >= SEND_ORIGINAL_MAX_BYTES,
+            // ছাঁটা ভিডিও সাইজ যাই হোক এনকোড হয় (ছাঁটতে এনকোড লাগে)
+            forceCompress:
+                !asDocument && msgType === "video" && (hasTrim || file.size >= SEND_ORIGINAL_MAX_BYTES),
+            trim: trimRange,
             purpose: purpose || "chat"
         },
         file,
         fileName: file.name || "",
         fileType: file.type || "",
         originalSize: file.size,
-        duration: Number(duration) > 0 ? Number(duration) : 0,
+        duration: trimRange
+            ? trimRange.end - trimRange.start
+            : Number(duration) > 0
+              ? Number(duration)
+              : 0,
         prepared: null,
         compressDone: false,
         chunkState: null,
