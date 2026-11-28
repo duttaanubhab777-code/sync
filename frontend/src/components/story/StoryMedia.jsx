@@ -45,7 +45,7 @@ function useTimedProgress({ active, paused, duration, onProgress, onDone }) {
             elapsed.current += Math.min(now - last, 100);
             last = now;
             const p = Math.min(1, elapsed.current / duration);
-            cbs.current.onProgress?.(p);
+            cbs.current.onProgress?.(p, elapsed.current);
             if (p >= 1) {
                 if (!finished) {
                     finished = true;
@@ -241,7 +241,8 @@ function VideoStory({
             const v = vref.current;
             if (v && Number.isFinite(v.duration) && v.duration > 0) {
                 cbs.current.onProgress?.(
-                    Math.min(1, v.currentTime / v.duration)
+                    Math.min(1, v.currentTime / v.duration),
+                    v.currentTime * 1000
                 );
                 const sec = Math.floor(v.currentTime);
                 if (sec !== lastSec && timeRef.current) {

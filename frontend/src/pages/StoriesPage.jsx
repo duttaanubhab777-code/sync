@@ -124,6 +124,9 @@ export default function StoriesPage() {
     const [closing, setClosing] = useState(false);
     const [nav, setNav] = useState({ dir: "open", n: 0 });
     const progressRef = useRef(null);
+    // বর্তমান story-র চলার সময় (ms) ও যেসব react animation আগেই চলে গেছে
+    const posRef = useRef(0);
+    const firedReactionsRef = useRef(new Set());
     const playerRef = useRef(null);
     const gestureRef = useRef(null);
     const closeTimerRef = useRef(null);
@@ -187,6 +190,8 @@ export default function StoriesPage() {
 
     // অন্য story-তে গেলে reply/picker পরিষ্কার
     useEffect(() => {
+        posRef.current = 0;
+        firedReactionsRef.current = new Set();
         setReplyText("");
         setReplyError("");
         setShowPicker(false);
@@ -214,6 +219,10 @@ export default function StoriesPage() {
         if (!lastReaction || !activeStory || !activeGroup?.isMine) return;
         if (String(lastReaction.storyId) !== String(activeStory._id)) return;
         if (Date.now() - lastReaction.at > 4000) return;
+        // লাইভ animation এখনই চলল; টাইমলাইনে একই react যেন আবার না চলে
+        firedReactionsRef.current.add(
+            `${lastReaction.user?._id}|${lastReaction.emoji}|${lastReaction.offsetMs ?? 0}`
+        );
         launchBurst(lastReaction.emoji, lastReaction.user?.fullName);
     }, [lastReaction]);
 
@@ -327,7 +336,8 @@ export default function StoriesPage() {
         dispatch(
             reactToStory({
                 storyId: activeStory._id,
-                emoji: same ? null : emoji
+                emoji: same ? null : emoji,
+                offsetMs: posRef.current
             })
         );
         if (!same) launchBurst(emoji);
@@ -435,7 +445,27 @@ export default function StoriesPage() {
         setShowViewersList(false);
     };
 
-    const handleProgress = p => progressRef.current?.set(p);
+    // ---- story চলার বর্তমান সময় (ms) + লেখকের জন্য react animation টাইমলাইন ----
+    const handleProgress = (p, ms) => {
+        progressRef.current?.set(p);
+        const pos = Number.isFinite(ms) ? ms : 0;
+        // আবার শুরু (পেছনে গেলে) হলে আগের চালানো animation গুলো আবার চলবে
+        if (pos + 800 < posRef.current) firedReactionsRef.current.clear();
+        posRef.current = pos;
+
+        if (!activeGroup?.isMine || !activeStory?.reactionTimeline?.length) return;
+        for (const r of activeStory.reactionTimeline) {
+            const key = `${r.userId}|${r.emoji}|${r.offsetMs}`;
+            if (r.offsetMs > pos || firedReactionsRef.current.has(key)) continue;
+            firedReactionsRef.current.add(key);
+            // সময় পেরিয়ে গেছে অনেক আগে (যেমন সিক করে) হলে animation বাদ; শুধু ঠিক সময়ের আশেপাশেরগুলো চলে
+            if (pos - r.offsetMs > 1500) continue;
+            const row = (viewersByStoryId?.[activeStory._id] || []).find(
+                v => String(v.user?._id) === String(r.userId)
+            );
+            launchBurst(r.emoji, row?.user?.fullName || "");
+        }
+    };
 
     // ---------- জেসচার: ট্যাপ (বাঁ/ডান), হোল্ড = পজ, সোয়াইপ ----------
     const resetDrag = () => {

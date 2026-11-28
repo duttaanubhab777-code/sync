@@ -97,7 +97,9 @@ export const createStorySchema = z.object({
 
 // story-তে react: emoji = null বা "" হলে নিজের react সরে যাবে
 export const reactStorySchema = z.object({
-    emoji: z.string().trim().max(16).nullable().optional()
+    emoji: z.string().trim().max(16).nullable().optional(),
+    // story-র কত মিলিসেকেন্ডের মাথায় react দেওয়া হলো (animation সেই সময়ে চলবে)
+    offsetMs: z.number().finite().min(0).max(24 * 60 * 60 * 1000).optional()
 });
 
 export const replyStorySchema = z.object({

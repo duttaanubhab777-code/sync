@@ -45,7 +45,9 @@ const storySchema = new Schema(
             {
                 user: { type: Schema.Types.ObjectId, ref: "User" },
                 emoji: { type: String, maxlength: 16 },
-                reactedAt: { type: Date, default: Date.now }
+                reactedAt: { type: Date, default: Date.now },
+                // story চলার কত মিলিসেকেন্ডের মাথায় react দেওয়া হয়েছে (লেখক সেই মুহূর্তে animation দেখেন)
+                offsetMs: { type: Number, min: 0 }
             }
         ],
         // ঠিক ২৪ ঘণ্টা পরে র সময় এখা নে সে ট থা কবে

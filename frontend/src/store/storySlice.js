@@ -69,12 +69,14 @@ export const fetchStoryViewers = createAsyncThunk(
 
 export const reactToStory = createAsyncThunk(
     "story/reactToStory",
-    async ({ storyId, emoji }, { dispatch, rejectWithValue }) => {
+    async ({ storyId, emoji, offsetMs = 0 }, { dispatch, rejectWithValue }) => {
         // আগে UI-তে সাথে সাথে দেখাই (optimistic), সার্ভার ফেল করলে ফিরিয়ে আনি
         dispatch(setMyReaction({ storyId, emoji: emoji || null }));
         try {
             const res = await api.post(`/api/v1/stories/${storyId}/react`, {
-                emoji: emoji || null
+                emoji: emoji || null,
+                // story-র কত ms-এর মাথায় react দিলাম (লেখক ঠিক সেই সময়ে animation দেখেন)
+                offsetMs: Math.max(0, Math.round(Number(offsetMs) || 0))
             });
             return { storyId, ...(res.data?.data || {}) };
         } catch (err) {
@@ -166,8 +168,15 @@ const storySlice = createSlice({
         },
         // অন্য কেউ আমার story-তে react দিলে (রিয়েল-টাইম)
         recordRealtimeStoryReaction(state, action) {
-            const { storyId, user, emoji, reactedAt, reactionCount, reactionSummary } =
-                action.payload || {};
+            const {
+                storyId,
+                user,
+                emoji,
+                reactedAt,
+                offsetMs,
+                reactionCount,
+                reactionSummary
+            } = action.payload || {};
             if (!storyId || !user?._id) return;
             const sId = String(storyId);
             const st = findStory(state, sId);
@@ -176,6 +185,21 @@ const storySlice = createSlice({
             }
             if (st && reactionSummary) {
                 st.reactionSummary = reactionSummary;
+            }
+            // লেখকের টাইমলাইন আপডেট: একজনের একটাই react, নতুন হলে আগেরটা বদলে যায়
+            const at = Math.max(0, Math.round(Number(offsetMs) || 0));
+            if (st && Array.isArray(st.reactionTimeline)) {
+                st.reactionTimeline = st.reactionTimeline.filter(
+                    r => String(r.userId) !== String(user._id)
+                );
+                if (emoji) {
+                    st.reactionTimeline.push({
+                        userId: String(user._id),
+                        emoji,
+                        offsetMs: at
+                    });
+                    st.reactionTimeline.sort((a, b) => a.offsetMs - b.offsetMs);
+                }
             }
             const list = state.viewersByStoryId[sId];
             if (list) {
@@ -197,6 +221,7 @@ const storySlice = createSlice({
                     storyId: sId,
                     emoji,
                     user,
+                    offsetMs: at,
                     at: Date.now()
                 };
             }

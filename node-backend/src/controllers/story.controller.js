@@ -46,6 +46,39 @@ const summarizeReactions = reactions => {
     return out;
 };
 
+// story কত ms চলে (আনুমানিক): ভিডিও = আসল দৈর্ঘ্য, ছবি/টেক্সট = সর্বোচ্চ প্লে-টাইম
+const storyLengthMs = s =>
+    s.type === "video" && Number(s.media?.duration) > 0
+        ? Number(s.media.duration) * 1000
+        : 12000;
+
+// লেখকের জন্য react টাইমলাইন।
+// নতুন react-এ offsetMs সেভ থাকে। আপডেটের আগের react-এ নেই, তখন দর্শকের "দেখা শুরু" (viewedAt) থেকে
+// react (reactedAt) পর্যন্ত সময় দিয়ে আন্দাজ করা হয়; আন্দাজ story-র দৈর্ঘ্যের বাইরে গেলে (যেমন পরে আবার দেখে react)
+// ভুল সময়ে animation না চালিয়ে বাদ দেওয়া হয়।
+const buildReactionTimeline = s => {
+    const lenMs = storyLengthMs(s);
+    const viewedAtByUser = new Map(
+        (s.viewers || []).map(v => [String(v.user?._id || v.user), v.viewedAt])
+    );
+    const out = [];
+    for (const r of s.reactions || []) {
+        if (!r?.emoji || !r.user) continue;
+        const userId = String(r.user?._id || r.user);
+        let offsetMs = null;
+        if (Number.isFinite(Number(r.offsetMs)) && r.offsetMs !== null && r.offsetMs !== undefined) {
+            offsetMs = Math.max(0, Math.round(Number(r.offsetMs)));
+        } else {
+            const viewedAt = viewedAtByUser.get(userId);
+            const est = viewedAt && r.reactedAt ? new Date(r.reactedAt) - new Date(viewedAt) : NaN;
+            if (Number.isFinite(est) && est >= 0 && est <= lenMs) offsetMs = Math.round(est);
+        }
+        if (offsetMs === null) continue;
+        out.push({ userId, emoji: r.emoji, offsetMs });
+    }
+    return out.sort((a, b) => a.offsetMs - b.offsetMs);
+};
+
 const toPublicStory = (s, me) => ({
     _id: s._id,
     type: s.type,
@@ -59,7 +92,11 @@ const toPublicStory = (s, me) => ({
     reactionCount: (s.reactions || []).length,
     reactionSummary: summarizeReactions(s.reactions),
     myReaction:
-        (s.reactions || []).find(r => String(r.user) === me)?.emoji || null
+        (s.reactions || []).find(r => String(r.user) === me)?.emoji || null,
+    // শুধু লেখকের জন্য: কে কোন emoji কত মিলিসেকেন্ডের মাথায় দিয়েছে (story চলার সময় animation হিসেবে দেখানো হয়)
+    ...(String(s.author?._id || s.author) === me
+        ? { reactionTimeline: buildReactionTimeline(s) }
+        : {})
 });
 
 // একই লেখকের একই story একসাথে একাধিক রিকোয়েস্টে এলে (ডাবল ট্যাপ/রিট্রাই) একবারই তৈরি হবে
@@ -324,6 +361,7 @@ export const reactToStory = asyncHandler(async (req, res) => {
     const me = String(req.user._id);
     const id = assertObjectId(req.params.id, "story id");
     const emoji = (req.body.emoji || "").trim();
+    const offsetMs = Math.max(0, Math.round(Number(req.body.offsetMs) || 0));
 
     const { authorId } = await loadReachableStory(me, id);
     const io = req.app.get("io");
@@ -366,7 +404,8 @@ export const reactToStory = asyncHandler(async (req, res) => {
             {
                 $set: {
                     "reactions.$.emoji": emoji,
-                    "reactions.$.reactedAt": now
+                    "reactions.$.reactedAt": now,
+                    "reactions.$.offsetMs": offsetMs
                 }
             }
         );
@@ -374,7 +413,7 @@ export const reactToStory = asyncHandler(async (req, res) => {
         if (!changed) {
             const pushed = await Story.updateOne(
                 { _id: id, "reactions.user": { $ne: me } },
-                { $push: { reactions: { user: me, emoji, reactedAt: now } } }
+                { $push: { reactions: { user: me, emoji, reactedAt: now, offsetMs } } }
             );
             changed = pushed.modifiedCount > 0;
         }
@@ -390,6 +429,7 @@ export const reactToStory = asyncHandler(async (req, res) => {
             user: actor,
             emoji: emoji || null,
             reactedAt: now,
+            offsetMs,
             reactionCount,
             reactionSummary
         });
