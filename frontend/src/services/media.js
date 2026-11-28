@@ -642,9 +642,12 @@ export const prepareMediaFile = async (file, onProgress, options = {}) => {
         return file;
     }
     report(0, { phase: "compressing", total: originalSize });
+    // options.trim = { start, end } (সেকেন্ড): শুধু ভিডিওর ওই অংশ রাখা (স্টোরি trim)
+    const trim = originalKind === "video" && options?.trim ? options.trim : null;
     const out = await compressMediaFile(file, {
         signal: options?.compressSignal,
-        force: Boolean(options?.forceCompress),
+        force: Boolean(options?.forceCompress) || Boolean(trim),
+        trim,
         onProgress: (compressPct, detail) =>
             report(0, {
                 phase: "compressing",

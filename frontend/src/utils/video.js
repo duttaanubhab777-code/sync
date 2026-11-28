@@ -11,7 +11,11 @@
 // নিয়ম: কোনো কারণে (অসমর্থিত কোডেক, ইউজার "Send original" চাপা ...) ব্যর্থ হলে বা ফল আসলের চেয়ে
 // ছোট না হলে আসল ফাইলই ফেরত যায়। কখনো throw করে না, আপলোড আটকায় না।
 //
-// onProgress(pct, { current, duration }): pct ০–৯৯ (দশমিকসহ), current/duration সেকেন্ডে
+// Trim: trim = { start, end } (সেকেন্ডে) দিলে শুধু ওই অংশটুকুই এনকোড হয় (WhatsApp-এর মতো ভিডিও ছাঁটা)।
+// trim থাকলে ফাইল যত ছোটই হোক এনকোড হয়; কোনো কারণে ছাঁটা না গেলে আসল (না-ছাঁটা) ফাইল ফেরত না দিয়ে error throw করে,
+// কারণ ইউজার যে অংশ বেছেছে তার বদলে পুরো ভিডিও পোস্ট হয়ে যাওয়া ভুল।
+//
+// onProgress(pct, { current, duration }): pct ০–৯৯ (দশমিকসহ), current/duration সেকেন্ডে (trim হলে ছাঁটা অংশের হিসাবে)
 // signal (AbortSignal): abort হলে compress থেমে আসল ফাইল ফেরত যায়
 
 // আসল ফাইল খুব ছোট হলে আর ছোঁয়া হয় না (আবার এনকোড করলে কোয়ালিটি শুধু নষ্ট হতো)
@@ -26,6 +30,10 @@ const AUDIO_BPS = 96 * 1000;
 const TARGET_FPS = 30;
 // এর চেয়ে লম্বা ভিডিও compress করতে অনেক সময় লাগবে, তাই আসলটাই যায়
 const MAX_COMPRESS_SECONDS = 10 * 60;
+// একটা স্টোরিতে সর্বোচ্চ কত সেকেন্ড বাছা যাবে (২ মিনিট)। আসল ভিডিও যত লম্বাই হোক, বাছাইয়ের কোনো সীমা নেই — এখান থেকে ২ মিনিটের একটা অংশ ছাঁটা হয়
+export const STORY_VIDEO_MAX_SECONDS = 120;
+// এর চেয়ে ছোট অংশ বাছা যায় না
+export const TRIM_MIN_SECONDS = 1;
 
 // হালকা রেজোলিউশন + স্থির bitrate: কোয়ালিটি কিছুটা কম হলেও ফ্রেম একদম স্মুথ (ল্যাগ/ফ্রেম ড্রপ ছাড়া)
 const TIERS = [
@@ -58,6 +66,22 @@ const pickRecorderType = () => {
         }
     }
     return null;
+};
+
+// এই ব্রাউজার/WebView-এ ভিডিও ছাঁটা (এনকোড) সম্ভব কিনা; না হলে UI trim এডিটর দেখায় না
+export const canTrimVideo = () => {
+    try {
+        if (typeof document === "undefined") return false;
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        return Boolean(
+            pickRecorderType() &&
+                AudioCtx &&
+                typeof HTMLCanvasElement !== "undefined" &&
+                typeof HTMLCanvasElement.prototype.captureStream === "function"
+        );
+    } catch {
+        return false;
+    }
 };
 
 const even = n => Math.max(2, Math.round(n / 2) * 2);
@@ -143,7 +167,10 @@ const resumeWithTimeout = async (ctx, ms) => {
 };
 
 // একবারের compress। সফল/ব্যর্থ হলে File ফেরত দেয়; ফাইল সীমার চেয়ে বড় হয়ে যাচ্ছে বুঝলে { retryScale } ফেরত দেয়
-const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0, force = false } = {}) => {
+const compressOnce = async (
+    file,
+    { onProgress, signal, scale = 1, retry = 0, force = false, trim = null } = {}
+) => {
     let objectUrl = "";
     let video = null;
     let audioCtx = null;
@@ -254,14 +281,21 @@ const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0, fo
 
         const srcW = video.videoWidth;
         const srcH = video.videoHeight;
-        const duration = video.duration;
-        if (!srcW || !srcH || !Number.isFinite(duration) || duration <= 0) return file;
+        const fullDuration = video.duration;
+        if (!srcW || !srcH || !Number.isFinite(fullDuration) || fullDuration <= 0) return file;
+
+        // trim থাকলে শুধু [trimStart, trimEnd] অংশ; duration = ছাঁটা অংশের দৈর্ঘ্য
+        const trimStart = trim ? Math.min(Math.max(0, Number(trim.start) || 0), fullDuration - 0.2) : 0;
+        const trimEnd = trim
+            ? Math.min(fullDuration, Math.max(trimStart + 0.2, Number(trim.end) || fullDuration))
+            : fullDuration;
+        const duration = trim ? trimEnd - trimStart : fullDuration;
         if (duration > MAX_COMPRESS_SECONDS) return file;
 
         const profile = pickVideoProfile(srcW, srcH, duration, scale);
 
         // আগে থেকেই খুব ছোট ও হালকা হলে আবার এনকোড না করাই ভালো (তবে >25MB হলে অবশ্যই কমপ্রেস)
-        if (retry === 0 && !force && file.size <= HARD_LIMIT_BYTES) {
+        if (retry === 0 && !force && !trim && file.size <= HARD_LIMIT_BYTES) {
             const srcBps = (file.size * 8) / duration;
             const targetTotalBps = profile.videoBps + AUDIO_BPS;
             const alreadySmall =
@@ -327,10 +361,25 @@ const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0, fo
         if (video.readyState < 2) await waitForEvent(video, "loadeddata", 15000);
         if (failed) return file;
 
+        // ছাঁটার শুরুর বিন্দুতে সরে যাওয়া (রেকর্ডার চালুর আগে, যাতে শুরুর অংশ রেকর্ড না হয়)
+        if (trim && trimStart > 0.05) {
+            video.currentTime = trimStart;
+            await waitForEvent(video, "seeked", 10000);
+            if (video.readyState < 2) await waitForEvent(video, "canplay", 10000);
+            if (failed) return file;
+        }
+
         let finished = false;
         let pausedByBrowser = false;
+        let finishClip = () => {};
         const done = new Promise(resolve => {
             video.onended = () => resolve();
+            finishClip = resolve;
+        });
+        // শেষ বিন্দু ছুঁলেই থামা (rVFC / rAF / watchdog / ব্যাকগ্রাউন্ড টাইমার — যেটাই আগে ধরে)
+        const reachedTrimEnd = t => Boolean(trim) && t >= trimEnd - 0.01;
+        video.addEventListener("timeupdate", () => {
+            if (reachedTrimEnd(video.currentTime)) finishClip();
         });
 
         // ---- স্মুথ ফ্রেম লুপ: ফোরগ্রাউন্ডে rVFC/rAF, ব্যাকগ্রাউন্ডে Worker 30fps টাইমার ----
@@ -342,6 +391,10 @@ const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0, fo
             const tick = (_now, meta) => {
                 if (finished) return;
                 const t = meta?.mediaTime ?? video.currentTime;
+                if (reachedTrimEnd(t)) {
+                    finishClip();
+                    return;
+                }
                 if (lastDrawnMediaTime < 0 || t - lastDrawnMediaTime >= HIGH_FPS_GAP || t < lastDrawnMediaTime) {
                     drawFrame(true);
                     lastDrawnMediaTime = t;
@@ -352,6 +405,10 @@ const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0, fo
         } else {
             const loop = () => {
                 if (finished) return;
+                if (reachedTrimEnd(video.currentTime)) {
+                    finishClip();
+                    return;
+                }
                 if (!document.hidden) drawFrame(false);
                 requestAnimationFrame(loop);
             };
@@ -365,6 +422,10 @@ const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0, fo
                 if (!stopBgTimer) {
                     stopBgTimer = createBgTimer(Math.round(1000 / TARGET_FPS), () => {
                         if (finished) return;
+                        if (reachedTrimEnd(video.currentTime)) {
+                            finishClip();
+                            return;
+                        }
                         if (video.paused && !video.ended && !pausedByBrowser) {
                             video.play().catch(() => {});
                         }
@@ -397,7 +458,7 @@ const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0, fo
         let lastPct = -1;
         const reportPct = () => {
             if (typeof onProgress !== "function") return;
-            const current = Math.min(duration, video.currentTime || 0);
+            const current = Math.min(duration, Math.max(0, (video.currentTime || 0) - trimStart));
             const pct = Math.min(99, Math.round((current / duration) * 1000) / 10);
             if (pct !== lastPct) {
                 lastPct = pct;
@@ -410,7 +471,8 @@ const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0, fo
             reportPct();
 
             // এনকোডার bitrate ছাড়িয়ে বড় ফাইল বানালে অর্ধেকের আগেই ধরে কম bitrate-এ নতুন করে শুরু
-            const now = video.currentTime || 0;
+            if (reachedTrimEnd(video.currentTime || 0)) finishClip();
+            const now = Math.max(0, (video.currentTime || 0) - trimStart);
             if (
                 !retryScale &&
                 retry < MAX_RETRIES &&
@@ -470,6 +532,14 @@ const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0, fo
         if (retryScale) return { retryScale };
         if (failed) throw failed;
 
+        // ছাঁটা অংশ শেষ: ভিডিও থামানো, যাতে শেষ বিন্দুর পরের শব্দ/ফ্রেম রেকর্ডে না ঢোকে
+        if (trim) {
+            try {
+                video.pause();
+            } catch {
+                /* ignore */
+            }
+        }
         // শেষ ফ্রেম ও অডিওর লেজটুকু রেকর্ডারে পৌঁছাতে একটু সময় দেওয়া
         drawFrame(true);
         await new Promise(r => setTimeout(r, 250));
@@ -483,7 +553,9 @@ const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0, fo
             return { retryScale: scale * (TARGET_OUTPUT_BYTES / blob.size) * 0.88 };
         }
         // খালি/ভাঙা বা ছোট হয়নি — আসলটাই ভালো (তবে >25MB হলে ছোটটা যতটুকু হয়েছে সেটাই)
-        if (blob.size < 2048 || (blob.size >= file.size * 0.95 && file.size <= HARD_LIMIT_BYTES)) {
+        // trim হলে ছাঁটা ফাইলই ফেরত যায় (ছোট না হলেও); না হলে কলার আসল ফাইল দেখে ব্যর্থতা ধরে
+        if (blob.size < 2048) return file;
+        if (!trim && blob.size >= file.size * 0.95 && file.size <= HARD_LIMIT_BYTES) {
             return file;
         }
 
@@ -501,15 +573,33 @@ const compressOnce = async (file, { onProgress, signal, scale = 1, retry = 0, fo
 };
 
 // সীমার (২৫ MB) মধ্যে না ঢুকলে নিজে থেকে কম bitrate-এ আবার চেষ্টা করে (সর্বোচ্চ MAX_RETRIES বার)।
-export const compressVideoFile = async (file, { onProgress, signal, force = false } = {}) => {
+export const compressVideoFile = async (file, { onProgress, signal, force = false, trim = null } = {}) => {
+    const hasTrim =
+        Boolean(trim) && Number.isFinite(Number(trim.start)) && Number.isFinite(Number(trim.end)) && trim.end > trim.start;
+    const effectiveTrim = hasTrim ? { start: Number(trim.start), end: Number(trim.end) } : null;
+    // trim থাকলে ছোট ফাইলও এনকোড হতে হবে
+    const forceNow = force || hasTrim;
+
     let scale = 1;
     for (let retry = 0; retry <= MAX_RETRIES; retry += 1) {
-        const result = await compressOnce(file, { onProgress, signal, scale, retry, force });
+        const result = await compressOnce(file, {
+            onProgress,
+            signal,
+            scale,
+            retry,
+            force: forceNow,
+            trim: effectiveTrim
+        });
         if (result && result.retryScale) {
             scale = result.retryScale;
             continue;
         }
+        // ছাঁটা যায়নি (আসল ফাইলই ফিরেছে): না-ছাঁটা ভিডিও পোস্ট না করে ব্যর্থ বলা (বাতিল হলে চুপচাপ)
+        if (hasTrim && result === file && !signal?.aborted) {
+            throw new Error("Couldn't trim this video. Tap to retry.");
+        }
         return result;
     }
+    if (hasTrim) throw new Error("Couldn't trim this video. Tap to retry.");
     return file;
 };

@@ -1,0 +1,567 @@
+/* ==========================================================================
+   Video trim editor (WhatsApp-style) — স্টোরি শেয়ারের আগে ভিডিও ছাঁটা
+   ========================================================================== */
+.sync-trim {
+    position: fixed;
+    inset: 0;
+    z-index: 400;
+    display: flex;
+    flex-direction: column;
+    padding-top: var(--safe-top);
+    background: radial-gradient(120% 70% at 50% 0%, #0b2b24 0%, #031512 55%, #010a08 100%);
+    color: var(--text);
+    overflow: hidden;
+    overscroll-behavior: contain;
+    -webkit-user-select: none;
+    user-select: none;
+    animation: sync-trim-in 0.34s var(--ease) both;
+}
+
+.sync-trim.is-leaving {
+    animation: sync-trim-out 0.21s ease-in both;
+}
+
+@keyframes sync-trim-in {
+    from { opacity: 0; transform: translateY(28px) scale(0.985); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes sync-trim-out {
+    to { opacity: 0; transform: translateY(20px) scale(0.985); }
+}
+
+.sync-trim-glow {
+    position: absolute;
+    top: -120px;
+    left: 50%;
+    width: 340px;
+    height: 340px;
+    margin-left: -170px;
+    border-radius: 50%;
+    background: rgba(0, 237, 100, 0.14);
+    filter: blur(80px);
+    pointer-events: none;
+}
+
+/* ---- হেডার ---- */
+.sync-trim-head {
+    position: relative;
+    z-index: 2;
+    flex-shrink: 0;
+    display: grid;
+    grid-template-columns: 44px 1fr 44px;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px 6px;
+}
+
+.sync-trim-iconbtn {
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.18s, transform 0.18s var(--ease);
+    -webkit-tap-highlight-color: transparent;
+}
+
+.sync-trim-iconbtn:hover { background: rgba(255, 255, 255, 0.12); }
+.sync-trim-iconbtn:active { transform: scale(0.92); }
+
+.sync-trim-swap {
+    display: grid;
+    place-items: center;
+    animation: sync-trim-pop 0.26s var(--ease) both;
+}
+
+@keyframes sync-trim-pop {
+    from { opacity: 0; transform: scale(0.6) rotate(-14deg); }
+    to { opacity: 1; transform: none; }
+}
+
+.sync-trim-title {
+    justify-self: center;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    background: var(--grad-soft);
+    border: 1px solid rgba(0, 237, 100, 0.25);
+    font-size: 0.92rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.sync-trim-title svg { color: var(--mongo); }
+
+/* ---- প্রিভিউ ---- */
+.sync-trim-stage {
+    position: relative;
+    z-index: 1;
+    flex: 1 1 auto;
+    min-height: 0;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.sync-trim-stage video {
+    position: absolute;
+    inset: 8px 14px 10px;
+    width: calc(100% - 28px);
+    height: calc(100% - 18px);
+    object-fit: contain;
+    background: transparent;
+    animation: sync-trim-fade 0.4s ease both;
+}
+
+@keyframes sync-trim-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.sync-trim-playbadge {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 72px;
+    height: 72px;
+    margin: -36px 0 0 -36px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: rgba(2, 16, 12, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    color: #fff;
+    opacity: 0;
+    transform: scale(0.7);
+    transition: opacity 0.2s, transform 0.28s var(--ease);
+    pointer-events: none;
+}
+
+.sync-trim-playbadge svg { margin-left: 3px; fill: currentColor; }
+.sync-trim-playbadge.show { opacity: 1; transform: scale(1); }
+
+.sync-trim-loading,
+.sync-trim-error {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    text-align: center;
+    color: var(--text-2);
+    pointer-events: none;
+}
+
+.sync-trim-spinner {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.12);
+    border-top-color: var(--mongo);
+    animation: sync-trim-spin 0.8s linear infinite;
+}
+
+@keyframes sync-trim-spin { to { transform: rotate(360deg); } }
+
+/* ---- নিচের প্যানেল ---- */
+.sync-trim-panel {
+    position: relative;
+    z-index: 2;
+    flex-shrink: 0;
+    width: 100%;
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 6px 16px calc(var(--safe-bottom) + 14px);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.sync-trim-readout {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.sync-trim-len {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 7px 14px;
+    border-radius: 999px;
+    background: var(--grad-soft);
+    border: 1px solid rgba(0, 237, 100, 0.35);
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.sync-trim-len b {
+    font-size: 1.02rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--mongo);
+    font-variant-numeric: tabular-nums;
+    transition: color 0.2s;
+}
+
+.sync-trim-len span {
+    font-size: 0.78rem;
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+}
+
+.sync-trim-len.is-limit {
+    background: rgba(255, 181, 71, 0.12);
+    border-color: rgba(255, 181, 71, 0.55);
+    animation: sync-trim-shake 0.34s ease both;
+}
+
+.sync-trim-len.is-limit b,
+.sync-trim-len.is-limit span { color: #ffb547; }
+
+@keyframes sync-trim-shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    55% { transform: translateX(4px); }
+    80% { transform: translateX(-2px); }
+}
+
+.sync-trim-range {
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---- টাইমলাইন ---- */
+.sync-trim-track {
+    padding: 30px 18px 6px; /* উপরে বাবলের জায়গা, দুই পাশে হ্যান্ডেলের জায়গা */
+}
+
+.sync-trim-strip {
+    position: relative;
+    height: 60px;
+    touch-action: none;
+}
+
+.sync-trim-thumbs {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    overflow: hidden;
+    border-radius: 8px;
+    background: #0b2b24;
+}
+
+.sync-trim-cell {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    background: linear-gradient(110deg, rgba(255, 255, 255, 0.04) 30%, rgba(255, 255, 255, 0.11) 50%, rgba(255, 255, 255, 0.04) 70%);
+    background-size: 220% 100%;
+    animation: sync-trim-shimmer 1.3s linear infinite;
+}
+
+.sync-trim-cell.on { animation: none; background: #0b2b24; }
+
+.sync-trim-cell img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    pointer-events: none;
+    animation: sync-trim-cell-in 0.45s ease both;
+}
+
+@keyframes sync-trim-shimmer {
+    from { background-position: 120% 0; }
+    to { background-position: -120% 0; }
+}
+
+@keyframes sync-trim-cell-in {
+    from { opacity: 0; transform: scale(1.12); }
+    to { opacity: 1; transform: none; }
+}
+
+.sync-trim-dim {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: rgba(1, 10, 8, 0.74);
+    pointer-events: none;
+    z-index: 1;
+}
+
+.sync-trim-dim.l { left: 0; border-radius: 8px 0 0 8px; }
+.sync-trim-dim.r { right: 0; border-radius: 0 8px 8px 0; }
+
+.sync-trim-frame {
+    position: absolute;
+    top: -3px;
+    bottom: -3px;
+    z-index: 2;
+}
+
+.sync-trim-frame::before,
+.sync-trim-frame::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--grad-brand);
+    pointer-events: none;
+    transition: background 0.2s;
+}
+
+.sync-trim-frame::before { top: 0; }
+.sync-trim-frame::after { bottom: 0; }
+
+.sync-trim-window {
+    position: absolute;
+    inset: 0;
+    cursor: grab;
+    touch-action: none;
+}
+
+.sync-trim-frame.is-drag .sync-trim-window { cursor: grabbing; }
+
+.sync-trim-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 18px;
+    background: linear-gradient(180deg, #b6f34d 0%, #00ed64 55%, #2ccb9a 100%);
+    cursor: ew-resize;
+    touch-action: none;
+    outline: none;
+    transition: box-shadow 0.2s, transform 0.2s var(--ease), background 0.2s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.sync-trim-handle.start { left: -18px; border-radius: 12px 0 0 12px; }
+.sync-trim-handle.end { right: -18px; border-radius: 0 12px 12px 0; }
+
+/* হাতের আঙুলের জন্য বড় টাচ এলাকা (দৃশ্যমান নয়) */
+.sync-trim-handle::before {
+    content: "";
+    position: absolute;
+    top: -8px;
+    bottom: -8px;
+    left: -8px;
+    right: -8px;
+}
+
+/* গ্রিপ দাগ */
+.sync-trim-handle::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 3px;
+    height: 24px;
+    margin: -12px 0 0 -1.5px;
+    border-radius: 3px;
+    background: rgba(2, 43, 23, 0.7);
+}
+
+.sync-trim-handle:focus-visible,
+.sync-trim-handle.active {
+    box-shadow: 0 0 0 5px rgba(0, 237, 100, 0.22), 0 8px 22px rgba(0, 237, 100, 0.45);
+}
+
+.sync-trim-handle.active.start { transform: translateX(-2px) scaleY(1.06); }
+.sync-trim-handle.active.end { transform: translateX(2px) scaleY(1.06); }
+
+/* সর্বোচ্চ সীমায় ঠেকলে */
+.sync-trim-frame.is-limit::before,
+.sync-trim-frame.is-limit::after { background: #ffb547; }
+
+.sync-trim-frame.is-limit .sync-trim-handle {
+    background: linear-gradient(180deg, #ffd27a 0%, #ffb547 100%);
+    box-shadow: 0 0 0 5px rgba(255, 181, 71, 0.22), 0 8px 22px rgba(255, 181, 71, 0.4);
+}
+
+.sync-trim-playhead {
+    position: absolute;
+    top: -7px;
+    bottom: -7px;
+    left: 0;
+    width: 3px;
+    margin-left: -1.5px;
+    border-radius: 3px;
+    background: #fff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25), 0 0 12px rgba(255, 255, 255, 0.7);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 3;
+    transition: opacity 0.18s;
+    will-change: left;
+}
+
+.sync-trim-bubble {
+    position: absolute;
+    top: -38px;
+    z-index: 4;
+    padding: 4px 10px;
+    border-radius: 9px;
+    background: #e8f7f0;
+    color: #022b17;
+    font-size: 0.76rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px) scale(0.9);
+    transition: opacity 0.16s, transform 0.2s var(--ease);
+    pointer-events: none;
+}
+
+.sync-trim-bubble::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -4px;
+    width: 8px;
+    height: 8px;
+    margin-left: -4px;
+    background: #e8f7f0;
+    transform: rotate(45deg);
+    border-radius: 2px;
+}
+
+.sync-trim-bubble.show { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+
+.sync-trim-hint {
+    margin: 0;
+    text-align: center;
+    font-size: 0.78rem;
+    color: var(--text-3);
+    opacity: 0;
+    transition: opacity 0.4s;
+}
+
+.sync-trim-hint.show { opacity: 1; }
+
+/* ---- বোতাম ---- */
+.sync-trim-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sync-trim-actions .sync-btn { flex: 0 0 auto; height: 50px; border-radius: 16px; }
+
+.sync-trim-done {
+    flex: 1 1 auto;
+    height: 50px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    border: 0;
+    border-radius: 16px;
+    background: var(--grad-btn);
+    color: var(--on-brand);
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    cursor: pointer;
+    box-shadow: 0 12px 30px -10px rgba(0, 237, 100, 0.65);
+    transition: transform 0.18s var(--ease), filter 0.2s, opacity 0.2s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.sync-trim-done:hover { filter: brightness(1.06); }
+.sync-trim-done:active { transform: scale(0.97); }
+.sync-trim-done:disabled { opacity: 0.45; cursor: default; box-shadow: none; }
+
+.sync-trim-done em {
+    font-style: normal;
+    font-size: 0.82rem;
+    font-weight: 800;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: rgba(2, 43, 23, 0.16);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---- Create Story মডালের ভেতরের trim চিপ ---- */
+.sync-story-trim-chip {
+    width: 100%;
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 10px 12px;
+    border: 1px solid rgba(0, 237, 100, 0.3);
+    border-radius: 14px;
+    background: var(--grad-soft);
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.2s, transform 0.18s var(--ease);
+    animation: sync-trim-fade 0.35s ease both;
+}
+
+.sync-story-trim-chip:hover { border-color: var(--mongo); }
+.sync-story-trim-chip:active { transform: scale(0.985); }
+
+.sync-story-trim-chip > svg { flex-shrink: 0; color: var(--mongo); }
+
+.sync-story-trim-chip .txt {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.sync-story-trim-chip .txt strong { font-size: 0.9rem; font-weight: 700; }
+
+.sync-story-trim-chip .txt small {
+    font-size: 0.76rem;
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+}
+
+.sync-story-trim-chip em {
+    flex-shrink: 0;
+    font-style: normal;
+    font-size: 0.78rem;
+    font-weight: 800;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: var(--grad-btn);
+    color: var(--on-brand);
+}
+
+@media (min-width: 900px) {
+    .sync-trim-stage video { inset: 8px 40px 14px; width: calc(100% - 80px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sync-trim,
+    .sync-trim.is-leaving,
+    .sync-trim-swap,
+    .sync-trim-len.is-limit,
+    .sync-trim-cell,
+    .sync-trim-cell img,
+    .sync-trim-stage video,
+    .sync-story-trim-chip { animation: none; }
+    .sync-trim-bubble,
+    .sync-trim-playbadge,
+    .sync-trim-handle { transition: none; }
+}

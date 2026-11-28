@@ -19,12 +19,14 @@ import {
     Volume2,
     VolumeX,
     AlertCircle,
-    RotateCw
+    RotateCw,
+    Scissors
 } from "lucide-react";
 import Avatar from "../components/Avatar.jsx";
 import SyncBrandBar from "../components/SyncBrandBar.jsx";
 import MoreMenu from "../components/MoreMenu.jsx";
 import UploadProgressCard from "../components/UploadProgressCard.jsx";
+import VideoTrimmer from "../components/VideoTrimmer.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import {
     deleteMyStory,
@@ -41,6 +43,8 @@ import {
 } from "../services/outbox.js";
 import useUploadQueue from "../hooks/useUploadQueue.js";
 import { pushBackHandler } from "../services/backNavigation.js";
+import { detectMessageTypeFromFile } from "../services/media.js";
+import { canTrimVideo, STORY_VIDEO_MAX_SECONDS } from "../utils/video.js";
 import {
     formatChatListTime,
     formatTime
@@ -98,6 +102,9 @@ export default function StoriesPage() {
     const [bgColor, setBgColor] = useState(STORY_COLORS[0]);
     const [mediaFile, setMediaFile] = useState(null);
     const [createError, setCreateError] = useState("");
+    // ভিডিও trim: { start, end, total, trimmed } — এডিটরে Done চাপলে বসে
+    const [trim, setTrim] = useState(null);
+    const [trimmerOpen, setTrimmerOpen] = useState(false);
     // ব্যাকগ্রাউন্ডে চলা স্টোরি আপলোড/কমপ্রেশন কিউ (WhatsApp-এর মতো ট্যাব বদলালেও/কাটলেও চলে)
     const uploadQueue = useUploadQueue();
     const pendingStories = uploadQueue.filter(j => j.kind === "story");
@@ -238,11 +245,17 @@ export default function StoriesPage() {
             type: storyType === "text" ? "text" : "media",
             caption: caption.trim(),
             backgroundColor: bgColor,
-            file: storyType === "text" ? null : mediaFile
+            file: storyType === "text" ? null : mediaFile,
+            trim:
+                storyType !== "text" && pickedIsVideo && trim?.trimmed
+                    ? { start: trim.start, end: trim.end }
+                    : null
         });
 
         setCaption("");
         setMediaFile(null);
+        setTrim(null);
+        setTrimmerOpen(false);
         setShowCreateModal(false);
         showToast("Posting story in background…");
     };
@@ -254,6 +267,34 @@ export default function StoriesPage() {
 
     const closeCreateModal = () => {
         setShowCreateModal(false);
+        setTrimmerOpen(false);
+        setMediaFile(null);
+        setTrim(null);
+    };
+
+    // ফাইল বাছা: ভিডিও হলে সাথে সাথে trim এডিটর খোলে (WhatsApp-এর মতো)
+    const handleMediaPicked = e => {
+        const f = e.target.files?.[0] || null;
+        setMediaFile(f);
+        setTrim(null);
+        if (f && detectMessageTypeFromFile(f) === "video" && canTrimVideo()) {
+            setTrimmerOpen(true);
+        }
+    };
+
+    const handleTrimDone = result => {
+        setTrim(result);
+        setTrimmerOpen(false);
+    };
+
+    // প্রথমবার এডিটর বন্ধ করলে বাছাই বাতিল (WhatsApp-এর মতো); আবার Edit করে বন্ধ করলে আগের ছাঁটাই থাকে
+    const handleTrimCancel = () => {
+        setTrimmerOpen(false);
+        if (!trim) {
+            setMediaFile(null);
+            const input = document.getElementById("sync-story-media-input");
+            if (input) input.value = "";
+        }
     };
 
     const showToast = text => {
@@ -539,6 +580,12 @@ export default function StoriesPage() {
     const contactGroups = storyGroups
         .map((g, idx) => ({ ...g, originalIdx: idx }))
         .filter(g => !g.isMine);
+
+    const pickedIsVideo = Boolean(mediaFile) && detectMessageTypeFromFile(mediaFile) === "video";
+    const clipClock = sec => {
+        const t = Math.max(0, Math.round(sec || 0));
+        return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+    };
 
     return (
         <div className={`sync-stories-layout ${viewerState !== null ? "has-active-story" : ""}`}>
@@ -1240,11 +1287,7 @@ export default function StoriesPage() {
                                                 className="sync-story-file-input"
                                                 type="file"
                                                 accept="image/*,video/*"
-                                                onChange={e => {
-                                                    setMediaFile(
-                                                        e.target.files?.[0] || null
-                                                    );
-                                                }}
+                                                onChange={handleMediaPicked}
                                                 required
                                             />
                                             <label
@@ -1264,7 +1307,9 @@ export default function StoriesPage() {
                                                     </strong>
                                                     <small>
                                                         {mediaFile
-                                                            ? `${(mediaFile.size / (1024 * 1024)).toFixed(2)} MB · Ready to upload`
+                                                            ? pickedIsVideo && trim?.trimmed
+                                                                ? `${clipClock(trim.end - trim.start)} clip · Ready to upload`
+                                                                : `${(mediaFile.size / (1024 * 1024)).toFixed(2)} MB · Ready to upload`
                                                             : "JPG, PNG, GIF or MP4 · Tap to browse"}
                                                     </small>
                                                 </span>
@@ -1272,6 +1317,28 @@ export default function StoriesPage() {
                                                     {mediaFile ? "Change" : "Browse"}
                                                 </span>
                                             </label>
+                                            {pickedIsVideo && trim && (
+                                                <button
+                                                    type="button"
+                                                    className="sync-story-trim-chip"
+                                                    onClick={() => setTrimmerOpen(true)}
+                                                >
+                                                    <Scissors size={18} />
+                                                    <span className="txt">
+                                                        <strong>
+                                                            {trim.trimmed
+                                                                ? `Trimmed to ${clipClock(trim.end - trim.start)}`
+                                                                : "Full video"}
+                                                        </strong>
+                                                        <small>
+                                                            {trim.trimmed
+                                                                ? `${clipClock(trim.start)} – ${clipClock(trim.end)} of ${clipClock(trim.total)}`
+                                                                : `${clipClock(trim.total)} · Tap to trim`}
+                                                        </small>
+                                                    </span>
+                                                    <em>Edit</em>
+                                                </button>
+                                            )}
                                             <div className="sync-story-upload-footnote">
                                                 <span className="sync-story-upload-dot" />
                                                 Your story will be visible for 24 hours
@@ -1318,6 +1385,16 @@ export default function StoriesPage() {
                         </form>
                     </div>
                 </div>
+            )}
+
+            {trimmerOpen && mediaFile && (
+                <VideoTrimmer
+                    file={mediaFile}
+                    initial={trim?.trimmed ? { start: trim.start, end: trim.end } : null}
+                    maxSeconds={STORY_VIDEO_MAX_SECONDS}
+                    onCancel={handleTrimCancel}
+                    onDone={handleTrimDone}
+                />
             )}
 
             {confirmDeleteStory && (

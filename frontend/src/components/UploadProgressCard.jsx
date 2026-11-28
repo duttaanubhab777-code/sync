@@ -72,7 +72,12 @@ export default function UploadProgressCard({ info, onSkip, className = "" }) {
     let title;
     if (isDone) title = "Done";
     else if (isWaiting) title = waitOffline ? "Waiting for network" : "Retrying";
-    else if (isCompress) title = info.compressRetry > 0 ? `Shrinking ${noun} more` : `Compressing ${noun}`;
+    else if (isCompress)
+        title = info.trimming
+            ? `Trimming ${noun}`
+            : info.compressRetry > 0
+              ? `Shrinking ${noun} more`
+              : `Compressing ${noun}`;
     else if (isPrepare) title = "Getting ready";
     else if (isFinalizing) title = "Finalizing";
     else title = `Uploading ${noun}`;

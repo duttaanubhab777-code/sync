@@ -391,7 +391,8 @@ const compressPhase = async (entry, signal) => {
                 name: job.fileName,
                 total: job.file.size,
                 originalSize: job.file.size,
-                willCompress: true
+                willCompress: true,
+                trimming: Boolean(job.options?.trim)
             }
         });
 
@@ -407,11 +408,13 @@ const compressPhase = async (entry, signal) => {
                     setProgress(entry, info?.compressPct ?? pct, {
                         file: job.file,
                         name: job.fileName,
+                        trimming: Boolean(job.options?.trim),
                         ...info
                     }),
                 {
                     compress: true,
                     forceCompress: Boolean(job.options?.forceCompress),
+                    trim: job.options?.trim || null,
                     compressSignal: ctrl.signal
                 }
             );
@@ -778,7 +781,9 @@ export const enqueueStoryUpload = ({
     type = "text",
     caption = "",
     backgroundColor = "#0F4C3A",
-    file = null
+    file = null,
+    // ভিডিও স্টোরির ছাঁটা অংশ: { start, end } সেকেন্ডে (না দিলে পুরো ভিডিও)
+    trim = null
 }) => {
     const me = store.getState().auth.user;
     const id = generateClientMsgId();
@@ -786,11 +791,20 @@ export const enqueueStoryUpload = ({
     const storyType =
         type === "text" || !file ? "text" : detected === "video" ? "video" : "image";
 
+    const hasTrim =
+        storyType === "video" &&
+        Boolean(trim) &&
+        Number.isFinite(Number(trim.start)) &&
+        Number.isFinite(Number(trim.end)) &&
+        Number(trim.end) > Number(trim.start);
+    const trimRange = hasTrim ? { start: Number(trim.start), end: Number(trim.end) } : null;
+
+    // ছাঁটা ভিডিও সাইজ যাই হোক এনকোড হয় (ছাঁটতে এনকোড লাগে)
     const shouldCompress =
         storyType === "image"
             ? true
             : storyType === "video"
-              ? Boolean(file && file.size > STORY_VIDEO_COMPRESS_THRESHOLD)
+              ? hasTrim || Boolean(file && file.size > STORY_VIDEO_COMPRESS_THRESHOLD)
               : false;
 
     const job = {
@@ -805,8 +819,10 @@ export const enqueueStoryUpload = ({
         options: {
             compress: shouldCompress,
             forceCompress: storyType === "video" && shouldCompress,
+            trim: trimRange,
             purpose: "story"
         },
+        duration: trimRange ? trimRange.end - trimRange.start : 0,
         file: file || null,
         fileName: file?.name || "Text Story",
         fileType: file?.type || "",
